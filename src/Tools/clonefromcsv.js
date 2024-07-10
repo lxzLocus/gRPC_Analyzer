@@ -2,6 +2,8 @@
 フィルタver
 GitCloneするコード
 
+保存先 : app/dataset/reps 
+
 https://github.com/darioamorosodaragona-tuni/Microservices-Dataset
 
 The filtered version is available here: 
@@ -19,7 +21,7 @@ const csvFilePath = path.join(__dirname, '../../dataset/P.U_merged_filtered - Fi
 const header = 'URL;Unnamed: 0;Identifier;_id;FileInfo;NumAuthors;MonNauth;NumActiveMon;EarliestCommitDate;EarliestCommitDateConverted;NumBlobs;LatestCommitDate;LastCommitDateConverted;ProjectID;MonNcmt;NumCore;NumCommits;CommunitySize;NumFiles;Core;NumForks;n_microservices;Tot. Duration (Y);Application Type;Application Purpose;Developed by;Archived;WIP/Incomplete;Is a Microservices?;num_services;servers;languages;num_langs;images;num_dbs;dbs;num_servers ;num_buses;buses;gates;monitors;num_discos;shared_dbs;num_dockers;dockers_raw;structure_raw;ms_depend_graph;avg_size_service;commit_hash';
 
 // 保存先パス
-const savePath = path.join(__dirname, '../../dataset');
+const savePath = path.join(__dirname, '../../dataset/reps');
 
 const outputPath = path.join(savePath, 'log.txt');
 
