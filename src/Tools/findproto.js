@@ -9,77 +9,70 @@ const path = require('path');
 const datasetFolder = path.join(__dirname, '../../dataset/reps');
 
 // 移動先のディレクトリのパスを指定
-const moveToFolder = path.join(__dirname, '../../gRPC');
+const moveToFolder = path.join(__dirname, '../../dataset/gRPC');
 
-let directoryDepth = 0;
-const stack = [];
+// 再帰的にディレクトリを探索する関数
+function findProtoFiles(dir, projectPath) {
+    // ディレクトリの内容を読み取る
+    const files = fs.readdirSync(dir);
 
-// 拡張子が '.proto' のファイルを探す関数
-function findProtoFiles(dirPath, currentDepth) {
-    const files = fs.readdirSync(dirPath);
-    let foundProtoFile = false;
-
+    // 各ファイル/ディレクトリを処理
     for (const file of files) {
-        const filePath = path.join(dirPath, file);
-        let stat;
+        const fullPath = path.join(dir, file);
 
+        // ファイルの状態を取得
         try {
-            stat = fs.lstatSync(filePath);
-        } catch (err) {
-            console.error(`Error reading file stats for ${filePath}: ${err.message}`);
-            continue;
-        }
+            const stat = fs.lstatSync(fullPath);
 
-        if (stat.isDirectory()) {
-            // サブディレクトリの場合、再帰的に探索する
-            stack.push({ dirPath: filePath, depth: currentDepth + 1 });
+            if (stat.isDirectory()) {
+                // ディレクトリの場合、再帰的に探索
+                const found = findProtoFiles(fullPath, projectPath);
+                if (found) {
+                    return true; // .protoファイルが見つかった場合、再帰探索を終了
+                }
+            } else if (stat.isFile() && path.extname(fullPath) === '.proto') {
+                // .protoファイルを発見した場合
+                console.log(`Found .proto file in project: ${projectPath}`);
 
-        } else if (stat.isFile() && path.extname(file) === '.proto') {
-            //protoファイルを見つけた場合
+                let projectName = projectPath.split('/').slice(4, 5).join('');
+                let projectMovePath = path.join(moveToFolder, projectName);
 
-            //現在の探索フォルダパスからプロジェクトフォルダパスを抜き出す
-            let projectPath = dirPath.split('/').slice(0, -(currentDepth-1)).join('/');
-            //repsフォルダ追加により変更
-            let projectName = projectPath.split('/').slice(4, 5).join('');
+                console.log(`Moving project '${projectPath}' to ${projectMovePath}`);
 
-            //移動先パス作成
-            const projectMovePath = path.join(moveToFolder, projectName);
+                if (!fs.existsSync(projectMovePath)) {
+                    fs.mkdirSync(projectMovePath, { recursive: true });
+                }
 
-            console.log(`Moving project '${projectPath}' to ${projectMovePath}`);
+                fs.renameSync(projectPath, projectMovePath);
 
-            // 移動先ディレクトリが存在しない場合は作成
-            if (!fs.existsSync(projectMovePath)) {
-               fs.mkdirSync(projectMovePath, { recursive: true });
+                console.log(`Project '${projectName}' moved successfully.`);
+
+
+                // プロジェクトを終了し、次のプロジェクトに移動
+                return true;
             }
-
-            // プロジェクトフォルダを移動する
-            fs.renameSync(projectPath, projectMovePath);
-
-            console.log(`Project '${projectName}' moved successfully.`);
-
-            foundProtoFile = true;
-            break; // .proto ファイルが見つかったのでループを抜ける
+        } catch (err) {
+            console.error(`Error accessing ${fullPath}: ${err.message}`);
         }
     }
+    return false;
+}
 
-    if (foundProtoFile && currentDepth > 0) {
-        // depth=0 のディレクトリに戻る
-        while (stack.length > 0) {
-            const { dirPath, depth } = stack.pop();
-            if (depth === 0) {
-                findProtoFiles(dirPath, depth);
-                break;
+// datasetFolder内の各ディレクトリを探索
+const projects = fs.readdirSync(datasetFolder);
+for (const project of projects) {
+    const projectPath = path.join(datasetFolder, project);
+    try {
+        if (fs.lstatSync(projectPath).isDirectory()) {
+            console.log(`Searching in project: ${projectPath}`);
+            const found = findProtoFiles(projectPath, projectPath);
+            if (found) {
+                continue;
             }
         }
-    } else if (!foundProtoFile) {
-        // スタックに残っているディレクトリを探索する
-        while (stack.length > 0) {
-            const { dirPath, depth } = stack.pop();
-            findProtoFiles(dirPath, depth);
-        }
+    } catch (err) {
+        console.error(`Error accessing project ${projectPath}: ${err.message}`);
     }
 }
-// データセットフォルダから探索を開始する
-findProtoFiles(datasetFolder, directoryDepth);
 
-console.log('Search and move process completed.');
+
