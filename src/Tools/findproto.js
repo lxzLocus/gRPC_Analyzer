@@ -39,7 +39,8 @@ function findProtoFiles(dirPath, currentDepth) {
 
             //現在の探索フォルダパスからプロジェクトフォルダパスを抜き出す
             let projectPath = dirPath.split('/').slice(0, -(currentDepth-1)).join('/');
-            let projectName = projectPath.split('/').slice(3, 4).join('');
+            //repsフォルダ追加により変更
+            let projectName = projectPath.split('/').slice(4, 5).join('');
 
             //移動先パス作成
             const projectMovePath = path.join(moveToFolder, projectName);
@@ -48,14 +49,13 @@ function findProtoFiles(dirPath, currentDepth) {
 
             // 移動先ディレクトリが存在しない場合は作成
             if (!fs.existsSync(projectMovePath)) {
-                fs.mkdirSync(projectMovePath, { recursive: true });
+               fs.mkdirSync(projectMovePath, { recursive: true });
             }
 
             // プロジェクトフォルダを移動する
-            // fs.renameSync(dirPath, path.join(projectMovePath, file));
+            fs.renameSync(projectPath, projectMovePath);
 
-            console.log(`fs. ${dirPath} to ${path.join(projectMovePath, file)}`);
-            console.log(`Project '${relativePath}' moved successfully.`);
+            console.log(`Project '${projectName}' moved successfully.`);
 
             foundProtoFile = true;
             break; // .proto ファイルが見つかったのでループを抜ける

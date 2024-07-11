@@ -4,7 +4,7 @@ services:
       context: ./
       dockerfile: Dockerfile_node
     container_name: node
-    restart: always
+    # restart: always
     tty: true
     volumes:
       - "/app/node_modules" # ←追加
@@ -17,7 +17,7 @@ services:
       context: ./
       dockerfile: Dockerfile_python
     container_name: python
-    restart: always
+    # restart: always
     tty: true
     volumes:
       - type: bind
