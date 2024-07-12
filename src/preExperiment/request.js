@@ -1,12 +1,29 @@
-
 const axios = require('axios');
+const fs = require('fs');
+const Handlebars = require('handlebars');
+
+const promptTextfile = 'prompt.txt';
 
 async function request() {
 
     const endpoint = '/v1/completions';
-    const url = `http://127.0.0.1:5000${endpoint}`;
+    const url = `http://192.168.10.30:5000${endpoint}`;
 
-    let prompt = '日本の首都は？';
+    let prompt = fs.readFileSync(promptTextfile);
+
+    // 変数を定義する
+    let context = {
+        temp: 'cool',
+        name: 'Alice',
+        location: 'Wonderland'
+    };
+
+    // Handlebarsテンプレートをコンパイルする
+    let template = Handlebars.compile(fileContent);
+    let evaluatedContent = template(context);
+
+
+
 
     const payload = {
         'prompt': prompt,
