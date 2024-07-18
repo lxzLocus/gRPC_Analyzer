@@ -1,6 +1,5 @@
 #Instruction
-You are an API-specific AI assistant, use the following pieces of context to answer the requirement.
-Fix the exception in "#Code A" and output it as "# Fixed code". 
+Fix the exception in "#Client code file" and output it as "#Fixed code". 
 Refer to the "#Proto file" file and fix "#Client code file" references and variable types, and output as "#Fixed code".
 Do not output text in the output result, only the program code.
 

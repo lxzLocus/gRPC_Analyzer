@@ -4,30 +4,38 @@ const Handlebars = require('handlebars');
 
 const promptTextfile = 'prompt.txt';
 
+
+const protoContent = '';
+
+const clientSourceContent = '';
+
+
+
+request();
+
 async function request() {
 
     const endpoint = '/v1/completions';
     const url = `http://192.168.10.30:5000${endpoint}`;
 
-    let prompt = fs.readFileSync(promptTextfile);
+    let fileContent = fs.readFileSync(promptTextfile);
 
     // 変数を定義する
     let context = {
-        temp: 'cool',
-        name: 'Alice',
-        location: 'Wonderland'
+        protoSource: protoContent,
+        clientSource: clientSourceContent,
     };
 
     // Handlebarsテンプレートをコンパイルする
     let template = Handlebars.compile(fileContent);
-    let evaluatedContent = template(context);
+    let prompt = template(context);
 
 
 
 
     const payload = {
         'prompt': prompt,
-        'max_tokens': 4092,
+        'max_tokens': 4096,
         'temperature': 0.7,
         'temperature_last': false,
         'dynamic_temperature': false,
@@ -81,4 +89,3 @@ async function request() {
     }
 }
 
-request();
