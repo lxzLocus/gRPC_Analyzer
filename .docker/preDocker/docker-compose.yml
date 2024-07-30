@@ -1,0 +1,25 @@
+services:
+  node:
+    build:
+      context: ./
+      dockerfile: Dockerfile_node
+    container_name: node
+    # restart: always
+    tty: true
+    volumes:
+      - /app/node_modules # ←追加
+      - type: bind
+        source: ../
+        target: /app
+
+  python:
+    build:
+      context: ./
+      dockerfile: Dockerfile_python
+    container_name: python
+    # restart: always
+    tty: true
+    volumes:
+      - type: bind
+        source: ../
+        target: /app

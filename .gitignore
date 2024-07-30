@@ -1,4 +1,7 @@
+.env
+
 node_modules/
+
 dataset/*
 !dataset/P.U_merged_filtered - Final_merged_only_not_excluded_yes_ms_unarchived_commit_hash v2.0.csv
 !cloned/

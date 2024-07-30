@@ -1,0 +1,18 @@
+FROM node:alpine3.19
+
+WORKDIR /app
+
+#COPY . .
+COPY package*.json .
+
+
+RUN npm install npm
+RUN npm install  @types/node@20.14.10 csv-parser@3.0.0 @octokit/rest@21.0.0
+RUN npm install  axios@1.7.2 handlebars@4.7.8
+
+# 他のファイルをコピー
+COPY . .
+
+
+#Add git command
+RUN apk update && apk add --no-cache git
