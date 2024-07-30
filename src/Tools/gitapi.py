@@ -1,3 +1,7 @@
+####################
+# issueのfix 前後のリポジトリ取得
+####################
+
 import requests
 import os
 import shutil
