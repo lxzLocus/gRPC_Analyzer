@@ -2,7 +2,7 @@ const axios = require('axios');
 const fs = require('fs');
 const Handlebars = require('handlebars');
 
-const promptTextfile = 'src/preExperiment/prompt.txt';
+const promptTextfile = 'src/app/preExperiment/prompt.txt';
 
 
 const protoContent = '';
