@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-        "name": "Python デバッガー: 現在のファイル",
+        "name": "Docker Debug Python",
         "type": "debugpy",
         "request": "launch",
         "program": "${file}",
@@ -14,7 +14,7 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Docker Launch Node",
+            "name": "Docker Debug Node",
             "skipFiles": [
                 "<node_internals>/**"
             ],

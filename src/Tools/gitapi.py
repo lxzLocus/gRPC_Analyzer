@@ -8,10 +8,10 @@ import shutil
 from datetime import datetime
 from git import Repo
 
-import src/__config__
+import config
 
 # GitHub APIトークンをここに設定してください
-GITHUB_TOKEN = __config__.GITHUB_PERSONAL_ACCESS_TOKEN
+GITHUB_TOKEN = config.GITHUB_PERSONAL_ACCESS_TOKEN
 REPO_OWNER = 'octocat'
 REPO_NAME = 'Hello-World'
 LABEL = 'fix'
@@ -21,11 +21,13 @@ CLONE_DIR = 'repos'
 if not os.path.exists(CLONE_DIR):
     os.makedirs(CLONE_DIR)
 
+#04
 def is_programming_file(filename):
     """ファイルがプログラミング言語で書かれているか確認する"""
     programming_file_extensions = ['.py', '.js', '.java', '.cpp', '.c', '.cs', '.rb', '.go', '.rs', '.ts', '.php', '.html', '.css']
     return any(filename.endswith(ext) for ext in programming_file_extensions)
 
+#02
 def get_issues_with_label(owner, repo, label):
     """特定のラベルを持つイシューを取得する"""
     url = f'https://api.github.com/repos/{owner}/{repo}/issues'
@@ -35,6 +37,7 @@ def get_issues_with_label(owner, repo, label):
     response.raise_for_status()
     return response.json()
 
+#03
 def get_pull_request_files(owner, repo, pr_number):
     """プルリクエストの変更ファイルを取得する"""
     url = f'https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/files'
@@ -43,6 +46,7 @@ def get_pull_request_files(owner, repo, pr_number):
     response.raise_for_status()
     return response.json()
 
+#05
 def get_pull_request_commits(owner, repo, pr_number):
     """プルリクエストのコミットを取得する"""
     url = f'https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/commits'
@@ -51,6 +55,7 @@ def get_pull_request_commits(owner, repo, pr_number):
     response.raise_for_status()
     return response.json()
 
+#06
 def clone_repo_at_commit(repo_url, commit_sha, clone_path):
     """指定されたコミットSHAでリポジトリをクローンする"""
     if os.path.exists(clone_path):
@@ -58,6 +63,7 @@ def clone_repo_at_commit(repo_url, commit_sha, clone_path):
     repo = Repo.clone_from(repo_url, clone_path)
     repo.git.checkout(commit_sha)
 
+#01
 def main():
     issues = get_issues_with_label(REPO_OWNER, REPO_NAME, LABEL)
     repo_url = f'https://github.com/{REPO_OWNER}/{REPO_NAME}.git'
