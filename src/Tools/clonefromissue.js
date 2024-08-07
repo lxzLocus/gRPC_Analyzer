@@ -3,26 +3,28 @@
  GitHubの  issue前後のリポジトリを取得する
  プルリクエストの前後を取得する
 *********/
-
 const axios = require('axios');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const csv = require('csv-parser');
+require('dotenv').config();
+
+const csvFilePath = 'dataset/cloned_reps_issue/gRPC_reps_list.csv'; 
+const saveDir = 'dataset/cloned_reps_issue';
 
 const githubToken = process.env.GITHUB_TOKEN;
-const repoUrl = 'https://github.com/phongnguyend/Practical.CleanArchitecture';
 
 const programmingFileExtensions = [
     '.go', '.cs', '.java', '.scala', '.ts', '.py', '.c', '.js', '.sh',
     '.html', '.css', '.pl', '.cpp', '.rs'
 ];
 
-/*02*/
 async function getFixedIssues(repoUrl, token) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const issuesUrl = `https://api.github.com/repos/${owner}/${repo}/issues?state=closed&per_page=100`;
     const headers = {
-        'Authorization': `token ${token}`,
+        'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github.v3+json',
     };
 
@@ -48,12 +50,11 @@ async function getFixedIssues(repoUrl, token) {
     }
 }
 
-/*03*/
 async function getPullRequestInfo(repoUrl, token, issueNumber) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const pullsUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/events`;
     const headers = {
-        'Authorization': `token ${token}`,
+        'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github.v3+json',
     };
 
@@ -73,12 +74,11 @@ async function getPullRequestInfo(repoUrl, token, issueNumber) {
     return null;
 }
 
-/*04*/
 async function getChangedFiles(repoUrl, token, commitId) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const commitUrl = `https://api.github.com/repos/${owner}/${repo}/commits/${commitId}`;
     const headers = {
-        'Authorization': `token ${token}`,
+        'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github.v3+json',
     };
 
@@ -93,7 +93,6 @@ async function getChangedFiles(repoUrl, token, commitId) {
     }
 }
 
-/*05*/
 async function cloneRepository(repoUrl, commitId, directory) {
     try {
         execSync(`git clone ${repoUrl} ${directory}`);
@@ -108,11 +107,10 @@ function isProgrammingFile(file) {
     return programmingFileExtensions.some(ext => file.endsWith(ext));
 }
 
-/*01*/
-async function run() {
+async function processRepository(repoUrl) {
     const fixedIssues = await getFixedIssues(repoUrl, githubToken);
 
-    console.log(`Found ${fixedIssues.length} fixed issues:`);
+    console.log(`Found ${fixedIssues.length} fixed issues for repository ${repoUrl}:`);
 
     for (const issue of fixedIssues) {
         console.log(`\n#${issue.number}: ${issue.title}`);
@@ -127,8 +125,8 @@ async function run() {
             if (programmingFiles.length > 0) {
                 console.log(`Changed programming files: ${programmingFiles.join(', ')}`);
 
-                const preDir = path.join(__dirname, `repo_pre_${issue.number}`);
-                const postDir = path.join(__dirname, `repo_post_${issue.number}`);
+                const preDir = path.join(saveDir, `repo_pre_${issue.number}`);
+                const postDir = path.join(saveDir, `repo_post_${issue.number}`);
 
                 await cloneRepository(repoUrl, commitId, preDir);
 
@@ -147,5 +145,20 @@ async function run() {
     }
 }
 
-/*00*/
+function run() {
+    const repoUrls = [];
+
+    fs.createReadStream(csvFilePath)
+        .pipe(csv())
+        .on('data', (row) => {
+            repoUrls.push(row.url);
+        })
+        .on('end', async () => {
+            console.log('CSV file successfully processed');
+            for (const repoUrl of repoUrls) {
+                await processRepository(repoUrl);
+            }
+        });
+}
+
 run();
