@@ -10,7 +10,7 @@ const path = require('path');
 const csv = require('csv-parser');
 require('dotenv').config();
 
-const csvFilePath = 'dataset/gRPC_reps_list.csv'; 
+const csvFilePath = 'dataset/gRPC_reps_list.csv';
 const saveDir = 'dataset/cloned_reps_issue';
 
 const githubToken = process.env.GITHUB_TOKEN;
@@ -107,7 +107,18 @@ function isProgrammingFile(file) {
     return programmingFileExtensions.some(ext => file.endsWith(ext));
 }
 
+async function createDirectory(dir) {
+    try {
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+    } catch (error) {
+        console.error(`Error creating directory ${dir}:`, error);
+    }
+}
+
 async function processRepository(repoUrl) {
+    const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const fixedIssues = await getFixedIssues(repoUrl, githubToken);
 
     console.log(`Found ${fixedIssues.length} fixed issues for repository ${repoUrl}:`);
@@ -125,8 +136,16 @@ async function processRepository(repoUrl) {
             if (programmingFiles.length > 0) {
                 console.log(`Changed programming files: ${programmingFiles.join(', ')}`);
 
-                const preDir = path.join(saveDir, `repo_pre_${issue.number}`);
-                const postDir = path.join(saveDir, `repo_post_${issue.number}`);
+                const repoDir = path.join(saveDir, repo);
+                const issueDir = path.join(repoDir, 'issue', issue.title);
+
+                // Create directories
+                await createDirectory(repoDir);
+                await createDirectory(path.join(repoDir, 'issue'));
+                await createDirectory(issueDir);
+
+                const preDir = path.join(issueDir, `repo_pre_${issue.number}`);
+                const postDir = path.join(issueDir, `repo_post_${issue.number}`);
 
                 await cloneRepository(repoUrl, commitId, preDir);
 
@@ -136,14 +155,20 @@ async function processRepository(repoUrl) {
 
                 console.log(`Repository state after merge saved in: ${postDir}`);
 
-                fs.rmdirSync(preDir, { recursive: true });
-                fs.rmdirSync(postDir, { recursive: true });
+                // Cleanup directories
+                try {
+                    fs.rmdirSync(preDir, { recursive: true });
+                    fs.rmdirSync(postDir, { recursive: true });
+                } catch (err) {
+                    console.error('Error removing directories:', err);
+                }
             } else {
                 console.log(`No programming files changed for issue #${issue.number}`);
             }
         }
     }
 }
+
 
 function run() {
     const repoUrls = [];
