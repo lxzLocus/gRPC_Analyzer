@@ -10,13 +10,14 @@ const fs = require('fs');
 const path = require('path');
 
 const githubToken = process.env.GITHUB_TOKEN;
-const repoUrl = 'https://github.com/Microservice-API-Patterns';
+const repoUrl = 'https://github.com/phongnguyend/Practical.CleanArchitecture';
 
 const programmingFileExtensions = [
     '.go', '.cs', '.java', '.scala', '.ts', '.py', '.c', '.js', '.sh',
     '.html', '.css', '.pl', '.cpp', '.rs'
 ];
 
+/*02*/
 async function getFixedIssues(repoUrl, token) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const issuesUrl = `https://api.github.com/repos/${owner}/${repo}/issues?state=closed&per_page=100`;
@@ -47,6 +48,7 @@ async function getFixedIssues(repoUrl, token) {
     }
 }
 
+/*03*/
 async function getPullRequestInfo(repoUrl, token, issueNumber) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const pullsUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/events`;
@@ -71,6 +73,7 @@ async function getPullRequestInfo(repoUrl, token, issueNumber) {
     return null;
 }
 
+/*04*/
 async function getChangedFiles(repoUrl, token, commitId) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const commitUrl = `https://api.github.com/repos/${owner}/${repo}/commits/${commitId}`;
@@ -90,6 +93,7 @@ async function getChangedFiles(repoUrl, token, commitId) {
     }
 }
 
+/*05*/
 async function cloneRepository(repoUrl, commitId, directory) {
     try {
         execSync(`git clone ${repoUrl} ${directory}`);
@@ -104,6 +108,7 @@ function isProgrammingFile(file) {
     return programmingFileExtensions.some(ext => file.endsWith(ext));
 }
 
+/*01*/
 async function run() {
     const fixedIssues = await getFixedIssues(repoUrl, githubToken);
 
@@ -142,4 +147,5 @@ async function run() {
     }
 }
 
+/*00*/
 run();
