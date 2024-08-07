@@ -10,7 +10,7 @@ const path = require('path');
 const csv = require('csv-parser');
 require('dotenv').config();
 
-const csvFilePath = 'dataset/cloned_reps_issue/gRPC_reps_list.csv'; 
+const csvFilePath = 'dataset/gRPC_reps_list.csv'; 
 const saveDir = 'dataset/cloned_reps_issue';
 
 const githubToken = process.env.GITHUB_TOKEN;
