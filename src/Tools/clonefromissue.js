@@ -136,10 +136,9 @@ async function processRepository(repoUrl) {
             if (programmingFiles.length > 0) {
                 console.log(`Changed programming files: ${programmingFiles.join(', ')}`);
 
+                // Create directories for the issue
                 const repoDir = path.join(saveDir, repo);
                 const issueDir = path.join(repoDir, 'issue', issue.title);
-
-                // Create directories
                 await createDirectory(repoDir);
                 await createDirectory(path.join(repoDir, 'issue'));
                 await createDirectory(issueDir);
@@ -147,13 +146,28 @@ async function processRepository(repoUrl) {
                 const preDir = path.join(issueDir, `repo_pre_${issue.number}`);
                 const postDir = path.join(issueDir, `repo_post_${issue.number}`);
 
+                // Clone repository state before and after the merge
                 await cloneRepository(repoUrl, commitId, preDir);
-
                 console.log(`Repository state before merge saved in: ${preDir}`);
 
                 await cloneRepository(repoUrl, 'main', postDir);
-
                 console.log(`Repository state after merge saved in: ${postDir}`);
+
+                // Create directories for pull request
+                const pullRequestDir = path.join(repoDir, 'pullrequest', issue.title);
+                const pullRequestPreDir = path.join(pullRequestDir, 'repo_pre');
+                const pullRequestPostDir = path.join(pullRequestDir, 'repo_post');
+                await createDirectory(path.join(repoDir, 'pullrequest'));
+                await createDirectory(pullRequestDir);
+                await createDirectory(pullRequestPreDir);
+                await createDirectory(pullRequestPostDir);
+
+                // Clone repository state before and after the pull request
+                await cloneRepository(repoUrl, commitId, pullRequestPreDir);
+                console.log(`Pull request state before saved in: ${pullRequestPreDir}`);
+
+                await cloneRepository(repoUrl, 'main', pullRequestPostDir);
+                console.log(`Pull request state after saved in: ${pullRequestPostDir}`);
 
                 // Cleanup directories
                 try {
@@ -168,6 +182,7 @@ async function processRepository(repoUrl) {
         }
     }
 }
+
 
 
 function run() {
