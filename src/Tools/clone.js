@@ -59,13 +59,13 @@ async function processRepository(repoUrl) {
                 console.log(`Repository state before merge saved in: ${preDir}`);
 
                 //デフォルトブランチの取得
-                const default_branch = await getDefaultBranch(repoUrl, githubToken);
-                if (default_branch) {
+                const defaultbranch = await getDefaultBranch(repoUrl, githubToken);
+                if (defaultbranch) {
                     try {
-                        await cloneRepository(repoUrl, defaultBranch, postDir);
+                        await cloneRepository(repoUrl, defaultbranch, postDir);
                         console.log(`Repository state after merge saved in: ${postDir}`);
                     } catch (e) {
-                        console.error(`Failed to checkout the default branch (${defaultBranch}):`, e);
+                        console.error(`Failed to checkout the default branch (${defaultbranch}):`, e);
                     }
                 } else {
                     console.error('Could not determine the default branch.');
@@ -105,13 +105,13 @@ async function processRepository(repoUrl) {
                 console.log(`Repository state before merge saved in: ${preDir}`);
 
                 //デフォルトブランチの取得
-                const default_branch = await getDefaultBranch(repoUrl, githubToken);
-                if (default_branch){
+                const defaultbranch = await getDefaultBranch(repoUrl, githubToken);
+                if (defaultbranch){
                     try {
-                        await cloneRepository(repoUrl, defaultBranch, postDir);
+                        await cloneRepository(repoUrl, defaultbranch, postDir);
                         console.log(`Repository state after merge saved in: ${postDir}`);
                     } catch (e) {
-                        console.error(`Failed to checkout the default branch (${defaultBranch}):`, e);
+                        console.error(`Failed to checkout the default branch (${defaultbranch}):`, e);
                     }
                 } else {
                     console.error('Could not determine the default branch.');
@@ -224,10 +224,19 @@ function isProgrammingFile(file) {
 
 //08
 function sanitizeDirectoryName(name) {
-    return name
+    // 空白を"_"に置き換え、特殊文字を"-"に置き換え
+    let sanitized = name
         .replace(/\s+/g, '_') // 空白を"_"に置き換え
-        .replace(/[^a-zA-Z0-9-_ぁ-んァ-ン一-龥]/g, '-'); // 特殊文字を"-"に置き換え、日本語を許容
+        .replace(/[^a-zA-Z0-9-_]/g, '-'); // 特殊文字を"-"に置き換え
+
+    // 15文字に制限
+    if (sanitized.length > 15) {
+        sanitized = sanitized.substring(0, 15);
+    }
+
+    return sanitized;
 }
+
 
 //09
 async function createDirectory(dir) {
@@ -243,16 +252,22 @@ async function createDirectory(dir) {
 //10
 async function cloneRepository(repoUrl, commitId, directory) {
     try {
+        // Check if the directory already exists
+        if (fs.existsSync(directory)) {
+            console.log(`Directory ${directory} already exists. Removing it.`);
+            fs.rmdirSync(directory, { recursive: true });
+        }
+
         // Clone the repository
         execSync(`git clone ${repoUrl} ${directory}`);
-        console.log(`GITCLONENING : git clone ${repoUrl} ${directory}`)
+        console.log(`GITCLONENING : git clone ${repoUrl} ${directory}`);
 
         // Change to the cloned directory
         process.chdir(directory);
 
         // Checkout the specified commit
         execSync(`git checkout ${commitId}`);
-        console.log(`GITCHECKOUT : git checkout ${commitId}`)
+        console.log(`GITCHECKOUT : git checkout ${commitId}`);
     } catch (error) {
         console.error('Error cloning or checking out repository:', error);
     }

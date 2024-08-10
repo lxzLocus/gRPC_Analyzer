@@ -2,6 +2,8 @@
  for bug dataset
  GitHubの  issue前後のリポジトリを取得する
  プルリクエストの前後を取得する
+
+ sudo git config --system core.longpaths true
 *********/
 const axios = require('axios');
 const { execSync } = require('child_process');
