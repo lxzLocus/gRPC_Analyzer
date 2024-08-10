@@ -10,45 +10,20 @@ const path = require('path');
 const csv = require('csv-parser');
 require('dotenv').config();
 
-const csvFilePath = 'dataset/gRPC_reps_list.csv';
-const saveDir = 'dataset/cloned_reps_issue';
-
 const githubToken = process.env.GITHUB_TOKEN;
 
+
+/*settings*/
+const csvFilePath = 'dataset/temp.csv';
+const saveDir = 'dataset/cloned_reps_issue';
+// const saveDir = 'dataset/cloned_reps_issue';
+
+//issue取得拡張子定義
 const programmingFileExtensions = [
     '.go', '.cs', '.java', '.scala', '.ts', '.py', '.c', '.js', '.sh',
-    '.html', '.css', '.pl', '.cpp', '.rs'
+    '.html', '.css', '.pl', '.cpp', '.rs', '.proto', '.protoc'
 ];
 
-async function getFixedIssues(repoUrl, token) {
-    const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
-    const issuesUrl = `https://api.github.com/repos/${owner}/${repo}/issues?state=closed&per_page=100`;
-    const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github.v3+json',
-    };
-
-    try {
-        let page = 1;
-        let fixedIssues = [];
-        let response;
-
-        do {
-            response = await axios.get(`${issuesUrl}&page=${page}`, { headers });
-            const issues = response.data;
-
-            const fixed = issues.filter(issue => issue.pull_request === undefined);
-            fixedIssues = fixedIssues.concat(fixed);
-            page++;
-        } while (response.data.length > 0);
-
-        return fixedIssues;
-
-    } catch (error) {
-        console.error('Error fetching issues:', error);
-        return [];
-    }
-}
 
 async function getPullRequestInfo(repoUrl, token, issueNumber) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
@@ -95,13 +70,21 @@ async function getChangedFiles(repoUrl, token, commitId) {
 
 async function cloneRepository(repoUrl, commitId, directory) {
     try {
+        // Clone the repository
         execSync(`git clone ${repoUrl} ${directory}`);
+        console.log(`GITCLONENING : git clone ${ repoUrl } ${ directory }`)
+
+        // Change to the cloned directory
         process.chdir(directory);
+
+        // Checkout the specified commit
         execSync(`git checkout ${commitId}`);
+        console.log(`GITCHECKOUT : git checkout ${commitId}`)
     } catch (error) {
         console.error('Error cloning or checking out repository:', error);
     }
 }
+
 
 function isProgrammingFile(file) {
     return programmingFileExtensions.some(ext => file.endsWith(ext));
@@ -117,12 +100,84 @@ async function createDirectory(dir) {
     }
 }
 
+async function getPullRequestInfo(repoUrl, token, issueNumber) {
+    const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
+    const pullsUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/events`;
+    const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+    };
+
+    try {
+        const response = await axios.get(pullsUrl, { headers });
+        const events = response.data;
+
+        for (const event of events) {
+            if (event.event === 'closed' && event.commit_id) {
+                return event.commit_id;
+            }
+        }
+
+    } catch (error) {
+        console.error(`Error fetching pull request info for issue #${issueNumber}:`, error);
+    }
+    return null;
+}
+
+async function getFixedIssuesAndPullRequests(repoUrl, token) {
+    const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
+    const issuesUrl = `https://api.github.com/repos/${owner}/${repo}/issues?state=closed&per_page=100`;
+    const pullsUrl = `https://api.github.com/repos/${owner}/${repo}/pulls?state=closed&per_page=100`;
+    const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+    };
+
+    let fixedIssues = [];
+    let pullRequests = [];
+
+    // Fetch closed issues
+    try {
+        let page = 1;
+        let response;
+
+        do {
+            response = await axios.get(`${issuesUrl}&page=${page}`, { headers });
+            const issues = response.data;
+
+            const fixed = issues.filter(issue => issue.pull_request === undefined);
+            fixedIssues = fixedIssues.concat(fixed);
+            page++;
+        } while (response.data.length > 0);
+    } catch (error) {
+        console.error('Error fetching issues:', error);
+    }
+
+    // Fetch closed pull requests
+    try {
+        let page = 1;
+        let response;
+
+        do {
+            response = await axios.get(`${pullsUrl}&page=${page}`, { headers });
+            const pulls = response.data;
+            pullRequests = pullRequests.concat(pulls);
+            page++;
+        } while (response.data.length > 0);
+    } catch (error) {
+        console.error('Error fetching pull requests:', error);
+    }
+
+    return { fixedIssues, pullRequests };
+}
+
 async function processRepository(repoUrl) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
-    const fixedIssues = await getFixedIssues(repoUrl, githubToken);
+    const { fixedIssues, pullRequests } = await getFixedIssuesAndPullRequests(repoUrl, githubToken);
 
-    console.log(`Found ${fixedIssues.length} fixed issues for repository ${repoUrl}:`);
+    console.log(`Found ${fixedIssues.length} fixed issues and ${pullRequests.length} closed pull requests for repository ${repoUrl}:`);
 
+    // Process issues
     for (const issue of fixedIssues) {
         console.log(`\n#${issue.number}: ${issue.title}`);
 
@@ -136,9 +191,9 @@ async function processRepository(repoUrl) {
             if (programmingFiles.length > 0) {
                 console.log(`Changed programming files: ${programmingFiles.join(', ')}`);
 
-                // Create directories for the issue
                 const repoDir = path.join(saveDir, repo);
-                const issueDir = path.join(repoDir, 'issue', issue.title);
+                const sanitizedIssueTitle = sanitizeDirectoryName(issue.title); // ここでタイトルをサニタイズ
+                const issueDir = path.join(repoDir, 'issue', sanitizedIssueTitle);
                 await createDirectory(repoDir);
                 await createDirectory(path.join(repoDir, 'issue'));
                 await createDirectory(issueDir);
@@ -146,42 +201,61 @@ async function processRepository(repoUrl) {
                 const preDir = path.join(issueDir, `repo_pre_${issue.number}`);
                 const postDir = path.join(issueDir, `repo_post_${issue.number}`);
 
-                // Clone repository state before and after the merge
                 await cloneRepository(repoUrl, commitId, preDir);
                 console.log(`Repository state before merge saved in: ${preDir}`);
 
                 await cloneRepository(repoUrl, 'main', postDir);
                 console.log(`Repository state after merge saved in: ${postDir}`);
 
-                // Create directories for pull request
-                const pullRequestDir = path.join(repoDir, 'pullrequest', issue.title);
-                const pullRequestPreDir = path.join(pullRequestDir, 'repo_pre');
-                const pullRequestPostDir = path.join(pullRequestDir, 'repo_post');
-                await createDirectory(path.join(repoDir, 'pullrequest'));
-                await createDirectory(pullRequestDir);
-                await createDirectory(pullRequestPreDir);
-                await createDirectory(pullRequestPostDir);
-
-                // Clone repository state before and after the pull request
-                await cloneRepository(repoUrl, commitId, pullRequestPreDir);
-                console.log(`Pull request state before saved in: ${pullRequestPreDir}`);
-
-                await cloneRepository(repoUrl, 'main', pullRequestPostDir);
-                console.log(`Pull request state after saved in: ${pullRequestPostDir}`);
-
-                // Cleanup directories
-                try {
-                    fs.rmdirSync(preDir, { recursive: true });
-                    fs.rmdirSync(postDir, { recursive: true });
-                } catch (err) {
-                    console.error('Error removing directories:', err);
-                }
             } else {
                 console.log(`No programming files changed for issue #${issue.number}`);
             }
         }
     }
+
+    // Process pull requests
+    for (const pullRequest of pullRequests) {
+        if (pullRequest.merged_at) {
+            const commitId = pullRequest.merge_commit_sha;
+            console.log(`\nPull Request #${pullRequest.number}: ${pullRequest.title}`);
+            console.log(`Merged commit ID: ${commitId}`);
+
+            const changedFiles = await getChangedFiles(repoUrl, githubToken, commitId);
+            const programmingFiles = changedFiles.filter(isProgrammingFile);
+
+            if (programmingFiles.length > 0) {
+                console.log(`Changed programming files: ${programmingFiles.join(', ')}`);
+
+                const repoDir = path.join(saveDir, repo);
+                const sanitizedPrTitle = sanitizeDirectoryName(pullRequest.title); // ここでタイトルをサニタイズ
+                const prDir = path.join(repoDir, 'pullrequest', sanitizedPrTitle);
+                await createDirectory(repoDir);
+                await createDirectory(path.join(repoDir, 'pullrequest'));
+                await createDirectory(prDir);
+
+                const preDir = path.join(prDir, `repo_pre_${pullRequest.number}`);
+                const postDir = path.join(prDir, `repo_post_${pullRequest.number}`);
+
+                await cloneRepository(repoUrl, commitId, preDir);
+                console.log(`Repository state before merge saved in: ${preDir}`);
+
+                await cloneRepository(repoUrl, 'main', postDir);
+                console.log(`Repository state after merge saved in: ${postDir}`);
+
+            } else {
+                console.log(`No programming files changed for pull request #${pullRequest.number}`);
+            }
+        }
+    }
 }
+
+
+function sanitizeDirectoryName(name) {
+    return name
+        .replace(/\s+/g, '_') // 空白を"_"に置き換え
+        .replace(/[^a-zA-Z0-9-_ぁ-んァ-ン一-龥]/g, '-'); // 特殊文字を"-"に置き換え、日本語を許容
+}
+
 
 
 
