@@ -2,6 +2,10 @@
  for bug dataset
  GitHubの  issue前後のリポジトリを取得する
  プルリクエストの前後を取得する
+
+  sudo git config --system core.longpaths true
+  or
+  .git/config [core] longpaths = true 追加
 *********/
 const axios = require('axios');
 const { execSync } = require('child_process');
@@ -15,7 +19,7 @@ const githubToken = process.env.GITHUB_TOKEN;
 
 /*settings*/
 const csvFilePath = 'dataset/temp.csv';
-const saveDir = 'dataset/cloned_reps_issue';
+const saveDir = 'dataset/clone';
 // const saveDir = 'dataset/cloned_reps_issue';
 
 //issue取得拡張子定義
@@ -53,22 +57,22 @@ async function processRepository(repoUrl) {
                 await createDirectory(issueDir);
 
                 const preDir = path.join(issueDir, `pre_${issue.number}`);
-                const postDir = path.join(issueDir, `post_${issue.number}`);
+                const mergeDir = path.join(issueDir, `post_${issue.number}`);
 
                 await cloneRepository(repoUrl, commitId, preDir);
                 console.log(`Repository state before merge saved in: ${preDir}`);
 
-                //デフォルトブランチの取得
-                const defaultbranch = await getDefaultBranch(repoUrl, githubToken);
-                if (defaultbranch) {
+                // Get the next commit after the pre-merge commit
+                const nextCommitId = await getNextCommitId(preDir, commitId);
+                if (nextCommitId) {
                     try {
-                        await cloneRepository(repoUrl, defaultbranch, postDir);
-                        console.log(`Repository state after merge saved in: ${postDir}`);
+                        await cloneRepository(repoUrl, nextCommitId, mergeDir);
+                        console.log(`Repository state after merge saved in: ${mergeDir}`);
                     } catch (e) {
-                        console.error(`Failed to checkout the default branch (${defaultbranch}):`, e);
+                        console.error(`Failed to checkout the next commit (${nextCommitId}):`, e);
                     }
                 } else {
-                    console.error('Could not determine the default branch.');
+                    console.error('Could not determine the next commit.');
                 }
 
             } else {
@@ -99,22 +103,22 @@ async function processRepository(repoUrl) {
                 await createDirectory(prDir);
 
                 const preDir = path.join(prDir, `pre_${pullRequest.number}`);
-                const postDir = path.join(prDir, `post_${pullRequest.number}`);
+                const mergeDir = path.join(prDir, `merge_${pullRequest.number}`);
 
                 await cloneRepository(repoUrl, commitId, preDir);
                 console.log(`Repository state before merge saved in: ${preDir}`);
 
-                //デフォルトブランチの取得
-                const defaultbranch = await getDefaultBranch(repoUrl, githubToken);
-                if (defaultbranch){
+                // Get the next commit after the pre-merge commit
+                const nextCommitId = await getNextCommitId(preDir, commitId);
+                if (nextCommitId) {
                     try {
-                        await cloneRepository(repoUrl, defaultbranch, postDir);
-                        console.log(`Repository state after merge saved in: ${postDir}`);
+                        await cloneRepository(repoUrl, nextCommitId, mergeDir);
+                        console.log(`Repository state after merge saved in: ${mergeDir}`);
                     } catch (e) {
-                        console.error(`Failed to checkout the default branch (${defaultbranch}):`, e);
+                        console.error(`Failed to checkout the next commit (${nextCommitId}):`, e);
                     }
                 } else {
-                    console.error('Could not determine the default branch.');
+                    console.error('Could not determine the next commit.');
                 }
 
             } else {
@@ -123,6 +127,7 @@ async function processRepository(repoUrl) {
         }
     }
 }
+
 
 //04
 async function getFixedIssuesAndPullRequests(repoUrl, token) {
@@ -143,7 +148,7 @@ async function getFixedIssuesAndPullRequests(repoUrl, token) {
         let response;
 
         do {
-            response = await axios.get(`${issuesUrl}&page=${page}`, { headers });
+            response = await axios.get(`${issuesUrl}&page=${page}`, { headers }, { timeout: 10000 });
             const issues = response.data;
 
             const fixed = issues.filter(issue => issue.pull_request === undefined);
@@ -160,7 +165,7 @@ async function getFixedIssuesAndPullRequests(repoUrl, token) {
         let response;
 
         do {
-            response = await axios.get(`${pullsUrl}&page=${page}`, { headers });
+            response = await axios.get(`${pullsUrl}&page=${page}`, { headers }, { timeout: 10000 });
             const pulls = response.data;
             pullRequests = pullRequests.concat(pulls);
             page++;
@@ -182,7 +187,7 @@ async function getPullRequestInfo(repoUrl, token, issueNumber) {
     };
 
     try {
-        const response = await axios.get(pullsUrl, { headers });
+        const response = await axios.get(pullsUrl, { headers }, { timeout: 10000 });
         const events = response.data;
 
         for (const event of events) {
@@ -207,7 +212,7 @@ async function getChangedFiles(repoUrl, token, commitId) {
     };
 
     try {
-        const response = await axios.get(commitUrl, { headers });
+        const response = await axios.get(commitUrl, { headers }, { timeout: 10000 });
         const files = response.data.files;
 
         return files.map(file => file.filename);
@@ -236,7 +241,6 @@ function sanitizeDirectoryName(name) {
 
     return sanitized;
 }
-
 
 //09
 async function createDirectory(dir) {
@@ -274,6 +278,18 @@ async function cloneRepository(repoUrl, commitId, directory) {
 }
 
 //11
+async function getNextCommitId(repoDir, commitId) {
+    const command = `cd ${repoDir} && git log --pretty=format:"%H" --reverse ${commitId}..HEAD | head -n 1`;
+    try {
+        const result = execSync(command).toString().trim();
+        return result;
+    } catch (error) {
+        console.error(`Error getting next commit ID after ${commitId}:`, error);
+        return null;
+    }
+}
+
+//12
 async function getDefaultBranch(repoUrl, token) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const repoInfoUrl = `https://api.github.com/repos/${owner}/${repo}`;
@@ -283,7 +299,7 @@ async function getDefaultBranch(repoUrl, token) {
     };
 
     try {
-        const response = await axios.get(repoInfoUrl, { headers });
+        const response = await axios.get(repoInfoUrl, { headers }, { timeout: 10000 });
         return response.data.default_branch;
     } catch (error) {
         console.error('Error fetching default branch:', error);
