@@ -62,8 +62,11 @@ async function processRepository(repoUrl) {
                 await cloneRepository(repoUrl, commitId, mergeDir);
                 console.log(`Repository state before merge saved in: ${mergeDir}`);
 
+
+                const defaultBranchName = await getDefaultBranch(repoUrl, githubToken);
+
                 // Get the next commit after the pre-merge commit
-                const prevCommitId = await getPrevCommitId(mergeDir, commitId);
+                const prevCommitId = await getPrevCommitId(mergeDir, commitId, defaultBranchName);
                 if (prevCommitId) {
                     try {
                         await cloneRepository(repoUrl, prevCommitId, premergeDir);
@@ -108,8 +111,9 @@ async function processRepository(repoUrl) {
                 await cloneRepository(repoUrl, commitId, mergeDir);
                 console.log(`Repository state before merge saved in: ${mergeDir}`);
 
+                const defaultBranchName = await getDefaultBranch(repoUrl, githubToken);
 
-                const prevCommitId = await getPrevCommitId(mergeDir, commitId);
+                const prevCommitId = await getPrevCommitId(mergeDir, commitId, defaultBranchName);
                 if (prevCommitId) {
                     try {
                         await cloneRepository(repoUrl, prevCommitId, premergeDir);
@@ -280,8 +284,14 @@ async function cloneRepository(repoUrl, commitId, directory) {
 //11
 async function getPrevCommitId(repoDir, commitId, branchName) {
     try {
-        // リポジトリのディレクトリに移動し、指定したブランチの一つ前のコミットIDを取得するコマンド
-        const command = `cd ${repoDir} && git log ${branchName} --pretty=format:"%H" --before=$(git show -s --format=%ci ${commitId}) -n 1`;
+        // フルパスに変換
+        const fullRepoDir = path.resolve(repoDir);
+
+        // コマンドをフルパスで指定
+        const command = `
+            git -C ${fullRepoDir} log ${branchName} --pretty=format:"%H" --before=$(git -C ${fullRepoDir} show -s --format=%ci ${commitId}) -n 1
+        `;
+
         const result = execSync(command).toString().trim();
 
         // 結果が空の場合は一つ前のコミットが存在しない
@@ -297,7 +307,7 @@ async function getPrevCommitId(repoDir, commitId, branchName) {
     }
 }
 
-//12 not use
+//12
 async function getDefaultBranch(repoUrl, token) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const repoInfoUrl = `https://api.github.com/repos/${owner}/${repo}`;
