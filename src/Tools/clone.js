@@ -238,12 +238,12 @@ function sanitizeDirectoryName(name) {
     // 空白を"_"に置き換え、特殊文字を"-"に置き換え
     let sanitized = name
         .replace(/\s+/g, '_') // 空白を"_"に置き換え
-        .replace(/[^a-zA-Z0-9-_]/g, '-'); // 特殊文字を"-"に置き換え
+        .replace(/[^a-zA-Z0-9-_ぁ-んァ-ン一-龥]/g, '-'); // 特殊文字を"-"に置き換え、日本語を許容
 
     // 15文字に制限
-    if (sanitized.length > 15) {
-        sanitized = sanitized.substring(0, 15);
-    }
+    // if (sanitized.length > 15) {
+    //     sanitized = sanitized.substring(0, 15);
+    // }
 
     return sanitized;
 }
@@ -329,26 +329,6 @@ async function getDefaultBranch(repoUrl, token) {
         return null;
     }
 }
-
-//Add
-async function findBranchContainingCommit(repoPath, commitId) {
-    try {
-        // コミット ID を含むブランチをリモートで探す
-        const { stdout, stderr } = await execPromise(`git -C ${repoPath} branch -r --contains ${commitId}`);
-        if (stderr) {
-            throw new Error(`Error finding branches: ${stderr}`);
-        }
-        const branches = stdout.trim().split('\n').map(branch => branch.trim()).filter(Boolean);
-        if (branches.length === 0) {
-            throw new Error(`No branches found containing commit ${commitId}`);
-        }
-        return branches[0]; // 最初のブランチを返す
-    } catch (error) {
-        console.error('Error:', error);
-        throw error;
-    }
-}
-
 
 
 
