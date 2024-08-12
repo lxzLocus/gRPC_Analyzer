@@ -8,10 +8,12 @@
   .git/config [core] longpaths = true 追加
 *********/
 const axios = require('axios');
-const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
+const util = require('util');
+const { exec } = require('child_process');
+const execPromise = util.promisify(exec);
 require('dotenv').config();
 
 const githubToken = process.env.GITHUB_TOKEN;
@@ -133,9 +135,6 @@ async function processRepository(repoUrl) {
     }
 }
 
-
-
-
 //04
 async function getFixedIssuesAndPullRequests(repoUrl, token) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
@@ -155,7 +154,7 @@ async function getFixedIssuesAndPullRequests(repoUrl, token) {
         let response;
 
         do {
-            response = await axios.get(`${issuesUrl}&page=${page}`, { headers }, { timeout: 10000 });
+            response = await axios.get(`${issuesUrl}&page=${page}`, { headers });
             const issues = response.data;
 
             const fixed = issues.filter(issue => issue.pull_request === undefined);
@@ -194,7 +193,7 @@ async function getPullRequestInfo(repoUrl, token, issueNumber) {
     };
 
     try {
-        const response = await axios.get(pullsUrl, { headers }, { timeout: 10000 });
+        const response = await axios.get(pullsUrl, { headers });
         const events = response.data;
 
         for (const event of events) {
@@ -219,7 +218,7 @@ async function getChangedFiles(repoUrl, token, commitId) {
     };
 
     try {
-        const response = await axios.get(commitUrl, { headers }, { timeout: 10000 });
+        const response = await axios.get(commitUrl, { headers });
         const files = response.data.files;
 
         return files.map(file => file.filename);
@@ -271,7 +270,7 @@ async function cloneRepository(repoUrl, commitId, directory) {
 
         // Clone the repository
         console.log(`Cloning repository into ${directory}`);
-        await execPromise(`git clone ${repoUrl} ${directory}`);
+        await execPromise(`git clone ${repoUrl} ${directory}`); // await to ensure completion
 
         // Change to the cloned directory
         const repoPath = path.join(directory);
@@ -281,7 +280,7 @@ async function cloneRepository(repoUrl, commitId, directory) {
         process.chdir(repoPath); // Be cautious with process.chdir in async functions
 
         console.log(`Checking out commit ${commitId}`);
-        await execPromise(`git checkout ${commitId}`);
+        await execPromise(`git checkout ${commitId}`); // await to ensure completion
 
         // Return to original directory
         process.chdir(path.resolve('/')); // Change back to root or your desired directory
@@ -293,23 +292,22 @@ async function cloneRepository(repoUrl, commitId, directory) {
 
 //11
 async function getPrevCommitId(repoDir, commitId, branchName) {
+    const cdPath = path.join(rootPath, repoDir);
+
     try {
-        const cdPath = rootPath + repoDir;
-
-        // コミットの日時を取得するコマンド
+        // Get the commit date
         const commitDateCommand = `cd ${cdPath} && git show -s --format=%ci ${commitId}`;
-        const commitDateOutput = execSync(commitDateCommand).toString().trim();
+        const commitDateOutput = (await execPromise(commitDateCommand)).stdout.trim();
 
-        // 日付をISO形式に変換し、3秒引いた新しい日時を計算
+        // Calculate the date 1 seconds before
         const commitDate = new Date(commitDateOutput);
-        commitDate.setSeconds(commitDate.getSeconds() - 3);
-        const isoDate = commitDate.toISOString().replace('Z', '+00:00'); // replace 'Z' with '+00:00' for compatibility
+        commitDate.setSeconds(commitDate.getSeconds() - 1);
+        const isoDate = commitDate.toISOString().replace('Z', '+00:00'); // Replace 'Z' with '+00:00' for compatibility
 
-        // リポジトリのディレクトリに移動し、指定したブランチの一つ前のコミットIDを取得するコマンド
+        // Get the previous commit ID
         const command = `cd ${cdPath} && git log ${branchName} --pretty=format:"%H" --before="${isoDate}" -n 1`;
-        const result = execSync(command).toString().trim();
+        const result = (await execPromise(command)).stdout.trim();
 
-        // 結果が空の場合は一つ前のコミットが存在しない
         if (result && result !== commitId) {
             return result;
         } else {
@@ -322,6 +320,7 @@ async function getPrevCommitId(repoDir, commitId, branchName) {
     }
 }
 
+
 //12
 async function getDefaultBranch(repoUrl, token) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
@@ -332,7 +331,7 @@ async function getDefaultBranch(repoUrl, token) {
     };
 
     try {
-        const response = await axios.get(repoInfoUrl, { headers }, { timeout: 10000 });
+        const response = await axios.get(repoInfoUrl, { headers });
         return response.data.default_branch;
     } catch (error) {
         console.error('Error fetching default branch:', error);
