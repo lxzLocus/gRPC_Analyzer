@@ -262,28 +262,20 @@ async function createDirectory(dir) {
 //10
 async function cloneRepository(repoUrl, commitId, directory) {
     try {
-        // Check if the directory already exists
         if (fs.existsSync(directory)) {
             console.log(`Directory ${directory} already exists. Removing it.`);
             fs.rmdirSync(directory, { recursive: true });
         }
 
-        // Clone the repository
         console.log(`Cloning repository into ${directory}`);
-        await execPromise(`git clone ${repoUrl} ${directory}`); // await to ensure completion
+        await execPromise(`git clone ${repoUrl} ${directory}`);
 
-        // Change to the cloned directory
-        const repoPath = path.join(directory);
-        console.log(`Changing directory to ${repoPath}`);
-
-        // Checkout the specified commit
-        process.chdir(repoPath); // Be cautious with process.chdir in async functions
+        console.log('Directory exists after git clone:', fs.existsSync(directory));
 
         console.log(`Checking out commit ${commitId}`);
-        await execPromise(`git checkout ${commitId}`); // await to ensure completion
+        await execPromise(`git -C ${directory} checkout ${commitId}`);
 
-        // Return to original directory
-        process.chdir(path.resolve('/')); // Change back to root or your desired directory
+        console.log('Repository state saved in:', directory);
     } catch (error) {
         console.error('Error cloning or checking out repository:', error);
         throw error;
@@ -320,7 +312,6 @@ async function getPrevCommitId(repoDir, commitId, branchName) {
     }
 }
 
-
 //12
 async function getDefaultBranch(repoUrl, token) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
@@ -338,6 +329,26 @@ async function getDefaultBranch(repoUrl, token) {
         return null;
     }
 }
+
+//Add
+async function findBranchContainingCommit(repoPath, commitId) {
+    try {
+        // コミット ID を含むブランチをリモートで探す
+        const { stdout, stderr } = await execPromise(`git -C ${repoPath} branch -r --contains ${commitId}`);
+        if (stderr) {
+            throw new Error(`Error finding branches: ${stderr}`);
+        }
+        const branches = stdout.trim().split('\n').map(branch => branch.trim()).filter(Boolean);
+        if (branches.length === 0) {
+            throw new Error(`No branches found containing commit ${commitId}`);
+        }
+        return branches[0]; // 最初のブランチを返す
+    } catch (error) {
+        console.error('Error:', error);
+        throw error;
+    }
+}
+
 
 
 
