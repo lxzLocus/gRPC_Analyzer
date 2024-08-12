@@ -18,6 +18,7 @@ const githubToken = process.env.GITHUB_TOKEN;
 
 
 /*settings*/
+const rootPath = '/app/'
 const csvFilePath = 'dataset/temp.csv';
 const saveDir = 'dataset/clone';
 // const saveDir = 'dataset/cloned_reps_issue';
@@ -56,26 +57,25 @@ async function processRepository(repoUrl) {
                 await createDirectory(path.join(repoDir, 'issue'));
                 await createDirectory(issueDir);
 
-                const mergeDir = path.join(prDir, `merge_${issue.number}`);
-                const premergeDir = path.join(prDir, `premerge_${issue.number}`);
+                const mergeDir = path.join(issueDir, `merge_${issue.number}`);
+                const premergeDir = path.join(issueDir, `premerge_${issue.number}`);
 
                 await cloneRepository(repoUrl, commitId, mergeDir);
                 console.log(`Repository state before merge saved in: ${mergeDir}`);
 
-
                 const defaultBranchName = await getDefaultBranch(repoUrl, githubToken);
 
-                // Get the next commit after the pre-merge commit
+                // Ensure cloneRepository is finished before calling getPrevCommitId
                 const prevCommitId = await getPrevCommitId(mergeDir, commitId, defaultBranchName);
                 if (prevCommitId) {
                     try {
                         await cloneRepository(repoUrl, prevCommitId, premergeDir);
                         console.log(`Repository state after merge saved in: ${premergeDir}`);
                     } catch (e) {
-                        console.error(`Failed to checkout the next commit (${prevCommitId}):`, e);
+                        console.error(`Failed to checkout the previous commit (${prevCommitId}):`, e);
                     }
                 } else {
-                    console.error('Could not determine the next commit.');
+                    console.error('Could not determine the previous commit.');
                 }
 
             } else {
@@ -96,7 +96,7 @@ async function processRepository(repoUrl) {
             const programmingFiles = changedFiles.filter(isProgrammingFile);
 
             if (programmingFiles.length > 0) {
-                console.log(`Changed programming files: ${programmingFiles.join(', ')}¥n`);
+                console.log(`Changed programming files: ${programmingFiles.join(', ')}\n`);
 
                 const repoDir = path.join(saveDir, repo);
                 const sanitizedPrTitle = sanitizeDirectoryName(pullRequest.title); // ここでタイトルをサニタイズ
@@ -113,16 +113,17 @@ async function processRepository(repoUrl) {
 
                 const defaultBranchName = await getDefaultBranch(repoUrl, githubToken);
 
+                // Ensure cloneRepository is finished before calling getPrevCommitId
                 const prevCommitId = await getPrevCommitId(mergeDir, commitId, defaultBranchName);
                 if (prevCommitId) {
                     try {
                         await cloneRepository(repoUrl, prevCommitId, premergeDir);
                         console.log(`Repository state after merge saved in: ${premergeDir}`);
                     } catch (e) {
-                        console.error(`Failed to checkout the next commit (${prevCommitId}):`, e);
+                        console.error(`Failed to checkout the previous commit (${prevCommitId}):`, e);
                     }
                 } else {
-                    console.error('Could not determine the next commit.');
+                    console.error('Could not determine the previous commit.');
                 }
 
             } else {
@@ -131,6 +132,8 @@ async function processRepository(repoUrl) {
         }
     }
 }
+
+
 
 
 //04
@@ -267,38 +270,50 @@ async function cloneRepository(repoUrl, commitId, directory) {
         }
 
         // Clone the repository
-        execSync(`git clone ${repoUrl} ${directory}`);
-        console.log(`GITCLONENING : git clone ${repoUrl} ${directory}`);
+        console.log(`Cloning repository into ${directory}`);
+        await execPromise(`git clone ${repoUrl} ${directory}`);
 
         // Change to the cloned directory
-        process.chdir(directory);
+        const repoPath = path.join(directory);
+        console.log(`Changing directory to ${repoPath}`);
 
         // Checkout the specified commit
-        execSync(`git checkout ${commitId}`);
-        console.log(`GITCHECKOUT : git checkout ${commitId}`);
+        process.chdir(repoPath); // Be cautious with process.chdir in async functions
+
+        console.log(`Checking out commit ${commitId}`);
+        await execPromise(`git checkout ${commitId}`);
+
+        // Return to original directory
+        process.chdir(path.resolve('/')); // Change back to root or your desired directory
     } catch (error) {
         console.error('Error cloning or checking out repository:', error);
+        throw error;
     }
 }
 
 //11
 async function getPrevCommitId(repoDir, commitId, branchName) {
     try {
-        // フルパスに変換
-        const fullRepoDir = path.resolve(repoDir);
+        const cdPath = rootPath + repoDir;
 
-        // コマンドをフルパスで指定
-        const command = `
-            git -C ${fullRepoDir} log ${branchName} --pretty=format:"%H" --before=$(git -C ${fullRepoDir} show -s --format=%ci ${commitId}) -n 1
-        `;
+        // コミットの日時を取得するコマンド
+        const commitDateCommand = `cd ${cdPath} && git show -s --format=%ci ${commitId}`;
+        const commitDateOutput = execSync(commitDateCommand).toString().trim();
 
+        // 日付をISO形式に変換し、3秒引いた新しい日時を計算
+        const commitDate = new Date(commitDateOutput);
+        commitDate.setSeconds(commitDate.getSeconds() - 3);
+        const isoDate = commitDate.toISOString().replace('Z', '+00:00'); // replace 'Z' with '+00:00' for compatibility
+
+        // リポジトリのディレクトリに移動し、指定したブランチの一つ前のコミットIDを取得するコマンド
+        const command = `cd ${cdPath} && git log ${branchName} --pretty=format:"%H" --before="${isoDate}" -n 1`;
         const result = execSync(command).toString().trim();
 
         // 結果が空の場合は一つ前のコミットが存在しない
-        if (result) {
+        if (result && result !== commitId) {
             return result;
         } else {
-            console.error(`No previous commit found for commit ID ${commitId} on branch ${branchName}.`);
+            console.error(`No previous commit found before commit ID ${commitId} on branch ${branchName}, or the commit ID is the same.`);
             return null;
         }
     } catch (error) {
