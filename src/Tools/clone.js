@@ -56,20 +56,20 @@ async function processRepository(repoUrl) {
                 await createDirectory(path.join(repoDir, 'issue'));
                 await createDirectory(issueDir);
 
-                const preDir = path.join(issueDir, `pre_${issue.number}`);
-                const mergeDir = path.join(issueDir, `post_${issue.number}`);
+                const mergeDir = path.join(prDir, `merge_${issue.number}`);
+                const premergeDir = path.join(prDir, `premerge_${issue.number}`);
 
-                await cloneRepository(repoUrl, commitId, preDir);
-                console.log(`Repository state before merge saved in: ${preDir}`);
+                await cloneRepository(repoUrl, commitId, mergeDir);
+                console.log(`Repository state before merge saved in: ${mergeDir}`);
 
                 // Get the next commit after the pre-merge commit
-                const nextCommitId = await getNextCommitId(preDir, commitId);
-                if (nextCommitId) {
+                const prevCommitId = await getprevCommitId(mergeDir, commitId);
+                if (prevCommitId) {
                     try {
-                        await cloneRepository(repoUrl, nextCommitId, mergeDir);
-                        console.log(`Repository state after merge saved in: ${mergeDir}`);
+                        await cloneRepository(repoUrl, prevCommitId, premergeDir);
+                        console.log(`Repository state after merge saved in: ${premergeDir}`);
                     } catch (e) {
-                        console.error(`Failed to checkout the next commit (${nextCommitId}):`, e);
+                        console.error(`Failed to checkout the next commit (${prevCommitId}):`, e);
                     }
                 } else {
                     console.error('Could not determine the next commit.');
@@ -102,20 +102,20 @@ async function processRepository(repoUrl) {
                 await createDirectory(path.join(repoDir, 'pullrequest'));
                 await createDirectory(prDir);
 
-                const preDir = path.join(prDir, `pre_${pullRequest.number}`);
                 const mergeDir = path.join(prDir, `merge_${pullRequest.number}`);
+                const premergeDir = path.join(prDir, `premerge_${pullRequest.number}`);
 
-                await cloneRepository(repoUrl, commitId, preDir);
-                console.log(`Repository state before merge saved in: ${preDir}`);
+                await cloneRepository(repoUrl, commitId, mergeDir);
+                console.log(`Repository state before merge saved in: ${mergeDir}`);
 
-                // Get the next commit after the pre-merge commit
-                const nextCommitId = await getNextCommitId(preDir, commitId);
-                if (nextCommitId) {
+
+                const prevCommitId = await getprevCommitId(mergeDir, commitId);
+                if (prevCommitId) {
                     try {
-                        await cloneRepository(repoUrl, nextCommitId, mergeDir);
-                        console.log(`Repository state after merge saved in: ${mergeDir}`);
+                        await cloneRepository(repoUrl, prevCommitId, premergeDir);
+                        console.log(`Repository state after merge saved in: ${premergeDir}`);
                     } catch (e) {
-                        console.error(`Failed to checkout the next commit (${nextCommitId}):`, e);
+                        console.error(`Failed to checkout the next commit (${prevCommitId}):`, e);
                     }
                 } else {
                     console.error('Could not determine the next commit.');
@@ -278,18 +278,18 @@ async function cloneRepository(repoUrl, commitId, directory) {
 }
 
 //11
-async function getNextCommitId(repoDir, commitId) {
-    const command = `cd ${repoDir} && git log --pretty=format:"%H" --reverse ${commitId}..HEAD | head -n 1`;
+async function getPrevCommitId(repoDir, commitId) {
+    const command = `cd ${repoDir} && git rev-parse ${commitId}^`;
     try {
         const result = execSync(command).toString().trim();
         return result;
     } catch (error) {
-        console.error(`Error getting next commit ID after ${commitId}:`, error);
+        console.error(`Error getting previous commit ID before ${commitId}:`, error);
         return null;
     }
 }
 
-//12
+//12 not use
 async function getDefaultBranch(repoUrl, token) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const repoInfoUrl = `https://api.github.com/repos/${owner}/${repo}`;
