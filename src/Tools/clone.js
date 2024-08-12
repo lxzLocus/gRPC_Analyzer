@@ -63,7 +63,7 @@ async function processRepository(repoUrl) {
                 console.log(`Repository state before merge saved in: ${mergeDir}`);
 
                 // Get the next commit after the pre-merge commit
-                const prevCommitId = await getprevCommitId(mergeDir, commitId);
+                const prevCommitId = await getPrevCommitId(mergeDir, commitId);
                 if (prevCommitId) {
                     try {
                         await cloneRepository(repoUrl, prevCommitId, premergeDir);
@@ -109,7 +109,7 @@ async function processRepository(repoUrl) {
                 console.log(`Repository state before merge saved in: ${mergeDir}`);
 
 
-                const prevCommitId = await getprevCommitId(mergeDir, commitId);
+                const prevCommitId = await getPrevCommitId(mergeDir, commitId);
                 if (prevCommitId) {
                     try {
                         await cloneRepository(repoUrl, prevCommitId, premergeDir);
@@ -278,13 +278,21 @@ async function cloneRepository(repoUrl, commitId, directory) {
 }
 
 //11
-async function getPrevCommitId(repoDir, commitId) {
-    const command = `cd ${repoDir} && git rev-parse ${commitId}^`;
+async function getPrevCommitId(repoDir, commitId, branchName) {
     try {
+        // リポジトリのディレクトリに移動し、指定したブランチの一つ前のコミットIDを取得するコマンド
+        const command = `cd ${repoDir} && git log ${branchName} --pretty=format:"%H" --before=$(git show -s --format=%ci ${commitId}) -n 1`;
         const result = execSync(command).toString().trim();
-        return result;
+
+        // 結果が空の場合は一つ前のコミットが存在しない
+        if (result) {
+            return result;
+        } else {
+            console.error(`No previous commit found for commit ID ${commitId} on branch ${branchName}.`);
+            return null;
+        }
     } catch (error) {
-        console.error(`Error getting previous commit ID before ${commitId}:`, error);
+        console.error(`Error getting previous commit ID before ${commitId} on branch ${branchName}:`, error);
         return null;
     }
 }
