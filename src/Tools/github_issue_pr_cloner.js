@@ -21,7 +21,7 @@ const githubToken = process.env.GITHUB_TOKEN;
 
 /*settings*/
 const rootPath = '/app/'
-const csvFilePath = 'dataset/temp.csv';
+const csvFilePath = 'dataset/gRPC_reps_list.csv';
 const saveDir = 'dataset/clone';
 // const saveDir = 'dataset/cloned_reps_issue';
 
@@ -53,7 +53,7 @@ async function processRepository(repoUrl) {
                 console.log(`Changed programming files: ${programmingFiles.join(', ')}`);
 
                 const repoDir = path.join(saveDir, repo);
-                const sanitizedIssueTitle = sanitizeDirectoryName(issue.title); // ここでタイトルをサニタイズ
+                const sanitizedIssueTitle = sanitizeDirectoryName(issue.title);
                 const issueDir = path.join(repoDir, 'issue', sanitizedIssueTitle);
                 await createDirectory(repoDir);
                 await createDirectory(path.join(repoDir, 'issue'));
@@ -62,22 +62,24 @@ async function processRepository(repoUrl) {
                 const mergeDir = path.join(issueDir, `merge_${issue.number}`);
                 const premergeDir = path.join(issueDir, `premerge_${issue.number}`);
 
-                await cloneRepository(repoUrl, commitId, mergeDir);
-                console.log(`Repository state before merge saved in: ${mergeDir}`);
+                try {
+                    await cloneRepository(repoUrl, commitId, mergeDir);
+                    console.log(`Repository state before merge saved in: ${mergeDir}`);
 
-                const defaultBranchName = await getDefaultBranch(repoUrl, githubToken);
-
-                // Ensure cloneRepository is finished before calling getPrevCommitId
-                const prevCommitId = await getPrevCommitId(mergeDir, commitId, defaultBranchName);
-                if (prevCommitId) {
-                    try {
-                        await cloneRepository(repoUrl, prevCommitId, premergeDir);
-                        console.log(`Repository state after merge saved in: ${premergeDir}`);
-                    } catch (e) {
-                        console.error(`Failed to checkout the previous commit (${prevCommitId}):`, e);
+                    const defaultBranchName = await getDefaultBranch(repoUrl, githubToken);
+                    const prevCommitId = await getPrevCommitId(mergeDir, commitId, defaultBranchName);
+                    if (prevCommitId) {
+                        try {
+                            await cloneRepository(repoUrl, prevCommitId, premergeDir);
+                            console.log(`Repository state after merge saved in: ${premergeDir}`);
+                        } catch (e) {
+                            console.error(`Failed to checkout the previous commit (${prevCommitId}):`, e);
+                        }
+                    } else {
+                        console.error('Could not determine the previous commit.');
                     }
-                } else {
-                    console.error('Could not determine the previous commit.');
+                } catch (e) {
+                    console.error(`Failed to clone the repository or checkout the commit (${commitId}):`, e);
                 }
 
             } else {
@@ -88,7 +90,6 @@ async function processRepository(repoUrl) {
 
     // Process pull requests
     for (const pullRequest of pullRequests) {
-        //マージされたかどうか判定
         if (pullRequest.merged_at) {
             const commitId = pullRequest.merge_commit_sha;
             console.log(`\nPull Request #${pullRequest.number}: ${pullRequest.title}`);
@@ -101,7 +102,7 @@ async function processRepository(repoUrl) {
                 console.log(`Changed programming files: ${programmingFiles.join(', ')}\n`);
 
                 const repoDir = path.join(saveDir, repo);
-                const sanitizedPrTitle = sanitizeDirectoryName(pullRequest.title); // ここでタイトルをサニタイズ
+                const sanitizedPrTitle = sanitizeDirectoryName(pullRequest.title);
                 const prDir = path.join(repoDir, 'pullrequest', sanitizedPrTitle);
                 await createDirectory(repoDir);
                 await createDirectory(path.join(repoDir, 'pullrequest'));
@@ -110,22 +111,24 @@ async function processRepository(repoUrl) {
                 const mergeDir = path.join(prDir, `merge_${pullRequest.number}`);
                 const premergeDir = path.join(prDir, `premerge_${pullRequest.number}`);
 
-                await cloneRepository(repoUrl, commitId, mergeDir);
-                console.log(`Repository state before merge saved in: ${mergeDir}`);
+                try {
+                    await cloneRepository(repoUrl, commitId, mergeDir);
+                    console.log(`Repository state before merge saved in: ${mergeDir}`);
 
-                const defaultBranchName = await getDefaultBranch(repoUrl, githubToken);
-
-                // Ensure cloneRepository is finished before calling getPrevCommitId
-                const prevCommitId = await getPrevCommitId(mergeDir, commitId, defaultBranchName);
-                if (prevCommitId) {
-                    try {
-                        await cloneRepository(repoUrl, prevCommitId, premergeDir);
-                        console.log(`Repository state after merge saved in: ${premergeDir}`);
-                    } catch (e) {
-                        console.error(`Failed to checkout the previous commit (${prevCommitId}):`, e);
+                    const defaultBranchName = await getDefaultBranch(repoUrl, githubToken);
+                    const prevCommitId = await getPrevCommitId(mergeDir, commitId, defaultBranchName);
+                    if (prevCommitId) {
+                        try {
+                            await cloneRepository(repoUrl, prevCommitId, premergeDir);
+                            console.log(`Repository state after merge saved in: ${premergeDir}`);
+                        } catch (e) {
+                            console.error(`Failed to checkout the previous commit (${prevCommitId}):`, e);
+                        }
+                    } else {
+                        console.error('Could not determine the previous commit.');
                     }
-                } else {
-                    console.error('Could not determine the previous commit.');
+                } catch (e) {
+                    console.error(`Failed to clone the repository or checkout the commit (${commitId}):`, e);
                 }
 
             } else {
@@ -134,6 +137,7 @@ async function processRepository(repoUrl) {
         }
     }
 }
+
 
 //04
 async function getFixedIssuesAndPullRequests(repoUrl, token) {
