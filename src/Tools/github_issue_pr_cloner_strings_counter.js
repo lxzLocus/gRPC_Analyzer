@@ -1,3 +1,14 @@
+/*********
+ for bug dataset
+ GitHubの  issue前後のリポジトリを取得する
+ プルリクエストの前後を取得する
+
+ ファイルの中に文字列あったらクローンする
+
+  sudo git config --system core.longpaths true
+  or
+  .git/config [core] longpaths = true 追加
+*********/
 const axios = require('axios');
 const fs = require('fs');
 const csv = require('csv-parser');
@@ -5,34 +16,38 @@ require('dotenv').config();
 
 const githubToken = process.env.GITHUB_TOKEN;
 
+
 /*settings*/
 const csvFilePath = 'dataset/temp.csv';
 
-// Issue取得拡張子定義
+//issue取得拡張子定義
 const programmingFileExtensions = [
     '.go', '.cs', '.java', '.scala', '.ts', '.py', '.c', '.js', '.sh',
     '.html', '.css', '.pl', '.cpp', '.rs', '.proto', '.protoc'
 ];
 
-// メイン関数
+const importStrings = [
+    'import "google.golang.org/grpc"', 'using Grpc.Core;', 'import io.grpc.',
+    'import * as grpc from', 'import grpc', '#include <grpc/grpc.h>',
+    'const grpc = require(', 'syntax = "proto3"', 'service '
+];
+
+//03
 async function processRepository(repoUrl) {
-    const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const { fixedIssues, pullRequests } = await getFixedIssuesAndPullRequests(repoUrl, githubToken);
-
-    console.log(`Found ${fixedIssues.length} fixed issues and ${pullRequests.length} closed pull requests for repository ${repoUrl}:`);
-
-    let cloneableIssues = 0;
-    let cloneablePullRequests = 0;
+    console.log(`FILTER Found ${fixedIssues.length} fixed issues and ${pullRequests.length} closed pull requests for repository ${repoUrl}:`);
+    let relevantIssueCount = 0;
+    let relevantPullRequestCount = 0;
 
     // Process issues
     for (const issue of fixedIssues) {
         const commitId = await getPullRequestInfo(repoUrl, githubToken, issue.number);
         if (commitId) {
-            const changedFiles = await getChangedFiles(repoUrl, githubToken, commitId);
-            const programmingFiles = changedFiles.filter(isProgrammingFile);
+            const changedFiles = await getChangedFilesWithContent(repoUrl, githubToken, commitId);
+            const relevantFiles = changedFiles.filter(file => containsImportStrings(file.content));
 
-            if (programmingFiles.length > 0) {
-                cloneableIssues++;
+            if (relevantFiles.length > 0) {
+                relevantIssueCount++;
             }
         }
     }
@@ -41,21 +56,22 @@ async function processRepository(repoUrl) {
     for (const pullRequest of pullRequests) {
         if (pullRequest.merged_at) {
             const commitId = pullRequest.merge_commit_sha;
-            const changedFiles = await getChangedFiles(repoUrl, githubToken, commitId);
-            const programmingFiles = changedFiles.filter(isProgrammingFile);
+            const changedFiles = await getChangedFilesWithContent(repoUrl, githubToken, commitId);
+            const relevantFiles = changedFiles.filter(file => containsImportStrings(file.content));
 
-            if (programmingFiles.length > 0) {
-                cloneablePullRequests++;
+            if (relevantFiles.length > 0) {
+                relevantPullRequestCount++;
             }
         }
     }
+    console.log(`FILTER Cloneable issues: ${relevantIssueCount}`);
+    console.log(`FILTER Cloneable pull requests: ${relevantPullRequestCount}`);
 
-    console.log(`Cloneable issues: ${cloneableIssues}`);
-    console.log(`Cloneable pull requests: ${cloneablePullRequests}`);
+    return { relevantIssueCount, relevantPullRequestCount };
 }
 
 
-// GitHub APIからクローズされたIssueとPull Requestを取得
+//04
 async function getFixedIssuesAndPullRequests(repoUrl, token) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const issuesUrl = `https://api.github.com/repos/${owner}/${repo}/issues?state=closed&per_page=100`;
@@ -68,7 +84,7 @@ async function getFixedIssuesAndPullRequests(repoUrl, token) {
     let fixedIssues = [];
     let pullRequests = [];
 
-    // クローズされたIssueを取得
+    // Fetch closed issues
     try {
         let page = 1;
         let response;
@@ -82,10 +98,10 @@ async function getFixedIssuesAndPullRequests(repoUrl, token) {
             page++;
         } while (response.data.length > 0);
     } catch (error) {
-        console.error('Issueの取得エラー:', error);
+        console.error('Error fetching issues:', error);
     }
 
-    // クローズされたPull Requestを取得
+    // Fetch closed pull requests
     try {
         let page = 1;
         let response;
@@ -97,12 +113,13 @@ async function getFixedIssuesAndPullRequests(repoUrl, token) {
             page++;
         } while (response.data.length > 0);
     } catch (error) {
-        console.error('Pull Requestの取得エラー:', error);
+        console.error('Error fetching pull requests:', error);
     }
 
     return { fixedIssues, pullRequests };
 }
 
+//05
 async function getPullRequestInfo(repoUrl, token, issueNumber) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const pullsUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/events`;
@@ -127,7 +144,8 @@ async function getPullRequestInfo(repoUrl, token, issueNumber) {
     return null;
 }
 
-async function getChangedFiles(repoUrl, token, commitId) {
+//06
+async function getChangedFilesWithContent(repoUrl, token, commitId) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const commitUrl = `https://api.github.com/repos/${owner}/${repo}/commits/${commitId}`;
     const headers = {
@@ -139,20 +157,41 @@ async function getChangedFiles(repoUrl, token, commitId) {
         const response = await axios.get(commitUrl, { headers });
         const files = response.data.files;
 
-        return files.map(file => file.filename);
+        const fileContents = [];
+        for (const file of files) {
+            if (isProgrammingFile(file.filename)) {
+                const rawFileUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${commitId}/${file.filename}`;
+                try {
+                    const fileContentResponse = await axios.get(rawFileUrl);
+                    fileContents.push({ filename: file.filename, content: fileContentResponse.data });
+                } catch (error) {
+                    console.error(`Error fetching content for file ${file.filename}:`, error);
+                }
+            }
+        }
+
+        return fileContents;
     } catch (error) {
         console.error(`Error fetching changed files for commit ${commitId}:`, error);
         return [];
     }
 }
 
+//07
 function isProgrammingFile(file) {
     return programmingFileExtensions.some(ext => file.endsWith(ext));
 }
 
-// CSVファイルを読み込んでリポジトリを処理
-function main() {
+//08
+function containsImportStrings(content) {
+    return importStrings.some(str => content.includes(str));
+}
+
+//02
+async function main() {
     const repoUrls = [];
+    let totalIssues = 0;
+    let totalPullRequests = 0;
 
     fs.createReadStream(csvFilePath)
         .pipe(csv())
@@ -160,11 +199,17 @@ function main() {
             repoUrls.push(row.url);
         })
         .on('end', async () => {
-            console.log('CSVファイルの処理が完了しました');
+            console.log('CSV file successfully processed');
             for (const repoUrl of repoUrls) {
-                await processRepository(repoUrl);
+                const { relevantIssueCount, relevantPullRequestCount } = await processRepository(repoUrl);
+                totalIssues += relevantIssueCount;
+                totalPullRequests += relevantPullRequestCount;
             }
+
+            console.log(`Total relevant issues: ${totalIssues}`);
+            console.log(`Total relevant pull requests: ${totalPullRequests}`);
         });
 }
 
+//01
 main();
