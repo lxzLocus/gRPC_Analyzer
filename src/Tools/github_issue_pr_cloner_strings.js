@@ -35,7 +35,7 @@ const programmingFileExtensions = [
 const importStrings = [
     'import "google.golang.org/grpc"', 'using Grpc.Core;', 'import io.grpc.',
     'import * as grpc from', 'import grpc', '#include <grpc/grpc.h>',
-    'const grpc = require(', 'syntax = "proto3"', 'service '
+    'const grpc = require(', 'syntax = "proto3"'
 ];
 
 //03
