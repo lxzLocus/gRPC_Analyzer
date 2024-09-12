@@ -1,0 +1,12 @@
+#Instruction
+Fix the exception in "#Client code file" and output it as "#Fixed code". 
+Refer to the "#Proto file" file and fix "#Client code file" references and variable types, and output as "#Fixed code".
+Do not output text in the output result, only the program code.
+
+#Proto file
+{{protoSource}}
+
+#Client code file
+{{clientSource}}
+
+#Fixed code
