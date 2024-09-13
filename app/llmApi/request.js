@@ -8,7 +8,7 @@ const OPENAI_TOKEN = process.env.OPENAI_TOKEN;
 const promptTextfile = 'app/llmApi/prompt.txt';
 
 const protoContent = '';
-const clientSourceContent = '';
+const sourceCodeContent = '';
 
 request();
 
@@ -16,23 +16,26 @@ async function request() {
     const endpoint = '/v1/chat/completions';
     const url = `https://api.openai.com${endpoint}`;
 
-    // let fileContent = fs.readFileSync(promptTextfile);
+    let fileContent = fs.readFileSync(promptTextfile);
 
-    // // 変数を定義する
-    // let context = {
-    //     protoSource: protoContent,
-    //     clientSource: clientSourceContent,
-    // };
+    // 変数を定義する
+    let context = {
+        protoSource: protoContent,
+        sourceCode: sourceCodeContent,
+    };
 
-    // // Handlebarsテンプレートをコンパイルする
-    // let template = Handlebars.compile(fileContent);
-    // let prompt = template(context);
+    // Handlebarsテンプレートをコンパイルする
+    let template = Handlebars.compile(fileContent);
+    let prompt = template(context);
 
-    let prompt = 'Hello';
 
     const payload = {
         'model': 'gpt-4o', 
         'messages': [
+            {
+                "role": "system",
+                "content": "Fix or improve issues in the program code related to grpc, please refer to the proto file and make the code fixes."
+            },
             {
                 'role': 'user', 
                 'content': `${prompt}`
@@ -50,7 +53,7 @@ async function request() {
     try {
         const response = await axios.post(url, payload, config);
         console.log(response.data);
-        console.log(response.data.choices[0].message.content); // 修正：response.data.choices[0].message.content
+        console.log(response.data.choices[0].message.content); 
     } catch (error) {
         console.error(error.response ? error.response.data : error.message);
     }
