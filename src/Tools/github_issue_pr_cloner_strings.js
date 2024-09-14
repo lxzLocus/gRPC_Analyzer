@@ -23,7 +23,7 @@ const githubToken = process.env.GITHUB_TOKEN;
 
 /*settings*/
 const rootPath = '/app/'
-const csvFilePath = 'dataset/temp.csv';
+const csvFilePath = 'dataset/gRPC_reps_without_bigreps.csv';
 const saveDir = 'dataset/clone';
 
 //issue取得拡張子定義
