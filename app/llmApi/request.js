@@ -34,7 +34,7 @@ async function request() {
         'messages': [
             {
                 "role": "system",
-                "content": "Fix or improve issues in the program code related to grpc, please refer to the proto file and make the code fixes."
+                "content": "Fix or improve issues in the program code related to gRPC, please refer to the proto file and make the code fixes."
             },
             {
                 'role': 'user', 
