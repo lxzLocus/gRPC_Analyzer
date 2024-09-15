@@ -39,7 +39,7 @@ const importStrings = [
 ];
 
 //03
-async function processRepository(repoUrl) {
+async function processRepository(repoUrl) { 
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const { fixedIssues, pullRequests } = await getFixedIssuesAndPullRequests(repoUrl, githubToken);
 
@@ -104,7 +104,6 @@ async function processRepository(repoUrl) {
             console.log(`Merged commit ID: ${commitId}`);
 
             const changedFiles = await getChangedFilesWithContent(repoUrl, githubToken, commitId);
-            // 文字列がファイル内に含まれているかを確認
             const relevantFiles = changedFiles.filter(file => containsImportStrings(file.content));
 
             if (relevantFiles.length > 0) {
@@ -124,8 +123,10 @@ async function processRepository(repoUrl) {
                     await cloneRepository(repoUrl, commitId, mergeDir);
                     console.log(`Repository state before merge saved in: ${mergeDir}`);
 
-                    const defaultBranchName = await getDefaultBranch(repoUrl, githubToken);
-                    const prevCommitId = await getPrevCommitId(mergeDir, commitId, defaultBranchName);
+                    // プルリクエストのマージ先ブランチを取得
+                    const targetBranchName = await getPullRequestBaseBranch(repoUrl, githubToken, pullRequest.number);
+                    const prevCommitId = await getPrevCommitId(mergeDir, commitId, targetBranchName);
+
                     if (prevCommitId) {
                         try {
                             await cloneRepository(repoUrl, prevCommitId, premergeDir);
@@ -139,12 +140,12 @@ async function processRepository(repoUrl) {
                 } catch (e) {
                     console.error(`Failed to clone the repository or checkout the commit (${commitId}):`, e);
                 }
-
             } else {
                 console.log(`No relevant strings found in changed files for pullRequest #${pullRequest.number}`);
             }
         }
     }
+
 }
 
 
@@ -360,6 +361,23 @@ async function getDefaultBranch(repoUrl, token) {
 
 function containsImportStrings(content) {
     return importStrings.some(str => content.includes(str));
+}
+
+async function getPullRequestBaseBranch(repoUrl, token, pullRequestNumber) {
+    const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
+    const pullsUrl = `https://api.github.com/repos/${owner}/${repo}/pulls/${pullRequestNumber}`;
+    const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+    };
+
+    try {
+        const response = await axios.get(pullsUrl, { headers });
+        return response.data.base.ref;  // マージ先のブランチ名
+    } catch (error) {
+        console.error(`Error fetching pull request info for PR #${pullRequestNumber}:`, error);
+        return null;
+    }
 }
 
 
