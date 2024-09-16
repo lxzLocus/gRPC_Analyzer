@@ -7,7 +7,8 @@ const OPENAI_TOKEN = process.env.OPENAI_TOKEN;
 
 const promptTextfile = 'app/llmApi/prompt.txt';
 
-const protoContent = '';
+const protoFileContent = '';
+const fileChangesContent = '';
 const sourceCodeContent = '';
 
 request();
@@ -20,8 +21,9 @@ async function request() {
 
     // 変数を定義する
     let context = {
-        protoSource: protoContent,
-        sourceCode: sourceCodeContent,
+        protoFile: protoFileContent,
+        fileChanges: fileChangesContent,
+        sourceCode: sourceCodeContent
     };
 
     // Handlebarsテンプレートをコンパイルする

@@ -5,13 +5,13 @@ Refer to the "#Proto file" file and fix "#SourceCode" references and variable ty
 Do not output text in the output result, only the program code.
 
 ### proto file ###
-{{protoSource}}
+{{protoFile}}
 
 ### difference of changes ###
-{{Repository}}
+{{fileChanges}}
 
 ### source code###
-{{SourceCode}}
+{{sourceCode}}
 
 
 
