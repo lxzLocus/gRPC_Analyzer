@@ -2,3 +2,5 @@ matplotlib
 requests
 python-dotenv
 gitpython
+Jinja2
+

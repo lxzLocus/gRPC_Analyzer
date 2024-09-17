@@ -54,8 +54,12 @@ async function requestOpenAI(protoFileContent, fileChangesContent, sourceCodeCon
         const response = await axios.post(url, payload, config);
         console.log(response.data);
         console.log(response.data.choices[0].message.content);
+
+        return response.data.choices[0].message.content;
     } catch (error) {
         console.error(error.response ? error.response.data : error.message);
+
+        return 0;
     }
 }
 

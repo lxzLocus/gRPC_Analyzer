@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 // 1つの入力ディレクトリ
-const inputDir = '/app/dataset/clone/alibabacloud-microservice-demo/pullrequest/feat-_multiple_framework_go_http_demo';
+const inputDir = '/app/dataset/clone/mslearn-aspnet-core/pullrequest/Convert_config_module_to_dev_containers';
 
 // `premerge`と`merge`ディレクトリを検出
 const premergeDir = fs.readdirSync(inputDir).find(dir => dir.startsWith('premerge'));

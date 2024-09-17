@@ -1,17 +1,25 @@
 ### instruction ###
-Fix or improve issues in the program code related to grpc, please refer to the proto file and make the code fixes.
-Fix the exception in "#SourceCode" and output it as Fixed code. 
-Refer to the "#Proto file" file and fix "#SourceCode" references and variable types, and output as Fixed code.
-Do not output text in the output result, only the program code.
+Fix or improve gRPC-related issues in the source code based on the proto file. Ensure that exceptions in "### source code###" are handled appropriately and provide the corrected code as output. 
+
+- Reference the "### proto file ###" and ensure that all message and service definitions are correctly implemented in "### source code###".
+- Correct any type mismatches, field names, or methods based on the proto file. Update variable names and types where necessary.
+- Handle exceptions based on the updated proto file structure, and output only the corrected code without any additional text.
+- If there are any missing implementations or incomplete parts, ensure that they are completed based on the proto file and the given changes.
 
 ### proto file ###
+```
 {{protoFile}}
+```
 
 ### difference of changes ###
+```
 {{fileChanges}}
+```
 
 ### source code###
+```
 {{sourceCode}}
+```
 
 
 
