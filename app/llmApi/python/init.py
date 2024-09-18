@@ -1,6 +1,7 @@
 from find_proto import get_proto_file_contents_recursive
 from format_proto import format_proto_content
 from diff_proto import compare_proto_files
+from find_useproto import find_usingproto
 from req import request_openai
 
 
@@ -14,6 +15,8 @@ formated_proto_content = format_proto_content(proto_content)
 
 # get proto diff
 file_changes = compare_proto_files(input_directory)
+
+source = find_usingproto(input_directory)
     
 
 # api request

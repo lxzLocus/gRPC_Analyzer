@@ -1,4 +1,4 @@
-#新旧proto fileの比較を行う
+#proto fileを使っているプログラムを探索する
 
 import os
 import subprocess
@@ -47,8 +47,33 @@ def diff_files(file1: str, file2: str) -> dict:
     except Exception as e:
         raise Exception(f"Error running diff: {e}")
 
+# .protoファイルを利用しているプログラムを探す関数
+def find_programs_using_proto(proto_files: List[str], project_dir: str) -> List[str]:
+    programs = []
+    for proto_file in proto_files:
+        proto_name = os.path.basename(proto_file)
+        # プロジェクトディレクトリ内でprotoファイル名が使われているファイルを検索
+        for root, dirs, files in os.walk(project_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                try:
+                    # utf-8 での読み込みを試みる
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        if proto_name in f.read():
+                            programs.append(file_path)
+                except UnicodeDecodeError:
+                    # エンコーディングエラー発生時に 'latin-1' など別のエンコーディングを試す
+                    try:
+                        with open(file_path, 'r', encoding='latin-1') as f:
+                            if proto_name in f.read():
+                                programs.append(file_path)
+                    except UnicodeDecodeError:
+                        # エンコーディングが分からない場合はエラーメッセージを出力してスキップ
+                        print(f"Cannot decode file {file_path}, skipping.")
+    return programs
+
 # メインの比較関数
-def compare_proto_files(input_dir: str):
+def find_usingproto(input_dir: str):
     try:
         # input_dir の存在チェック
         if not os.path.exists(input_dir):
@@ -87,6 +112,14 @@ def compare_proto_files(input_dir: str):
             else:
                 print(f"No corresponding file for {file1} in merge directory")
 
+        # 変更されたprotoファイルを利用しているプログラムを探す
+        modified_proto_files = [res['relativePath'] for res in diff_results]
+        if modified_proto_files:
+            programs_using_proto = find_programs_using_proto(modified_proto_files, input_dir)
+            print("Programs using modified proto files:", programs_using_proto)
+        else:
+            print("No modified proto files found.")
+
         print('Diff Results:', diff_results)
         return diff_results
 
@@ -98,5 +131,5 @@ def compare_proto_files(input_dir: str):
 if __name__ == "__main__":
     # テスト用の呼び出し
     input_directory = '/app/dataset/clone/loop/pullrequest/update_api_for_loop_in'
-    result = compare_proto_files(input_directory)
+    result = find_usingproto(input_directory)
     print(result)

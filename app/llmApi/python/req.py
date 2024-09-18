@@ -1,3 +1,5 @@
+#Open AI APIを利用したリクエスト
+
 import os
 import requests
 from jinja2 import Template

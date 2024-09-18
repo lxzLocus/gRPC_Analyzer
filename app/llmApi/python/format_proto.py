@@ -1,3 +1,5 @@
+#探索後のproto fileのフォーマット処理
+
 def format_proto_content(proto_content):
     # 結果を格納するリスト
     formatted_content = []
