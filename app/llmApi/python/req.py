@@ -31,7 +31,7 @@ def request_openai(proto_file_content, file_changes_content, source_code_content
         # Jinja2テンプレートのコンパイルとコンテキストの適用
         context = {
             'protoFile': proto_file_content,
-            'fileChanges': file_changes_content,
+            'fileChanges': file_changes_content[0]['diff'],
             'sourceCode': source_code_content
         }
 

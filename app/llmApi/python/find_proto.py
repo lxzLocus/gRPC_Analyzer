@@ -20,6 +20,8 @@ def get_proto_file_contents_recursive(input_dir: str):
     for root, dirs, files in os.walk(premerge_path):
         if '.git' in dirs:
             dirs.remove('.git')  # .gitディレクトリを除外
+        if 'node_modules' in dirs:
+            dirs.remove('node_modules')  # node_modulesディレクトリを除外
         # .protoファイルのみ取得
         for file in files:
             if file.endswith('.proto'):
@@ -37,7 +39,6 @@ def get_proto_file_contents_recursive(input_dir: str):
                     print(f"Error reading {file_path}: {e}")
 
     return proto_files_contents
-
 # モジュールとして利用可能にする
 if __name__ == "__main__":
     # テスト用の呼び出し
