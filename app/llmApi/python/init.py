@@ -3,7 +3,7 @@ from format_proto import format_proto_content
 from diff_proto import compare_proto_files
 from find_useproto import find_usingproto
 from convert_string import read_file_as_string
-from req import request_openai
+from request import request_openai
 
 
 source_code = "/app/dataset/openaiapi/premerge/cmd/server/main.go"
