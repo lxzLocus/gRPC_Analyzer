@@ -1,13 +1,15 @@
 /*********
- for bug dataset
- GitHubの  issue前後のリポジトリを取得する
- プルリクエストの前後を取得する
+     for bug dataset
+    GitHubの  issue前後のリポジトリを取得する
+    プルリクエストの前後を取得する
 
- ファイルの中に文字列あったらクローンする
+    ファイルの中に文字列あったらクローンする
 
-  sudo git config --system core.longpaths true
-  or
-  .git/config [core] longpaths = true 追加
+    5000req/h 守った版
+
+    sudo git config --system core.longpaths true
+    or
+    .git/config [core] longpaths = true 追加
 *********/
 const axios = require('axios');
 const fs = require('fs');
@@ -38,8 +40,21 @@ const importStrings = [
     'const grpc = require(', 'syntax = "proto3"'
 ];
 
+async function checkRateLimit(headers) {
+    const remainingRequests = headers['x-ratelimit-remaining'];
+    const resetTime = headers['x-ratelimit-reset'];
+
+    if (remainingRequests == 0) {
+        const currentTime = Math.floor(Date.now() / 1000);
+        const waitTime = resetTime - currentTime;
+
+        console.log(`Rate limit exceeded. Waiting for ${waitTime} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+    }
+}
+
 //03
-async function processRepository(repoUrl) { 
+async function processRepository(repoUrl) {
     const [owner, repo] = repoUrl.replace('https://github.com/', '').split('/');
     const { fixedIssues, pullRequests } = await getFixedIssuesAndPullRequests(repoUrl, githubToken);
 
@@ -162,13 +177,13 @@ async function getFixedIssuesAndPullRequests(repoUrl, token) {
     let fixedIssues = [];
     let pullRequests = [];
 
-    // Fetch closed issues
     try {
         let page = 1;
         let response;
 
         do {
             response = await axios.get(`${issuesUrl}&page=${page}`, { headers });
+            await checkRateLimit(response.headers); // レートリミットのチェック
             const issues = response.data;
 
             const fixed = issues.filter(issue => issue.pull_request === undefined);
@@ -179,13 +194,13 @@ async function getFixedIssuesAndPullRequests(repoUrl, token) {
         console.error('Error fetching issues:', error);
     }
 
-    // Fetch closed pull requests
     try {
         let page = 1;
         let response;
 
         do {
-            response = await axios.get(`${pullsUrl}&page=${page}`, { headers }, { timeout: 10000 });
+            response = await axios.get(`${pullsUrl}&page=${page}`, { headers });
+            await checkRateLimit(response.headers); // レートリミットのチェック
             const pulls = response.data;
             pullRequests = pullRequests.concat(pulls);
             page++;
