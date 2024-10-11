@@ -12,14 +12,23 @@
         "console": "integratedTerminal"
         },
         {
+            "name": "Docker Debug JavaScript",
             "type": "node",
             "request": "launch",
-            "name": "Docker Debug Node",
             "skipFiles": [
                 "<node_internals>/**"
             ],
             "program": "${file}",
             "outFiles": ["app/**/*.js"],
+        },
+        {
+            "name": "Docker Debug TypeScript",
+            "type": "node",
+            "request": "launch",
+            "preLaunchTask": "Compile TypeScript",
+            "program": "${file}",
+            "cwd": "${fileDirname}",
+            // "args": ["aaa"]
         }
     ]
 }
