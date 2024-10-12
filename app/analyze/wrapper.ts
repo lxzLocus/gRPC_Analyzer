@@ -5,6 +5,7 @@ extension代わりの呼び出しプログラム
 import initialize from './init';
 
 
-let mergeStateFilePath: String = "bbb";
+/*__MAIN__*/
+let mergeStateFilePath: string = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci";
 
-initialize(mergeStateFilePath);
+console.log(initialize(mergeStateFilePath));
