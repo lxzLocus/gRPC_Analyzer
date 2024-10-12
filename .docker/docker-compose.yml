@@ -23,3 +23,16 @@ services:
       - type: bind
         source: ../
         target: /app
+
+  any:
+    build:
+    context: ./
+    dockerfile: Dockerfile_any
+    container_name: any
+    # restart: always
+    tty: true
+    volumes:
+      - /app/node_modules # ←追加
+      - type: bind
+        source: ../
+        target: /app

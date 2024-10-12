@@ -1,0 +1,38 @@
+FROM node:22.4-alpine
+
+# ワーキングディレクトリの設定
+WORKDIR /app
+
+# 依存関係のコピー
+COPY package*.json ./
+
+# アプリケーションのソースコードをコピー
+COPY . .
+
+# gitおよびビルドツールをインストール
+RUN apk update && apk add --no-cache git
+
+# 追加のパッケージ（言語ごとのASTパーサー）をインストール
+# ここでは、Python、Java、Goなどの必要なツールをインストールする例を示します
+
+# Pythonのインストール
+RUN apk add --no-cache python3 py3-pip
+
+# Javaのインストール
+RUN apk add --no-cache openjdk11
+
+# Goのインストール
+RUN apk add --no-cache go
+
+# C/C++のためのビルドツールをインストール
+RUN apk add --no-cache build-base
+
+# Rubyのインストール
+RUN apk add --no-cache ruby
+
+# Rustのインストール
+RUN apk add --no-cache rust cargo
+
+# npmパッケージのインストール（必要に応じて追加）
+RUN npm install
+
