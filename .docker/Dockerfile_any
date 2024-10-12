@@ -33,6 +33,5 @@ RUN apk add --no-cache ruby
 # Rustのインストール
 RUN apk add --no-cache rust cargo
 
-# npmパッケージのインストール（必要に応じて追加）
-RUN npm install
+
 
