@@ -26,8 +26,8 @@ services:
 
   any:
     build:
-    context: ./
-    dockerfile: Dockerfile_any
+      context: ./
+      dockerfile: Dockerfile_any
     container_name: any
     # restart: always
     tty: true
