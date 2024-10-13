@@ -18,20 +18,25 @@ RUN apk update && apk add --no-cache git
 # Pythonのインストール
 RUN apk add --no-cache python3 py3-pip
 
+
 # Javaのインストール
 RUN apk add --no-cache openjdk11
+RUN mvn dependency:get -Dartifact=com.github.javaparser:javaparser-core:3.23.1
 
 # Goのインストール
 RUN apk add --no-cache go
+RUN go install golang.org/x/tools/gopls@latest
 
 # C/C++のためのビルドツールをインストール
 RUN apk add --no-cache build-base
+RUN apt-get install clang
+RUN dotnet tool install -g dotnet-ast
 
 # Rubyのインストール
 RUN apk add --no-cache ruby
 
 # Rustのインストール
 RUN apk add --no-cache rust cargo
-
+RUN rustup component add rust-analyzer
 
 
