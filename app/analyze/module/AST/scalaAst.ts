@@ -9,3 +9,9 @@ function generateScalaAst(filePath: string) {
     console.log(`Scala AST:\n${stdout}`);
   });
 }
+
+/*__MAIN__*/
+if (require.main === module) {
+  let sourcefilePath: string = "";
+  generateScalaAst(sourcefilePath);
+}

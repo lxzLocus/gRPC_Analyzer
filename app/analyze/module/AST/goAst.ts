@@ -9,3 +9,9 @@ function generateGoAst(filePath: string) {
         console.log(`Go AST:\n${stdout}`);
     });
 }
+
+/*__MAIN__*/
+if (require.main === module) {
+    let sourcefilePath: string = "";
+    generateGoAst(sourcefilePath);
+}

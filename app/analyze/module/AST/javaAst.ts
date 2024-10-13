@@ -9,3 +9,9 @@ function generateJavaAst(filePath: string) {
         console.log(`Java AST:\n${stdout}`);
     });
 }
+
+/*__MAIN__*/
+if (require.main === module) {
+    let sourcefilePath: string = "";
+    generateJavaAst(sourcefilePath);
+}

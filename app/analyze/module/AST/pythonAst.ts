@@ -9,3 +9,9 @@ function generatePythonAst(filePath: string) {
         console.log(`Python AST:\n${stdout}`);
     });
 }
+
+/*__MAIN__*/
+if (require.main === module) {
+    let sourcefilePath: string = "";
+    generatePythonAst(sourcefilePath);
+}

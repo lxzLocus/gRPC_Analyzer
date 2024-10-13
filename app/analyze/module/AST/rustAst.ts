@@ -9,3 +9,9 @@ function generateRustAst(filePath: string) {
         console.log(`Rust AST:\n${stdout}`);
     });
 }
+
+/*__MAIN__*/
+if (require.main === module) {
+    let sourcefilePath: string = "";
+    generateRustAst(sourcefilePath);
+}

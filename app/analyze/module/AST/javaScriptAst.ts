@@ -68,3 +68,10 @@ function generateJavaScriptAstAcorn(filePath: string) {
         console.log(`JavaScript AST:\n${stdout}`);
     });
 }
+
+
+/*__MAIN__*/
+if (require.main === module) {
+    let sourcefilePath: string = "";
+    generateJavaScriptAst(sourcefilePath);
+}

@@ -9,3 +9,9 @@ function generateCSharpAst(filePath: string) {
         console.log(`C# AST:\n${stdout}`);
     });
 }
+
+/*__MAIN__*/
+if (require.main === module) {
+    let sourcefilePath: string = "";
+    generateCSharpAst(sourcefilePath);
+}

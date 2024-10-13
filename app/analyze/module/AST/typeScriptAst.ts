@@ -9,3 +9,9 @@ function generateTypeScriptAst(filePath: string) {
         console.log(`TypeScript AST:\n${stdout}`);
     });
 }
+
+/*__MAIN__*/
+if (require.main === module) {
+    let sourcefilePath: string = "";
+    generateTypeScriptAst(sourcefilePath);
+}
