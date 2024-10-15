@@ -32,9 +32,6 @@ export default function get_proto_modified_list(preDirPath, afterDirPath) {
             if (!preFileContent.equals(afterFileContent)) {
                 modifiedFilePaths.push(afterFilePath);
             }
-        } else {
-            // ファイルが削除された場合
-            modifiedFilePaths.push(preFilePath);
         }
     });
 
