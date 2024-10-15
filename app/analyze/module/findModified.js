@@ -27,11 +27,11 @@ export default function get_file_modified_list(preDirPath, afterDirPath) {
         const afterFilePath = path.join(afterDirPath, relativePath);
 
         if (fs.existsSync(afterFilePath)) {
-            const preFileStat = fs.statSync(preFilePath);
-            const afterFileStat = fs.statSync(afterFilePath);
+            const preFileContent = fs.readFileSync(preFilePath);
+            const afterFileContent = fs.readFileSync(afterFilePath);
 
-            // ファイルの内容が異なるか、タイムスタンプが異なる場合
-            if (preFileStat.mtimeMs !== afterFileStat.mtimeMs || preFileStat.size !== afterFileStat.size) {
+            // ファイルの内容が一致しない場合
+            if (!preFileContent.equals(afterFileContent)) {
                 modifiedFilePaths.push(afterFilePath);
             }
         } else {
