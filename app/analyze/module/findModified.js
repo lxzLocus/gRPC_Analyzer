@@ -52,6 +52,11 @@ function get_all_file_paths(dirPath, fileList = []) {
             return;
         }
 
+        // .proto ファイルをスキップ
+        if (path.extname(file) === '.proto') {
+            return;
+        }
+
         if (fs.statSync(fullPath).isDirectory()) {
             get_all_file_paths(fullPath, fileList);
         } else {
@@ -61,6 +66,7 @@ function get_all_file_paths(dirPath, fileList = []) {
 
     return fileList;
 } 
+
 
 
 
