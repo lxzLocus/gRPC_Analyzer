@@ -5,14 +5,15 @@
 import fs from 'fs';
 import path from 'path';
 
-
 /*__MAIN__*/
 // premerge or merged file path 
 const premergeDir = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112";
 const mergeDir = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112";
 
-console.log(get_file_modified_list(premergeDir, mergeDir));
+const { modifiedProtoFiles, modifiedProgramFiles } = get_file_modified_list(premergeDir, mergeDir);
 
+console.log("Modified Proto Files:", modifiedProtoFiles);
+console.log("Modified Other Files:", modifiedProgramFiles);
 
 /*functions*/
 // ファイルを比較して、変更のあったファイルを特定
@@ -20,7 +21,8 @@ export default function get_file_modified_list(preDirPath, afterDirPath) {
     const preFiles = get_all_file_paths(preDirPath);
     const afterFiles = get_all_file_paths(afterDirPath);
 
-    const modifiedFilePaths = [];
+    const modifiedProtoFiles = [];
+    const modifiedProgramFiles = [];
 
     preFiles.forEach((preFilePath) => {
         const relativePath = path.relative(preDirPath, preFilePath);
@@ -32,12 +34,16 @@ export default function get_file_modified_list(preDirPath, afterDirPath) {
 
             // ファイルの内容が一致しない場合
             if (!preFileContent.equals(afterFileContent)) {
-                modifiedFilePaths.push(afterFilePath);
+                if (path.extname(preFilePath) === '.proto') {
+                    modifiedProtoFiles.push(afterFilePath);
+                } else {
+                    modifiedProgramFiles.push(afterFilePath);
+                }
             }
         }
     });
 
-    return modifiedFilePaths;
+    return { modifiedProtoFiles, modifiedProgramFiles };
 }
 
 // ディレクトリを再帰的に探索して、すべてのファイルのパスを取得
@@ -52,11 +58,6 @@ function get_all_file_paths(dirPath, fileList = []) {
             return;
         }
 
-        // .proto ファイルをスキップ
-        if (path.extname(file) === '.proto') {
-            return;
-        }
-
         if (fs.statSync(fullPath).isDirectory()) {
             get_all_file_paths(fullPath, fileList);
         } else {
@@ -65,8 +66,4 @@ function get_all_file_paths(dirPath, fileList = []) {
     });
 
     return fileList;
-} 
-
-
-
-
+}

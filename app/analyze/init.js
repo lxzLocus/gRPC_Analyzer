@@ -7,7 +7,6 @@ import fs from 'fs';
 import path from 'path';
 
 import get_program_file_paths from './module/findProgramFiles';
-import get_proto_modified_list from './module/findModifiedProto';
 import get_file_modified_list from './module/findModified';
 
 /*__MAIN__*/
@@ -26,13 +25,15 @@ export default function initialize(mergeStateFilePath) {
     }
 
     // `premerge`と`merge`ディレクトリを検出
-    const premergeDir = fs.readdirSync(mergeStateFilePath).find(dir => dir.startsWith('premerge'));
-    const mergeDir = fs.readdirSync(mergeStateFilePath).find(dir => dir.startsWith('merge'));
+    const preMergeDirPath = fs.readdirSync(mergeStateFilePath).find(dir => dir.startsWith('premerge'));
+    const mergeDirPath = fs.readdirSync(mergeStateFilePath).find(dir => dir.startsWith('merge'));
 
-    if (premergeDir === undefined || mergeDir === undefined){
+    if (preMergeDirPath === undefined || mergeDirPath === undefined){
         return "No such file or directory";
     }
 
+    const { protoPathList, programFileList } = get_program_file_paths(preMergeDirPath);
+    const { modifiedProtoList, modifiedProgramFileList} = get_file_modified_list(preMergeDirPath, mergeDirPath);
 
 
 
