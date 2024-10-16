@@ -12,7 +12,8 @@ import get_file_modified_list from './module/findModified';
 
 /*__MAIN__*/
 if (require.main === module) {
-    let mergeStateFilePath = process.argv.slice(2)[0];
+    // let mergeStateFilePath = process.argv.slice(2)[0];
+    let mergeStateFilePath = '/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/';
     initialize(mergeStateFilePath);
 }
 
@@ -32,9 +33,9 @@ export default function initialize(mergeStateFilePath) {
         return "No such file or directory";
     }
 
-    get_proto_file_paths(premergeDir);
 
-    console.log(mergeStateFilePath);
+
+
 
     return "";
 }
