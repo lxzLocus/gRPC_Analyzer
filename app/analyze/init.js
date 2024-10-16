@@ -6,8 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const get_program_file_paths = reuire('./module/findProgramFiles');
-const get_file_modified_list = reuire('./module/findModified');
+const get_program_file_paths = require('./module/findProgramFiles');
+const get_file_modified_list = require('./module/findModified');
 
 
 /*__MAIN__*/
