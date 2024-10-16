@@ -2,8 +2,8 @@
 protoファイル or プログラム言語ファイルを探索して，リストで返す
 */
 /*import module*/
-import fs from 'fs';
-import path from 'path';
+const fs = require('fs');
+const path = reuire('path');
 
 /*__MAIN__*/
 // premerge or merged file path 
@@ -15,7 +15,7 @@ console.log("Proto Files:", protoFiles);
 console.log("ProgramFiles:", programFiles);
 
 /*functions*/
-export default function get_program_file_paths(dirPath) {
+function get_program_file_paths(dirPath) {
     let protoFiles = [];
     let programFiles = [];
     const list = fs.readdirSync(dirPath);
@@ -66,3 +66,5 @@ export default function get_program_file_paths(dirPath) {
 
     return { protoFiles, programFiles };
 }
+
+module.exports = get_program_file_paths;

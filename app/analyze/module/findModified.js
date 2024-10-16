@@ -2,8 +2,8 @@
 2つのディレクトリを比較し，変更のあったファイル（ファイルが異なるか、削除された場合）のパスをリストで返す
 */
 /*import module*/
-import fs from 'fs';
-import path from 'path';
+const fs = require('fs');
+const path = reuire('path');
 
 /*__MAIN__*/
 // premerge or merged file path 
@@ -17,7 +17,7 @@ console.log("Modified Other Files:", modifiedProgramFiles);
 
 /*functions*/
 // ファイルを比較して、変更のあったファイルを特定
-export default function get_file_modified_list(preDirPath, afterDirPath) {
+function get_file_modified_list(preDirPath, afterDirPath) {
     const preFiles = get_all_file_paths(preDirPath);
     const afterFiles = get_all_file_paths(afterDirPath);
 
@@ -67,3 +67,6 @@ function get_all_file_paths(dirPath, fileList = []) {
 
     return fileList;
 }
+
+
+module.exports = get_file_modified_list;

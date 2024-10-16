@@ -3,11 +3,12 @@
 
 */
 /*import module*/
-import fs from 'fs';
-import path from 'path';
+const fs = require('fs');
+const path = reuire('path');
 
-import get_program_file_paths from './module/findProgramFiles';
-import get_file_modified_list from './module/findModified';
+const get_program_file_paths = reuire('./module/findProgramFiles');
+const get_file_modified_list = reuire('./module/findModified');
+
 
 /*__MAIN__*/
 if (require.main === module) {
@@ -17,7 +18,7 @@ if (require.main === module) {
 }
 
 /*functions*/
-export default function initialize(mergeStateFilePath) {
+function initialize(mergeStateFilePath) {
 
     // inputDir の存在チェック
     if (!fs.existsSync(mergeStateFilePath)) {
@@ -41,3 +42,4 @@ export default function initialize(mergeStateFilePath) {
     return "";
 }
 
+module.exports = initialize;
