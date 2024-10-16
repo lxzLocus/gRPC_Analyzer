@@ -6,7 +6,9 @@
 import fs from 'fs';
 import path from 'path';
 
-import get_proto_file_paths from './module/findProto';
+import get_program_file_paths from './module/findProgramFiles';
+import get_proto_modified_list from './module/findModifiedProto';
+import get_file_modified_list from './module/findModified';
 
 /*__MAIN__*/
 if (require.main === module) {

@@ -18,7 +18,7 @@ export default function get_proto_modified_list(preDirPath, afterDirPath) {
     const preFiles = get_all_proto_file_paths(preDirPath);
     const afterFiles = get_all_proto_file_paths(afterDirPath);
 
-    const modifiedFilePaths = [];
+    const modifiedProtoPaths = [];
 
     preFiles.forEach((preFilePath) => {
         const relativePath = path.relative(preDirPath, preFilePath);
@@ -30,12 +30,12 @@ export default function get_proto_modified_list(preDirPath, afterDirPath) {
 
             // ファイルの内容が一致しない場合
             if (!preFileContent.equals(afterFileContent)) {
-                modifiedFilePaths.push(afterFilePath);
+                modifiedProtoPaths.push(afterFilePath);
             }
         }
     });
 
-    return modifiedFilePaths;
+    return modifiedProtoPaths;
 }
 
 // ディレクトリを再帰的に探索して、拡張子が .proto のファイルのパスを取得
