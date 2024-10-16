@@ -6,18 +6,20 @@ const fs = require('fs');
 const path = require('path');
 
 /*__MAIN__*/
-// premerge or merged file path 
-const repositoryFolderPath = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112";
+if (require.main === module) {
+    // premerge or merged file path 
+    const repositoryFolderPath = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112";
 
-const { protoFiles, programFiles } = get_program_file_paths(repositoryFolderPath);
+    const { protoPathList, programFileList } = get_program_file_paths(repositoryFolderPath);
 
-console.log("Proto Files:", protoFiles);
-console.log("ProgramFiles:", programFiles);
+    console.log("Proto Files:", protoPathList);
+    console.log("programFiles:", programFileList);
+}
 
 /*functions*/
 function get_program_file_paths(dirPath) {
-    let protoFiles = [];
-    let programFiles = [];
+    let protoPathList = [];
+    let programFileList = [];
     const list = fs.readdirSync(dirPath);
 
     // 許可される言語ファイルの拡張子のリスト
@@ -49,22 +51,22 @@ function get_program_file_paths(dirPath) {
         // .protoファイルのみ取得し、.gitディレクトリは除外
         if (stat.isDirectory()) {
             if (file !== '.git') {
-                const { protoFiles: nestedProtoFiles, programFiles: nestedprogramFiles } = get_program_file_paths(filePath);
-                protoFiles = protoFiles.concat(nestedProtoFiles);
-                programFiles = programFiles.concat(nestedprogramFiles);
+                const { protoPathList: nestedprotoPathList, programFileList: nestedprogramFileList } = get_program_file_paths(filePath);
+                protoPathList = protoPathList.concat(nestedprotoPathList);
+                programFileList = programFileList.concat(nestedprogramFileList);
             }
         } else if (file.endsWith('.proto')) {
-            protoFiles.push(filePath);
+            protoPathList.push(filePath);
         } else {
-            // 許可されている拡張子のファイルのみをprogramFilesに追加
+            // 許可されている拡張子のファイルのみをprogramFileListに追加
             const fileExt = path.extname(file);
             if (allowedExtensions.includes(fileExt)) {
-                programFiles.push(filePath);
+                programFileList.push(filePath);
             }
         }
     });
 
-    return { protoFiles, programFiles };
+    return { protoPathList, programFileList };
 }
 
-module.exports = get_program_file_paths;
+module.exports = { get_program_file_paths };

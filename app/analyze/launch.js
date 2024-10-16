@@ -2,7 +2,7 @@
 extension代わりの呼び出しプログラム
 */
 /*module import*/
-const initialize = require('./init');
+const { initialize } = require('./init');
 
 
 /*__MAIN__*/

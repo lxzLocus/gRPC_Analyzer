@@ -6,8 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const get_program_file_paths = require('./module/findProgramFiles');
-const get_file_modified_list = require('./module/findModified');
+const { get_program_file_paths } = require('./module/findProgramFiles');
+const { get_file_modified_list } = require('./module/findModified');
 
 
 /*__MAIN__*/
@@ -26,20 +26,22 @@ function initialize(mergeStateFilePath) {
     }
 
     // `premerge`と`merge`ディレクトリを検出
-    const preMergeDirPath = fs.readdirSync(mergeStateFilePath).find(dir => dir.startsWith('premerge'));
-    const mergeDirPath = fs.readdirSync(mergeStateFilePath).find(dir => dir.startsWith('merge'));
+    let preMergeDirPath = fs.readdirSync(mergeStateFilePath).find(dir => fs.statSync(path.join(mergeStateFilePath, dir)).isDirectory() && dir.startsWith('premerge'));
+    let mergeDirPath = fs.readdirSync(mergeStateFilePath).find(dir => fs.statSync(path.join(mergeStateFilePath, dir)).isDirectory() && dir.startsWith('merge'));
 
-    if (preMergeDirPath === undefined || mergeDirPath === undefined){
-        return "No such file or directory";
+    if (!preMergeDirPath || !mergeDirPath) {
+        throw new Error("Premerge or merge directory not found");
     }
+    //ディレクトリパスを結合
+    preMergeDirPath = path.join(mergeStateFilePath, preMergeDirPath);
+    mergeDirPath = path.join(mergeStateFilePath, mergeDirPath);
+
 
     const { protoPathList, programFileList } = get_program_file_paths(preMergeDirPath);
-    const { modifiedProtoList, modifiedProgramFileList} = get_file_modified_list(preMergeDirPath, mergeDirPath);
-
-
+    const { modifiedProtoList, modifiedFileList} = get_file_modified_list(preMergeDirPath, mergeDirPath);
 
 
     return "";
 }
 
-module.exports = initialize;
+module.exports = { initialize };
