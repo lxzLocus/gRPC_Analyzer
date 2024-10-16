@@ -3,7 +3,7 @@ protoファイル or プログラム言語ファイルを探索して，リス�
 */
 /*import module*/
 const fs = require('fs');
-const path = reuire('path');
+const path = require('path');
 
 /*__MAIN__*/
 // premerge or merged file path 

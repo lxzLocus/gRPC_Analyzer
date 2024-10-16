@@ -4,7 +4,7 @@
 */
 /*import module*/
 const fs = require('fs');
-const path = reuire('path');
+const path = require('path');
 
 const get_program_file_paths = reuire('./module/findProgramFiles');
 const get_file_modified_list = reuire('./module/findModified');
