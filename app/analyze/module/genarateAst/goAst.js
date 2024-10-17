@@ -1,5 +1,6 @@
 /*import module*/
 const { exec } = require('child_process');
+const path = require('path');
 
 /*__MAIN__*/
 if (require.main === module) {
@@ -9,14 +10,16 @@ if (require.main === module) {
 
 /*import module*/
 function generateGoAst(filePath) {
-    let output;
-    exec(`gopls check ${filePath}`, (err, stdout, stderr) => {
+    const goFileName = 'generateGoAst';
+    const goFilePath = path.join(__dirname, goFileName)
+
+    exec(`${goFilePath} ${filePath} `, (err, stdout, stderr) => {
         if (err) {
             console.error(`Error generating Go AST: ${err.message}`);
             return;
         }
         console.log(`Go AST:\n${stdout}`);
-        output = stdout;
+        return stdout;
     });
 }
 

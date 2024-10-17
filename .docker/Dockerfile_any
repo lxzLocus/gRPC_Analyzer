@@ -20,7 +20,12 @@ RUN apk add --no-cache openjdk11 maven
 RUN mvn dependency:get -Dartifact=com.github.javaparser:javaparser-core:3.23.1
 
 # Goのインストール
+# Goのパス設定（デフォルトでは $HOME/go にインストールされる）
+ENV GOPATH=/go
+ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
+
 RUN apk add --no-cache go
+# termialでインストール
 RUN go install golang.org/x/tools/gopls@latest
 
 # C/C++のためのビルドツールをインストール
@@ -31,4 +36,7 @@ RUN apk add --no-cache ruby
 
 # Rustのインストール
 RUN apk add --no-cache rust cargo
-RUN cargo install --locked rust-analyzer
+# rust-analyzerのインストール
+RUN apk add curl
+RUN curl -L -o /usr/local/bin/rust-analyzer https://github.com/rust-lang/rust-analyzer/releases/download/2024-10-16/rust-analyzer-linux \
+    && chmod +x /usr/local/bin/rust-analyzer
