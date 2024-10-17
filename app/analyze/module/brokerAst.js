@@ -5,6 +5,8 @@ AST Broker
 const fs = require('fs');
 const path = require('path');
 
+const { exec } = require('child_process');
+
 
 /*__MAIN__*/
 if (require.main === module) {
@@ -24,7 +26,7 @@ function ast(progFileList, protoFileList) {
         const progFile = progFileList[i];
 
         // ASTの生成
-        const ast = make_AST(progFile); // ここに実装: ASTを生成する関数
+        const ast = generateAstBasedOnExtension(progFile); // ここに実装: ASTを生成する関数
 
         // protoファイルリストをループ
         for (let j = 0; j < protoFileList.length; j++) {
@@ -40,15 +42,66 @@ function ast(progFileList, protoFileList) {
     return importedFiles; // インポートされたファイルのリストを返す
 }
 
-// ASTを生成する関数 (実装はここに追加)
-function make_AST(progFile) {
-    // ここに実装: プログラムファイルからASTを生成して返す
+
+
+//拡張子の判別
+function generateAstBasedOnExtension(filePath) {
+    
+    const allowedExtensions = {
+        '.go': 'go',         // Go
+        '.cs': 'csharp',     // C#
+        '.java': 'java',     // Java
+        '.scala': 'scala',   // Scala
+        '.ts': 'typescript', // TypeScript
+        '.py': 'python',     // Python
+        '.c': 'c',           // C
+        '.js': 'javascript', // JavaScript
+        '.sh': 'shell',      // Shell
+        '.html': 'html',     // HTML
+        '.htm': 'html',      // HTML (alternative extension)
+        '.css': 'css',       // CSS
+        '.pl': 'perl',       // Perl
+        '.pm': 'perl',       // Perl module
+        '.cpp': 'cpp',       // C++
+        '.cc': 'cpp',        // C++
+        '.cx': 'cpp',        // C++
+        '.rs': 'rust',       // Rust
+    };
+
+    const ext = filePath.slice(filePath.lastIndexOf('.'));
+    const lang = allowedExtensions[ext];
+
+    if (!lang) {
+        console.log('Unsupported language');
+        return null;
+    }
+
+    switch (lang) {
+        case 'python':
+            return generatePythonAst(filePath);
+        case 'go':
+            return generateGoAst(filePath);    
+        case 'java':
+            return generateJavaAst(filePath);  
+        case 'csharp':
+            return generateCSharpAst(filePath);
+        case 'scala':
+            return generateScalaAst(filePath); 
+        case 'typescript':
+            return generateTypeScriptAst(filePath);
+        case 'cpp':
+            return generateCppAst(filePath);   
+        case 'javascript':
+            return generateJavaScriptAst(filePath);
+        case 'rust':
+            return generateRustAst(filePath);  
+        default:
+            console.log('Unsupported language');
+            return null;
+    }
 }
 
-// protoファイルがASTにインポートされているかを確認する関数 (実装はここに追加)
-function isProtoFileImported(ast, protoFile) {
-    // ここに実装: ASTを参照し、指定されたprotoファイルがインポートされているかどうかを確認
-}
+
 
 
 module.exports = { ast };
