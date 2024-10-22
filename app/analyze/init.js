@@ -9,6 +9,7 @@ const path = require('path');
 const { get_program_file_paths } = require('./module/findProgramFiles');
 const { get_file_modified_list } = require('./module/findModified');
 
+const { checkFileImportModule } = require('./module/brokerAst');
 
 /*__MAIN__*/
 if (require.main === module) {
@@ -40,6 +41,7 @@ function initialize(mergeStateFilePath) {
     const { protoPathList, programFileList } = get_program_file_paths(preMergeDirPath);
     const { modifiedProtoList, modifiedFileList} = get_file_modified_list(preMergeDirPath, mergeDirPath);
 
+    checkFileImportModule(protoPathList, programFileList);
 
     return "";
 }
