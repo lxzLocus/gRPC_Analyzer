@@ -16,13 +16,14 @@ function generateGoAst(filePath) {
     const goFilePath = path.join(__dirname, goFileName);
 
     return new Promise((resolve, reject) => {
-        exec(`${goFilePath} ${filePath}`, (err, stdout, stderr) => {
-            if (err) {
-                reject(`Error generating Go AST: ${err.message}`);
-            } else {
-                resolve(stdout);
-            }
-        });
+        exec(`${goFilePath} ${filePath}`, { maxBuffer: 1024 * 1024 * 100 }, // 50MBに拡張
+            (err, stdout, stderr) => {
+                if (err) {
+                    reject(`Error generating Go AST: ${err.message}`);
+                } else {
+                    resolve(stdout);
+                }
+            });
     });
 }
 
