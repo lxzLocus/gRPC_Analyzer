@@ -16,7 +16,7 @@ function generateGoAst(filePath) {
     const goFilePath = path.join(__dirname, goFileName);
 
     return new Promise((resolve, reject) => {
-        exec(`${goFilePath} ${filePath}`, { maxBuffer: 1024 * 1024 * 100 }, // 50MBに拡張
+        exec(`${goFilePath} ${filePath}`, { maxBuffer: 1024 * 1024 * 100 },
             (err, stdout, stderr) => {
                 if (err) {
                     reject(`Error generating Go AST: ${err.message}`);
