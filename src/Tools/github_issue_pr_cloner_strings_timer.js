@@ -312,6 +312,7 @@ async function cloneRepository(repoUrl, commitId, directory) {
         }
 
         console.log(`Cloning repository into ${directory}`);
+        await checkRateLimitForClone(); // レートリミットのチェックと待機
         await execPromise(`git clone ${repoUrl} ${directory}`);
 
         console.log('Directory exists after git clone:', fs.existsSync(directory));
@@ -323,6 +324,32 @@ async function cloneRepository(repoUrl, commitId, directory) {
     } catch (error) {
         console.error('Error cloning or checking out repository:', error);
         throw error;
+    }
+}
+
+
+async function checkRateLimitForClone() {
+    const headers = {
+        'Authorization': `Bearer ${githubToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+    };
+    const rateLimitUrl = 'https://api.github.com/rate_limit';
+
+    try {
+        const response = await axios.get(rateLimitUrl, { headers });
+        const rateLimit = response.data.resources.core;
+        const remainingRequests = rateLimit.remaining;
+        const resetTime = rateLimit.reset;
+
+        if (remainingRequests === 0) {
+            const currentTime = Math.floor(Date.now() / 1000);
+            const waitTime = resetTime - currentTime;
+
+            console.log(`Rate limit exceeded. Waiting for ${waitTime} seconds...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+        }
+    } catch (error) {
+        console.error('Error checking rate limit:', error);
     }
 }
 
@@ -404,12 +431,16 @@ function main() {
     fs.createReadStream(csvFilePath)
         .pipe(csv())
         .on('data', (row) => {
-            repoUrls.push(row.url);
+            if (row.url) {  // urlが存在する場合のみ追加
+                repoUrls.push(row.url);
+            }
         })
         .on('end', async () => {
             console.log('CSV file successfully processed');
             for (const repoUrl of repoUrls) {
-                await processRepository(repoUrl);
+                if (repoUrl) {  // repoUrlが未定義でない場合のみ処理
+                    await processRepository(repoUrl);
+                }
             }
         });
 }
