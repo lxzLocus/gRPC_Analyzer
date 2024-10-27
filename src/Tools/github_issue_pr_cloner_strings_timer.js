@@ -20,7 +20,7 @@ const { exec } = require('child_process');
 const execPromise = util.promisify(exec);
 require('dotenv').config();
 
-const githubToken = process.env.GITHUB_TOKEN;
+const githubToken = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
 
 
 /*settings*/
@@ -307,8 +307,8 @@ async function createDirectory(dir) {
 async function cloneRepository(repoUrl, commitId, directory) {
     try {
         if (fs.existsSync(directory)) {
-            console.log(`Directory ${directory} already exists. Removing it.`);
-            fs.rmdirSync(directory, { recursive: true });
+            console.log(`Directory ${directory} already exists. Skipping clone.`);
+            return; // 既にディレクトリが存在する場合はスキップ
         }
 
         console.log(`Cloning repository into ${directory}`);
