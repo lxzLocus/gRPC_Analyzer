@@ -4,6 +4,7 @@
     // 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
         "name": "Docker Debug Python",
         "type": "debugpy",
@@ -29,6 +30,16 @@
             "program": "${file}",
             "cwd": "${fileDirname}",
             // "args": ["aaa"]
+        },
+        {
+            "name": "Docker Debug go",
+            // "type": "godlvdap",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${fileDirname}",
+            "env": {},
+            "args": []
         }
     ]
 }

@@ -10,7 +10,6 @@ const { exec } = require('child_process');
 
 const { generateGoAst } = require('./genarateAst/goAst');
 
-const { generateGoAst } = require('./genarateAst/goAst');
 
 /*config*/
 const allowedExtensions = {
@@ -171,7 +170,7 @@ function isProtoFileImported(ast, programFile, protoFile) {
                     // case 'python':
                     //     return generatePythonAst(filePath);
                     case 'go':
-                        generateGoAst(filePath)
+                        goFetcher(filePath)
                             .then(ast => resolve(ast))  // 成功時にASTを返す
                             .catch(err => {
                                 console.error("Error generating Go AST:", err);
