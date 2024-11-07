@@ -8,7 +8,7 @@ const readline = require('readline');
 
 const { exec } = require('child_process');
 
-const { generateGoAst } = require('./genarateAst/goAst');
+// const { generateGoAst } = require('./genarateAst/goAst');
 
 
 /*config*/
