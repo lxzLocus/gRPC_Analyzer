@@ -5,6 +5,7 @@ Go
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -77,6 +78,37 @@ func main() {
 	} else {
 		fmt.Printf("Module '%s' is either not imported or not used.\n", targetModule)
 	}
+}
+
+// protoファイルからパッケージ名を取得
+func findProtoPackageName(filePath string) (string, error) {
+	// ファイルを開く
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	// ファイルを1行ずつ読み込む
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// "package" キーワードが含まれる行を探す
+		if strings.HasPrefix(strings.TrimSpace(line), "package") {
+			// "package" の後に続く名前を取得
+			parts := strings.Fields(line)
+			if len(parts) > 1 {
+				return parts[1], nil
+			}
+		}
+	}
+
+	// エラーが発生した場合、またはパッケージ名が見つからなかった場合
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+	return "", fmt.Errorf("package name not found in %s", filePath)
 }
 
 // ASTを生成する関数
