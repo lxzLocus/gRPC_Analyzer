@@ -5,6 +5,31 @@
 const fs = require('fs');
 const path = require('path');
 
+
+/*config*/
+// 許可される言語ファイルの拡張子のリスト
+const allowedExtensions = [
+    '.go',     // Go 
+    '.cs',     // C# 
+    '.java',   // Java 
+    '.scala',  // Scala 
+    '.ts',     // TypeScript 
+    '.py',     // Python 
+    '.c',      // C 
+    '.js',     // JavaScript 
+    '.sh',     // Shell 
+    '.html',   // HTML 
+    '.htm',    // HTML (alternative extension) 
+    '.css',    // CSS 
+    '.pl',     // Perl 
+    '.pm',     // Perl module 
+    '.cpp',    // C++ 
+    '.cc',     // C++ 
+    '.cx',     // C++ 
+    '.rs',     // Rust 
+]; 
+
+ 
 /*__MAIN__*/
 if (require.main === module) {
     // premerge or merged file path 
@@ -30,6 +55,11 @@ function get_file_modified_list(preDirPath, afterDirPath) {
         const relativePath = path.relative(preDirPath, preFilePath);
         const afterFilePath = path.join(afterDirPath, relativePath);
 
+        // 拡張子が許可されていない場合はスキップ
+        if (!isAllowedExtension(preFilePath)) {
+            return;
+        }
+
         if (fs.existsSync(afterFilePath)) {
             const preFileContent = fs.readFileSync(preFilePath);
             const afterFileContent = fs.readFileSync(afterFilePath);
@@ -46,6 +76,12 @@ function get_file_modified_list(preDirPath, afterDirPath) {
     });
 
     return { modifiedProtoList, modifiedFileList };
+} 
+
+// ファイルの拡張子が許可されているか確認
+function isAllowedExtension(filePath) {
+    const extname = path.extname(filePath);
+    return allowedExtensions.includes(extname);
 }
 
 // ディレクトリを再帰的に探索して、すべてのファイルのパスを取得
