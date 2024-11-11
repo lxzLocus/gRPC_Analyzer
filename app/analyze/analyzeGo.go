@@ -15,12 +15,49 @@ import (
 	"strings"
 )
 
+/*
+archive,
+compress,
+crypto,
+database,
+debug,
+encoding,
+go,
+hash,
+html,
+image,
+internal,
+io,
+log,
+math,
+mime,
+net,
+os,
+path,
+reflect,
+runtime,
+sync,
+testing,
+text,
+vendor
+*/
+/*
+args:
+filePath,
+target module
+
+do:
+genarate AST
+import module analyze
+*/
+
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatalf("Usage: %s <file.go>", os.Args[0])
+	if len(os.Args) < 3 {
+		log.Fatalf("Usage: %s <file.go> <module_name>", os.Args[0])
 	}
 
 	filePath := os.Args[1]
+	targetModule := os.Args[2]
 
 	// ファイルを読み込む
 	sourceCode, err := ioutil.ReadFile(filePath)
@@ -31,8 +68,15 @@ func main() {
 	// ASTを生成
 	fset, node := generateAST(filePath, sourceCode)
 
-	// ASTを解析
-	analyzeAST(fset, node)
+	// ASTを解析して、モジュールがインポートされ利用されているかを確認
+	isImportedAndUsed := analyzeAST(fset, node, targetModule)
+
+	// 結果を出力
+	if isImportedAndUsed {
+		fmt.Printf("Module '%s' is imported and used.\n", targetModule)
+	} else {
+		fmt.Printf("Module '%s' is either not imported or not used.\n", targetModule)
+	}
 }
 
 // ASTを生成する関数
@@ -50,7 +94,7 @@ func generateAST(filePath string, sourceCode []byte) (*token.FileSet, *ast.File)
 }
 
 // ASTを解析する関数
-func analyzeAST(fset *token.FileSet, node *ast.File) {
+func analyzeAST(fset *token.FileSet, node *ast.File, targetModule string) bool {
 	// インポートされたパッケージを収集
 	imports := make(map[string]bool)
 	ast.Inspect(node, func(n ast.Node) bool {
@@ -78,12 +122,10 @@ func analyzeAST(fset *token.FileSet, node *ast.File) {
 		return true
 	})
 
-	// 利用状況を出力
-	for pkg, used := range imports {
-		if used {
-			fmt.Printf("Package '%s' is used in the code.\n", pkg)
-		} else {
-			fmt.Printf("Package '%s' is imported but not used.\n", pkg)
-		}
+	// 指定されたモジュールがインポートされ、かつ利用されているかをチェック
+	if used, imported := imports[targetModule]; imported && used {
+		return true
 	}
+
+	return false
 }
