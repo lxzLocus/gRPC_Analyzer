@@ -10,14 +10,14 @@ if (require.main === module) {
     // premerge or merged file path 
     const repositoryFolderPath = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112";
 
-    const { protoPathList, programFileList } = get_program_file_paths(repositoryFolderPath);
+    const { protoPathList, programFileList } = getProgramFilePaths(repositoryFolderPath);
 
     console.log("Proto Files:", protoPathList);
     console.log("programFiles:", programFileList);
 }
 
 /*functions*/
-function get_program_file_paths(dirPath) {
+function getProgramFilePaths(dirPath) {
     let protoPathList = [];
     let programFileList = [];
     const list = fs.readdirSync(dirPath);
@@ -51,7 +51,7 @@ function get_program_file_paths(dirPath) {
         // .protoファイルのみ取得し、.gitディレクトリは除外
         if (stat.isDirectory()) {
             if (file !== '.git') {
-                const { protoPathList: nestedprotoPathList, programFileList: nestedprogramFileList } = get_program_file_paths(filePath);
+                const { protoPathList: nestedprotoPathList, programFileList: nestedprogramFileList } = getProgramFilePaths(filePath);
                 protoPathList = protoPathList.concat(nestedprotoPathList);
                 programFileList = programFileList.concat(nestedprogramFileList);
             }
@@ -69,4 +69,4 @@ function get_program_file_paths(dirPath) {
     return { protoPathList, programFileList };
 }
 
-module.exports = { get_program_file_paths };
+module.exports = { getProgramFilePaths };

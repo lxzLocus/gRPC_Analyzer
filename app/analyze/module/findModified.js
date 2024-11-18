@@ -36,7 +36,7 @@ if (require.main === module) {
     const premergeDir = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112";
     const mergeDir = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112";
 
-    const { modifiedProtoList, modifiedFileList } = get_file_modified_list(premergeDir, mergeDir);
+    const { modifiedProtoList, modifiedFileList } = getFileModifiedList(premergeDir, mergeDir);
 
     console.log("Modified Proto Files:", modifiedProtoList);
     console.log("Modified Other Files:", modifiedFileList);
@@ -44,9 +44,9 @@ if (require.main === module) {
 
 /*functions*/
 // ファイルを比較して、変更のあったファイルを特定
-function get_file_modified_list(preDirPath, afterDirPath) {
-    const preFiles = get_all_file_paths(preDirPath);
-    const afterFiles = get_all_file_paths(afterDirPath);
+function getFileModifiedList(preDirPath, afterDirPath) {
+    const preFiles = getAllFilePaths(preDirPath);
+    const afterFiles = getAllFilePaths(afterDirPath);
 
     const modifiedProtoList = [];
     const modifiedFileList = [];
@@ -85,7 +85,7 @@ function isAllowedExtension(filePath) {
 }
 
 // ディレクトリを再帰的に探索して、すべてのファイルのパスを取得
-function get_all_file_paths(dirPath, fileList = []) {
+function getAllFilePaths(dirPath, fileList = []) {
     const files = fs.readdirSync(dirPath);
 
     files.forEach((file) => {
@@ -97,7 +97,7 @@ function get_all_file_paths(dirPath, fileList = []) {
         }
 
         if (fs.statSync(fullPath).isDirectory()) {
-            get_all_file_paths(fullPath, fileList);
+            getAllFilePaths(fullPath, fileList);
         } else {
             fileList.push(fullPath);
         }
@@ -107,4 +107,4 @@ function get_all_file_paths(dirPath, fileList = []) {
 }
 
 
-module.exports = { get_file_modified_list };
+module.exports = { getFileModifiedList };

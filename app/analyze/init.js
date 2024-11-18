@@ -9,8 +9,8 @@ const readline = require('readline');
 const { exec } = require('child_process');
 
 
-const { get_program_file_paths } = require('./module/findProgramFiles');
-const { get_file_modified_list } = require('./module/findModified');
+const { getProgramFilePaths } = require('./module/findProgramFiles');
+const { getFileModifiedList } = require('./module/findModified');
 
 const { checkFileImportModule } = require('./module/brokerAst');
 
@@ -43,33 +43,33 @@ const allowedExtensions = [
 
 /*__MAIN__*/
 if (require.main === module) {
-    // let mergeStateFilePath = process.argv.slice(2)[0];
+    // let filePaths = process.argv.slice(2)[0];
     let mergeStateFilePath = '/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/';
     initialize(mergeStateFilePath);
 }
 
 /*functions*/
-function initialize(mergeStateFilePath) {
+function initialize(filePaths) {
 
     // inputDir の存在チェック
-    if (!fs.existsSync(mergeStateFilePath)) {
-        throw new Error(`Input directory ${mergeStateFilePath} does not exist`);
+    if (!fs.existsSync(filePaths)) {
+        throw new Error(`Input directory ${filePaths} does not exist`);
     }
 
     // `premerge`と`merge`ディレクトリを検出
-    let preMergeDirPath = fs.readdirSync(mergeStateFilePath).find(dir => fs.statSync(path.join(mergeStateFilePath, dir)).isDirectory() && dir.startsWith('premerge'));
-    let mergeDirPath = fs.readdirSync(mergeStateFilePath).find(dir => fs.statSync(path.join(mergeStateFilePath, dir)).isDirectory() && dir.startsWith('merge'));
+    let preMergeDirPath = fs.readdirSync(filePaths).find(dir => fs.statSync(path.join(filePaths, dir)).isDirectory() && dir.startsWith('premerge'));
+    let mergeDirPath = fs.readdirSync(filePaths).find(dir => fs.statSync(path.join(filePaths, dir)).isDirectory() && dir.startsWith('merge'));
 
     if (!preMergeDirPath || !mergeDirPath) {
         throw new Error("Premerge or merge directory not found");
     }
     //ディレクトリパスを結合
-    preMergeDirPath = path.join(mergeStateFilePath, preMergeDirPath);
-    mergeDirPath = path.join(mergeStateFilePath, mergeDirPath);
+    preMergeDirPath = path.join(filePaths, preMergeDirPath);
+    mergeDirPath = path.join(filePaths, mergeDirPath);
 
     /*並列処理必須*/
-    const { protoPathList, programFileList } = get_program_file_paths(preMergeDirPath);
-    const { modifiedProtoList, modifiedFileList} = get_file_modified_list(preMergeDirPath, mergeDirPath);
+    const { protoPathList, programFileList } = getProgramFilePaths(preMergeDirPath);
+    const { modifiedProtoList, modifiedFileList} = getFileModifiedList(preMergeDirPath, mergeDirPath);
 
     checkFileImportModule(protoPathList, programFileList, modifiedProtoList, modifiedFileList);
 

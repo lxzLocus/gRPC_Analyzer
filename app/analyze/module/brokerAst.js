@@ -8,7 +8,7 @@ const readline = require('readline');
 
 const { exec } = require('child_process');
 
-// const { generateGoAst } = require('./genarateAst/goAst');
+const { analyzeGoAst } = require('./analyzeAst/goAst');
 
 
 /*config*/
@@ -1213,16 +1213,155 @@ if (require.main === module) {
         "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112/vigoda/main.go"
     ]
 
-    checkFileImportModule(protoPathList, programFileList, modifiedProtoList, modifiedProgList);
+    main(protoPathList, programFileList, modifiedProtoList);
+
+    //checkFileImportModule(protoPathList, programFileList, modifiedProtoList, modifiedProgList);
 }
 
 /*functions*/
+async function main(protoPathList, programFileList, modifiedProtoList){
+    const dependencies = await analyzeDependencies(protoPathList, programFileList);
+    const affectedPrograms = findAffectedPrograms(modifiedProtoList, dependencies);
+    console.log("Affected programs:", Array.from(affectedPrograms));
+}
+
+
+// プロジェクト全体の依存関係を解析
+async function analyzeDependencies(protoPaths, programPaths) {
+    const protoPackages = protoPaths.map(getProtoPackageName);
+    const protoToPrograms = {};
+    const programToPrograms = {};
+
+    for (const progPath of programPaths) {
+        const importedProtos = getImportedProtos(progPath, protoPackages);
+        importedProtos.forEach(proto => {
+            if (!protoToPrograms[proto]) {
+                protoToPrograms[proto] = [];
+            }
+            protoToPrograms[proto].push(progPath);
+        });
+
+        // importしているものを取得
+        const importedPrograms = await getImportedPrograms(progPath); // 非同期処理
+        programToPrograms[progPath] = importedPrograms;
+    }
+
+    return { protoToPrograms, programToPrograms };
+}
+
+// 影響を受けるプログラムファイルを再帰的に探索
+function findAffectedPrograms(modifiedProtos, dependencies) {
+    const { protoToPrograms, programToPrograms } = dependencies;
+    const affectedPrograms = new Set();
+
+    function dfs(program) {
+        if (affectedPrograms.has(program)) return;
+        affectedPrograms.add(program);
+        (programToPrograms[program] || []).forEach(dfs);
+    }
+
+    modifiedProtos.forEach(modProto => {
+        const affected = protoToPrograms[getProtoPackageName(modProto)] || [];
+        affected.forEach(dfs);
+    });
+
+    return affectedPrograms;
+}
+
+// プログラムファイルからimportしているprotoファイルを特定
+//文字列一致
+function getImportedProtos(filePath, protoPackages) {
+    const content = readFile(filePath);
+    const importedProtos = [];
+
+    protoPackages.forEach(pkg => {
+        if (content.includes(pkg)) {
+            importedProtos.push(pkg);
+        }
+    });
+
+    return importedProtos;
+}
+
+
+// プログラムファイルからimportしている他のプログラムファイルを特定
+async function getImportedPrograms(filePath) {
+    const extension = path.extname(filePath);
+    let imports = [];
+
+    switch (extension) {
+        case '.go':
+            try {
+                imports = await analyzeGoAst(filePath); // Promise が解決されるまで待機
+                console.log(imports);
+            } catch (err) {
+                console.error("Error generating Go AST:", err);
+                throw err; // エラーを呼び出し元に伝搬
+            }
+            break; 
+
+        case '.js':
+            //imports = getJsImportsWithAST(filePath);
+            break;
+        case '.py':
+            //imports = getPythonImportsWithAST(filePath);
+            break;
+        // 他の言語用のAST解析をここに追加
+    }
+
+    return imports;
+}
+
+
+function readFile(filePath) {
+    return fs.readFileSync(filePath, 'utf8');
+}
+
+// protoファイルからpackage名を取得
+function getProtoPackageName(filePath) {
+    const content = readFile(filePath);
+    const packageMatch = content.match(/package\s+([\w.]+);/);
+    return packageMatch ? packageMatch[1] : null;
+}
+
+
+
+
+/****************** */
+function getGoImportsWithAST(filePath) {
+
+}
+
+//esprima
+// JavaScriptファイルのimportをASTで解析
+function getJsImportsWithAST(filePath) {
+    // const content = readFile(filePath);
+    // // const ast = esprima.parseModule(content);
+    // const imports = [];
+
+    // ast.body.forEach(node => {
+    //     if (node.type === 'ImportDeclaration') {
+    //         imports.push(node.source.value);
+    //     }
+    // });
+
+    // return imports;
+}
+
+
+
+
+
+/************************/
 async function checkFileImportModule(protoFileList, progFileList, modifiedProtoList, modifiedProgList) {
     const importedFiles = []; // インポートされたファイルを格納する配列
+
+    const protoPackages = extractPackageNames(modifiedProtoList);
 
     // プログラムファイルリストをループ
     for (let i = 0; i < progFileList.length; i++) {
         const progFile = progFileList[i];
+        //const packageName = protoPackages[i]
 
         try {
             // AST生成を非同期に待機
@@ -1244,6 +1383,28 @@ async function checkFileImportModule(protoFileList, progFileList, modifiedProtoL
     }
 
     return importedFiles; // インポートされたファイルのリストを返す
+}
+
+//proto packageの取得
+function extractPackageNames(protoFiles) {
+    const packageNames = protoFiles.map(filePath => {
+        try {
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            const packageMatch = fileContent.match(/^\s*package\s+([\w\.]+)\s*;/m);
+            if (packageMatch) {
+                return packageMatch[1];
+            } else {
+                console.warn(`No package name found in file: ${filePath}`);
+                return null;
+            }
+        } catch (error) {
+            console.error(`Error reading file ${filePath}:`, error);
+            return null;
+        }
+    });
+
+    // Filter out null values (files without a package name or read errors)
+    return packageNames.filter(name => name !== null);
 }
 
 //ファイルの行数確認
@@ -1298,7 +1459,7 @@ function generateAstBasedOnExtension(filePath) {
                     // case 'python':
                     //     return generatePythonAst(filePath);
                     case 'go':
-                        generateGoAst(filePath)
+                        analyzeGoAst(filePath)
                         .then(ast => resolve(ast))  // 成功時にASTを返す
                         .catch(err => {
                             console.error("Error generating Go AST:", err);
