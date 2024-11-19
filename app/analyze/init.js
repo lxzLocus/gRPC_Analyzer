@@ -13,6 +13,7 @@ const { getProgramFilePaths } = require('./module/findProgramFiles');
 const { getFileModifiedList } = require('./module/findModified');
 
 const { checkFileImportModule } = require('./module/brokerAst');
+const { promiseHooks } = require('v8');
 
 
 
@@ -68,12 +69,24 @@ function initialize(filePaths) {
     mergeDirPath = path.join(filePaths, mergeDirPath);
 
     /*並列処理必須*/
-    const { protoPathList, programFileList } = getProgramFilePaths(preMergeDirPath);
-    const { modifiedProtoList, modifiedFileList} = getFileModifiedList(preMergeDirPath, mergeDirPath);
+    Promise.all([
+        getProgramFilePaths(preMergeDirPath),
+        getFileModifiedList(preMergeDirPath, mergeDirPath)
+    ])
+    .then(([programPaths, modifiedFiles]) => {
+        const { protoPathList, programFileList } = programPaths;
+        const { modifiedProtoList, modifiedFileList } = modifiedFiles;
 
-    checkFileImportModule(protoPathList, programFileList, modifiedProtoList, modifiedFileList);
+        console.log(protoPathList, programFileList);
+        console.log(modifiedProtoList, modifiedFileList);
 
-    return "";
+        checkFileImportModule(protoPathList, programFileList, modifiedProtoList, modifiedFileList);
+    })
+    .catch((error) => {
+        console.error('An error occurred:', error);
+    });
+
+    return ;
 }
 
 
