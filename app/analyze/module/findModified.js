@@ -9,6 +9,7 @@ const path = require('path');
 /*config*/
 // 許可される言語ファイルの拡張子のリスト
 const allowedExtensions = [
+    '.proto',
     '.go',     // Go 
     '.cs',     // C# 
     '.java',   // Java 
