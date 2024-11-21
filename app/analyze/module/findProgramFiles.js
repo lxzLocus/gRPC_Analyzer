@@ -10,20 +10,21 @@ if (require.main === module) {
     // premerge or merged file path 
     const repositoryFolderPath = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112";
 
-    const { protoPathList, programFileList } = getProgramFilePaths(repositoryFolderPath);
+    const { protoPathMap, programFileList } = getProgramFilePaths(repositoryFolderPath);
 
-    console.log("Proto Files:", protoPathList);
-    console.log("programFiles:", programFileList);
+    console.log("Proto Files Map:", protoPathMap);
+    console.log("Program Files:", programFileList);
 }
 
 /*functions*/
 function getProgramFilePaths(dirPath) {
-    let protoPathList = [];
+    let protoPathMap = new Map();
     let programFileList = [];
     const list = fs.readdirSync(dirPath);
 
     // 許可される言語ファイルの拡張子のリスト
     const allowedExtensions = [
+        '.proto',
         '.go',     // Go
         '.cs',     // C#
         '.java',   // Java
@@ -51,12 +52,15 @@ function getProgramFilePaths(dirPath) {
         // .protoファイルのみ取得し、.gitディレクトリは除外
         if (stat.isDirectory()) {
             if (file !== '.git') {
-                const { protoPathList: nestedprotoPathList, programFileList: nestedprogramFileList } = getProgramFilePaths(filePath);
-                protoPathList = protoPathList.concat(nestedprotoPathList);
-                programFileList = programFileList.concat(nestedprogramFileList);
+                const { protoPathMap: nestedProtoPathMap, programFileList: nestedProgramFileList } = getProgramFilePaths(filePath);
+                protoPathMap = new Map([...protoPathMap, ...nestedProtoPathMap]); // Merge maps
+                programFileList = programFileList.concat(nestedProgramFileList);
             }
         } else if (file.endsWith('.proto')) {
-            protoPathList.push(filePath);
+            const protoDetails = parseProtoFile(filePath);
+            if (protoDetails) {
+                protoPathMap.set(filePath, protoDetails);
+            }
         } else {
             // 許可されている拡張子のファイルのみをprogramFileListに追加
             const fileExt = path.extname(file);
@@ -66,7 +70,27 @@ function getProgramFilePaths(dirPath) {
         }
     });
 
-    return { protoPathList, programFileList };
+    return { protoPathMap, programFileList };
+}
+
+/* Parses a .proto file to extract package and option details */
+function parseProtoFile(filePath) {
+    try {
+        const fileContent = fs.readFileSync(filePath, 'utf-8');
+        const packageMatch = fileContent.match(/package\s+([\w.]+);/);
+        const optionsMatch = [...fileContent.matchAll(/option\s+([\w_]+)\s*=\s*["']?([\w./-]+)["']?;/g)];
+
+        const packageName = packageMatch ? packageMatch[1] : null;
+        const options = optionsMatch.map(match => ({
+            key: match[1],
+            value: match[2]
+        }));
+
+        return { package: packageName, options };
+    } catch (err) {
+        console.error(`Error reading proto file ${filePath}:`, err);
+        return null;
+    }
 }
 
 module.exports = { getProgramFilePaths };

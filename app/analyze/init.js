@@ -17,31 +17,6 @@ const { promiseHooks } = require('v8');
 
 
 
-/*config*/
-const allowedExtensions = [
-    '.go',     // Go 
-    '.cs',     // C# 
-    '.java',   // Java 
-    '.scala',  // Scala 
-    '.ts',     // TypeScript 
-    '.py',     // Python 
-    '.c',      // C 
-    '.js',     // JavaScript 
-    '.sh',     // Shell 
-    '.html',   // HTML 
-    '.htm',    // HTML (alternative extension) 
-    '.css',    // CSS 
-    '.pl',     // Perl 
-    '.pm',     // Perl module 
-    '.cpp',    // C++ 
-    '.cc',     // C++ 
-    '.cx',     // C++ 
-    '.rs',     // Rust 
-];
-
-
-
-
 /*__MAIN__*/
 if (require.main === module) {
     // let filePaths = process.argv.slice(2)[0];
@@ -74,13 +49,13 @@ function initialize(filePaths) {
         getFileModifiedList(preMergeDirPath, mergeDirPath)
     ])
     .then(([programPaths, modifiedFiles]) => {
-        const { protoPathList, programFileList } = programPaths;
+        const { protoPathMap, programFileList } = programPaths;
         const { modifiedProtoList, modifiedFileList } = modifiedFiles;
 
-        console.log(protoPathList, programFileList);
+        console.log(protoPathMap, programFileList);
         console.log(modifiedProtoList, modifiedFileList);
 
-        checkFileImportModule(protoPathList, programFileList, modifiedProtoList, modifiedFileList);
+        checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedFileList);
     })
     .catch((error) => {
         console.error('An error occurred:', error);

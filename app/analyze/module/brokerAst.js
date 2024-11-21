@@ -31,55 +31,121 @@ const allowedExtensions = {
     '.cc': 'cpp',        // C++
     '.cx': 'cpp',        // C++
     '.rs': 'rust',       // Rust
+    '.proto': 'proto',  //Proto
 };
 
 
 /*__MAIN__*/
 if (require.main === module) {
     // let mergeStateFilePath = process.argv.slice(2)[0];
-    let protoPathList =  [
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/github.com/golang/protobuf/ptypes/any/any.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/github.com/golang/protobuf/ptypes/duration/duration.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/github.com/golang/protobuf/ptypes/timestamp/timestamp.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/github.com/googleapis/gnostic/OpenAPIv2/OpenAPIv2.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/github.com/googleapis/gnostic/extensions/extension.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/admissionregistration/v1alpha1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/admissionregistration/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/apps/v1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/apps/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/apps/v1beta2/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/authentication/v1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/authentication/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/authorization/v1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/authorization/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/autoscaling/v1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/autoscaling/v2beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/batch/v1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/batch/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/batch/v2alpha1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/certificates/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/core/v1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/events/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/extensions/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/networking/v1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/policy/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/rbac/v1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/rbac/v1alpha1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/rbac/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/scheduling/v1alpha1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/scheduling/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/settings/v1alpha1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/storage/v1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/storage/v1alpha1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/storage/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/apimachinery/pkg/api/resource/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/apimachinery/pkg/apis/meta/v1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/apimachinery/pkg/apis/meta/v1beta1/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/apimachinery/pkg/runtime/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/apimachinery/pkg/runtime/schema/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/apimachinery/pkg/util/intstr/generated.proto",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fortune/api/fortune.proto",
-    ];
+    let protoPathMap = new Map([
+        [
+            "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/github.com/golang/protobuf/ptypes/any/any.proto",
+            {
+                package: "google.protobuf",
+                options: [
+                    { key: "csharp_namespace", value: "Google.Protobuf.WellKnownTypes" },
+                    { key: "go_package", value: "github.com/golang/protobuf/ptypes/any" },
+                    { key: "java_package", value: "com.google.protobuf" },
+                    { key: "java_outer_classname", value: "AnyProto" },
+                    { key: "java_multiple_files", value: "true" },
+                    { key: "objc_class_prefix", value: "GPB" },
+                ],
+            },
+        ],
+        [
+            "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/github.com/golang/protobuf/ptypes/duration/duration.proto",
+            {
+                package: "google.protobuf",
+                options: [
+                    {
+                        key: "csharp_namespace",
+                        value: "Google.Protobuf.WellKnownTypes",
+                    },
+                    {
+                        key: "cc_enable_arenas",
+                        value: "true",
+                    },
+                    {
+                        key: "go_package",
+                        value: "github.com/golang/protobuf/ptypes/duration",
+                    },
+                    {
+                        key: "java_package",
+                        value: "com.google.protobuf",
+                    },
+                    {
+                        key: "java_outer_classname",
+                        value: "DurationProto",
+                    },
+                    {
+                        key: "java_multiple_files",
+                        value: "true",
+                    },
+                    {
+                        key: "objc_class_prefix",
+                        value: "GPB",
+                    },
+                ],
+            },
+        ],
+        [
+            "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/github.com/golang/protobuf/ptypes/timestamp/timestamp.proto",
+            {
+                package: "google.protobuf",
+                options: [
+                    {
+                        key: "csharp_namespace",
+                        value: "Google.Protobuf.WellKnownTypes",
+                    },
+                    {
+                        key: "cc_enable_arenas",
+                        value: "true",
+                    },
+                    {
+                        key: "go_package",
+                        value: "github.com/golang/protobuf/ptypes/timestamp",
+                    },
+                    {
+                        key: "java_package",
+                        value: "com.google.protobuf",
+                    },
+                    {
+                        key: "java_outer_classname",
+                        value: "TimestampProto",
+                    },
+                    {
+                        key: "java_multiple_files",
+                        value: "true",
+                    },
+                    {
+                        key: "objc_class_prefix",
+                        value: "GPB",
+                    },
+                ],
+            },
+        ],
+        [
+            "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/api/admissionregistration/v1beta1/generated.proto",
+            {
+                package: "k8s.io.api.admissionregistration.v1beta1",
+                options: [
+                    {
+                        key: "go_package",
+                        value: "v1beta1",
+                    },
+                ],
+            },
+        ],
+        [
+            "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fortune/api/fortune.proto",
+            {
+                package: "api",
+                options: [
+                ],
+            },
+        ]
+    ]);
     let programFileList = [
         "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/doggos/main.go",
         "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/emoji/main.go",
@@ -1233,7 +1299,7 @@ async function analyzeDependencies(protoPaths, programPaths) {
     const programToPrograms = {};
 
     for (const progPath of programPaths) {
-        const importedProtos = getImportedProtos(progPath, protoPackages);
+        const importedProtos = getImportedProtos(progPath, protoPaths);
         importedProtos.forEach(proto => {
             if (!protoToPrograms[proto]) {
                 protoToPrograms[proto] = [];
@@ -1270,17 +1336,49 @@ function findAffectedPrograms(modifiedProtos, dependencies) {
 
 // プログラムファイルからimportしているprotoファイルを特定
 //文字列一致
-function getImportedProtos(filePath, protoPackages) {
-    const content = readFile(filePath);
+//proto違い packageは同じ
+//相対パスか
+function getImportedProtos(filePath, protoPaths) {
+    const content = fs.readFileSync(filePath, 'utf8');
     const importedProtos = [];
 
-    protoPackages.forEach(pkg => {
-        if (content.includes(pkg)) {
-            importedProtos.push(pkg);
+    protoPaths.forEach(protoPath => {
+        const protoPackageName = getProtoPackageName(protoPath);
+        // より厳密にパッケージ名を特定するために正規表現を使う
+        const importRegex = new RegExp(`import\\s+["'].*${path.basename(protoPath)}["'];`);
+        if (importRegex.test(content)) {
+            importedProtos.push(protoPackageName);
         }
     });
 
     return importedProtos;
+}
+
+async function getImportedProtos_Go(filePath, protoPaths) {
+    const extension = path.extname(filePath);
+    let imports = [];
+
+    switch (extension) {
+        case '.go':
+            try {
+                imports = await analyzeGoAst(filePath); // Promise が解決されるまで待機
+                console.log(imports);
+            } catch (err) {
+                console.error("Error generating Go AST:", err);
+                throw err; // エラーを呼び出し元に伝搬
+            }
+            break;
+
+        case '.js':
+            //imports = getJsImportsWithAST(filePath);
+            break;
+        case '.py':
+            //imports = getPythonImportsWithAST(filePath);
+            break;
+        // 他の言語用のAST解析をここに追加
+    }
+
+    return imports;
 }
 
 
@@ -1312,14 +1410,9 @@ async function getImportedPrograms(filePath) {
     return imports;
 }
 
-
-function readFile(filePath) {
-    return fs.readFileSync(filePath, 'utf8');
-}
-
 // protoファイルからpackage名を取得
 function getProtoPackageName(filePath) {
-    const content = readFile(filePath);
+    const content = fs.readFileSync(filePath, 'utf8');
     const packageMatch = content.match(/package\s+([\w.]+);/);
     return packageMatch ? packageMatch[1] : null;
 }
