@@ -8,7 +8,7 @@ const readline = require('readline');
 
 const { exec } = require('child_process');
 
-const { analyzeGoAst } = require('./analyzeAst/goAst');
+const { analyzeGoAst } = require('./analyzeAst/Go/go');
 
 
 /*config*/
@@ -1279,27 +1279,27 @@ if (require.main === module) {
         "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112/vigoda/main.go"
     ]
 
-    main(protoPathList, programFileList, modifiedProtoList);
+    main(protoPathMap, programFileList, modifiedProtoList);
 
     //checkFileImportModule(protoPathList, programFileList, modifiedProtoList, modifiedProgList);
 }
 
 /*functions*/
-async function main(protoPathList, programFileList, modifiedProtoList){
-    const dependencies = await analyzeDependencies(protoPathList, programFileList);
+async function main(protoPathMap, programFileList, modifiedProtoList){
+    const dependencies = await analyzeDependencies(protoPathMap, programFileList);
     const affectedPrograms = findAffectedPrograms(modifiedProtoList, dependencies);
     console.log("Affected programs:", Array.from(affectedPrograms));
 }
 
 
 // プロジェクト全体の依存関係を解析
-async function analyzeDependencies(protoPaths, programPaths) {
-    const protoPackages = protoPaths.map(getProtoPackageName);
+async function analyzeDependencies(protoPathMap, programPaths) {
+    const protoPackages = protoPathMap.map(getProtoPackageName);
     const protoToPrograms = {};
     const programToPrograms = {};
 
     for (const progPath of programPaths) {
-        const importedProtos = getImportedProtos(progPath, protoPaths);
+        const importedProtos = getImportedProtos(progPath, protoPathMap);
         importedProtos.forEach(proto => {
             if (!protoToPrograms[proto]) {
                 protoToPrograms[proto] = [];
@@ -1343,6 +1343,7 @@ function getImportedProtos(filePath, protoPaths) {
     const importedProtos = [];
 
     protoPaths.forEach(protoPath => {
+        // protoファイルからpackage名を取得
         const protoPackageName = getProtoPackageName(protoPath);
         // より厳密にパッケージ名を特定するために正規表現を使う
         const importRegex = new RegExp(`import\\s+["'].*${path.basename(protoPath)}["'];`);

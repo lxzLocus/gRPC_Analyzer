@@ -13,13 +13,21 @@ if (require.main === module) {
 
 /*import module*/
 function analyzeGoAst(filePath) {
-    const goFileName = 'analyzeGo';
-    const goFilePath = path.join(__dirname, goFileName);
-    const tempFilePath = path.join(__dirname, "temp");
+    const progGoFileName = 'analyzeGo';
+    const protoGoFileName = 'analyzeProtoGo';
+
+    const progGoFilePath = path.join(__dirname, "prog");
+    const protoGoFilePath = path.join(__dirname, "proto");
+
+    const progGoPath = path.join(progGoFilePath, progGoFileName);
+    const protoGoPath = path.join(protoGoFilePath, protoGoFileName)
+
+
+    const tempFilePath = path.join(progGoFilePath, "temp");
 
 
     return new Promise((resolve, reject) => {
-        exec(`${goFilePath} ${filePath}`, { maxBuffer: 1024 * 1024 * 100 },
+        exec(`${progGoPath} ${filePath}`, { maxBuffer: 1024 * 1024 * 100 },
             (err, stdout, stderr) => {
                 if (err) {
                     reject(`Error generating Imported Module: ${err.message}`);
