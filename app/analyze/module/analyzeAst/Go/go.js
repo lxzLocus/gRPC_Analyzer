@@ -5,7 +5,7 @@ const fs = require('fs');
 
 /*__MAIN__*/
 if (require.main === module) {
-    let sourcefilePath = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/doggos/main.go";
+    let sourcefilePath = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/client-go/plugin/pkg/client/auth/exec/exec.go";
     analyzeGoAst(sourcefilePath)
         .then(temp => console.log(temp))
         .catch(err => console.error(err));

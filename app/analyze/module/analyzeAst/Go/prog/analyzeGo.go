@@ -81,11 +81,9 @@ func analyzeImportsAndUsage(fset *token.FileSet, node *ast.File) []string {
 	ast.Inspect(node, func(n ast.Node) bool {
 		// ImportSpecノードを見つけてimportされたパッケージを記録
 		if imp, ok := n.(*ast.ImportSpec); ok {
-			// パッケージ名を取り出すためにパスをスラッシュで分割し，最後の要素を使用
+			// パッケージパスをそのまま使用
 			fullPath := strings.Trim(imp.Path.Value, `"`)
-			segments := strings.Split(fullPath, "/")
-			packageName := segments[len(segments)-1]
-			imports[packageName] = false
+			imports[fullPath] = false
 		}
 		return true
 	})
@@ -95,8 +93,10 @@ func analyzeImportsAndUsage(fset *token.FileSet, node *ast.File) []string {
 		if sel, ok := n.(*ast.SelectorExpr); ok {
 			if ident, ok := sel.X.(*ast.Ident); ok {
 				// ident.Nameはパッケージ名を表しているので、マップに存在すれば利用フラグをtrueにする
-				if _, exists := imports[ident.Name]; exists {
-					imports[ident.Name] = true
+				for path := range imports {
+					if strings.HasSuffix(path, ident.Name) {
+						imports[path] = true
+					}
 				}
 			}
 		}

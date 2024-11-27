@@ -78,15 +78,17 @@ function parseProtoFile(filePath) {
     try {
         const fileContent = fs.readFileSync(filePath, 'utf-8');
         const packageMatch = fileContent.match(/package\s+([\w.]+);/);
+        const importMatches = [...fileContent.matchAll(/import\s+["'](.+?)["'];/g)]; 
         const optionsMatch = [...fileContent.matchAll(/option\s+([\w_]+)\s*=\s*["']?([\w./-]+)["']?;/g)];
 
         const packageName = packageMatch ? packageMatch[1] : null;
+        const imports = importMatches.map(match => match[1]); 
         const options = optionsMatch.map(match => ({
             key: match[1],
             value: match[2]
         }));
 
-        return { package: packageName, options };
+        return { package: packageName, imports, options }; 
     } catch (err) {
         console.error(`Error reading proto file ${filePath}:`, err);
         return null;
