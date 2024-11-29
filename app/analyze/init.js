@@ -16,11 +16,15 @@ const { checkFileImportModule } = require('./module/brokerAst');
 const { promiseHooks } = require('v8');
 
 
+//test
+const { main_f } = require('./module/brokerAst');
+
+
 
 /*__MAIN__*/
 if (require.main === module) {
     // let filePaths = process.argv.slice(2)[0];
-    let mergeStateFilePath = '/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/';
+    let mergeStateFilePath = '/app/dataset/clone/go-micro-services/pullrequest/Add_go_output_directory_for_protos';
     initialize(mergeStateFilePath);
 }
 
@@ -55,7 +59,8 @@ function initialize(filePaths) {
         console.log(protoPathMap, programFileList);
         console.log(modifiedProtoList, modifiedFileList);
 
-        checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedFileList);
+        //checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedFileList);
+        main_f(protoPathMap, programFileList, modifiedProtoList, modifiedFileList);
     })
     .catch((error) => {
         console.error('An error occurred:', error);

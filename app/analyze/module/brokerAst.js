@@ -1,5 +1,9 @@
 /*
 AST Broker
+
+
+FLAG : 要確認，デバッグ必要箇所
+
 */
 /*import module*/
 const fs = require('fs');
@@ -46,6 +50,10 @@ if (require.main === module) {
                 imports: [
                 ],
                 options: [
+                    {
+                        key: "go_package",
+                        value: "github.com/golang/protobuf/ptypes/any",
+                    }
                 ],
             },
         ]
@@ -76,9 +84,9 @@ async function main_f(protoPathMap, programFileList, modifiedProtoList, modified
     const pre_dependencies = await pre_Analyzedependencies(protoPathMap, programFileList);
 
 
-    const dependencies = await analyzeDependencies(protoPathMap, programFileList);
-    const affectedPrograms = findAffectedPrograms(modifiedProtoList, dependencies);
-    console.log("Affected programs:", Array.from(affectedPrograms));
+    //const dependencies = await analyzeDependencies(protoPathMap, programFileList);
+    //const affectedPrograms = findAffectedPrograms(modifiedProtoList, dependencies);
+    //console.log("Affected programs:", Array.from(affectedPrograms));
 }
 
 
@@ -95,27 +103,233 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
 
         // どのprotoをimportしているか
         for (const [protoPath, protoMeta] of protoPathMap) {
-            // Check if the importedModules includes exactly the proto package or any of its options' values
-            // Use exact matching to avoid partial match issues
-            const isPackageImported = importedModules.some(
-                (module) => module === protoMeta.package
-            );
-            const isOptionImported = protoMeta.options.some(
-                (option) => importedModules.includes(option.value)
+
+            /*bool package名一致*/
+            var isPackageImported = importedModules.some(
+                function(module) {
+                return module === protoMeta.package;
+                }
             );
 
-            if (isPackageImported || isOptionImported) {
+            //package名でimportされている場合，ほかの条件を確認しない
+            if (isPackageImported) {
+                // protoToProgramsへの登録
                 if (!protoToPrograms[protoPath]) {
                     protoToPrograms[protoPath] = [];
                 }
                 protoToPrograms[protoPath].push(progPath);
+
+                continue;
             }
+
+
+
+            /*proto内optionsの確認*/
+            if (protoMeta.options.length != 0){
+                //言語ごとのpackage取得
+                const optionPackagePath = getPackageNameOption(progPath, protoMeta, importedModules);
+                //属する言語がない場合 or option定義されていない場合
+                if (optionPackagePath.isOptionImported === true){
+                    //optionsで一致する場合の探索   FLAG
+                    var isOptionImported = importedModules.some(
+                        function(module) {
+                            return module === optionPackagePath.packageNamePath;
+                        }
+                    );
+
+                    // FLAG
+                    if (isOptionImported) {
+                        // protoToProgramsへの登録
+                        if (!protoToPrograms[protoPath]) {
+                            protoToPrograms[protoPath] = [];
+                        }
+                        protoToPrograms[protoPath].push(progPath);
+
+                        continue;
+                    }
+                }
+            }
+
+
+            /*package名と他の情報を組み合わせる探索*/
+            //package
+            const packageName = protoMeta.package;
+
+            //依存ファイル
+            //go.mod
+            const goModList = findGoModFiles(progPath);
+            if(goModList.length != 0){
+
+                console.log();
+            
+            }
+
+            //Makefile
+            const makefileList = findMakefileFiles(progPath);
+            if(makefileList.length != 0){
+                console.log();
+            }
+
+            //Dockerfile
+            const dockerfileList = findDockerfiles(progPath);
+            if(dockerfileList.length != 0){
+                console.log();
+            }
+ 
+            //逆引き
+
+
+
+            var isOptionImported = protoMeta.options.some(
+                function(option) {
+                    return importedModules.includes(option.value);
+                }
+            );
+
+            if (isPackageImported || isOptionImported) { 
+                if (!protoToPrograms[protoPath]) { 
+                    protoToPrograms[protoPath] = []; 
+                } 
+                protoToPrograms[protoPath].push(progPath); 
+            } 
         }
     }
 
     return { protoToPrograms, programToPrograms };
 }
 
+
+//proto optionからpackage名の取得
+function getPackageNameOption(filePath, protoMeta, importedModules){
+    const extension = path.extname(filePath);
+    let isOptionImported = false;
+    let packageName;
+    let packageNamePath = null;
+
+    switch (extension) {
+        case '.go':
+            packageName = protoMeta.options.find(option => option.key === 'go_package');
+            if (packageName && importedModules.includes(packageName.value)) {
+                isOptionImported = true;
+                packageNamePath = packageName.value;
+
+                return { isOptionImported, packageNamePath };  
+            }
+
+            return { isOptionImported, packageNamePath };
+
+        case '.js':
+
+            break;
+        case '.py':
+
+            break;
+        // 他の言語の追加
+        default:
+
+            //どれにも属さない為，falseを返す
+            return { isOptionImported, packageNamePath };
+    }
+}
+
+
+//Array go.modファイルパスの取得
+function findGoModFiles(progPath) {
+    const goModFiles = [];
+    let currentPath = path.resolve(progPath);
+
+    while (true) {
+        // Check if the current directory contains a go.mod file
+        const goModPath = path.join(currentPath, 'go.mod');
+        if (fs.existsSync(goModPath)) {
+            goModFiles.push(goModPath);
+        }
+
+        // Check if the current path contains "merge_" or "premerge_"
+        const baseName = path.basename(currentPath);
+        if (baseName.includes('merge_') || baseName.includes('premerge_')) {
+            break;
+        }
+
+        // Move up one directory
+        const parentPath = path.dirname(currentPath);
+        if (parentPath === currentPath) {
+            // Reached the file system root
+            break;
+        }
+        currentPath = parentPath;
+    }
+
+    return goModFiles;
+}
+
+//Array makefileのリストを取得
+function findMakefileFiles(progPath) {
+    const makefileFiles = [];
+    let currentPath = path.resolve(progPath);
+
+    while (true) {
+        // Check if the current directory contains a Makefile
+        const makefilePath = path.join(currentPath, 'Makefile');
+        if (fs.existsSync(makefilePath)) {
+            makefileFiles.push(makefilePath);
+        }
+
+        // Check if the current path contains "merge_" or "premerge_"
+        const baseName = path.basename(currentPath);
+        if (baseName.includes('merge_') || baseName.includes('premerge_')) {
+            break;
+        }
+
+        // Move up one directory
+        const parentPath = path.dirname(currentPath);
+        if (parentPath === currentPath) {
+            // Reached the file system root
+            break;
+        }
+        currentPath = parentPath;
+    }
+
+    return makefileFiles;
+}
+
+
+//Array dockerfileのリストを取得
+function findDockerfiles(progPath) {
+    const dockerfiles = [];
+    let currentPath = path.resolve(progPath);
+
+    while (true) {
+        // Read all files in the current directory
+        const files = fs.readdirSync(currentPath);
+
+        // Filter files to find Dockerfile or files containing "dockerfile"
+        files.forEach((file) => {
+            if (
+                !path.extname(file) && // No extension
+                file.toLowerCase().includes('dockerfile') // Contains "dockerfile" (case-insensitive)
+            ) {
+                dockerfiles.push(path.join(currentPath, file));
+            }
+        });
+
+        // Check if the current path contains "merge_" or "premerge_"
+        const baseName = path.basename(currentPath);
+        if (baseName.includes('merge_') || baseName.includes('premerge_')) {
+            break;
+        }
+
+        // Move up one directory
+        const parentPath = path.dirname(currentPath);
+        if (parentPath === currentPath) {
+            // Reached the file system root
+            break;
+        }
+        currentPath = parentPath;
+    }
+
+    return dockerfiles;
+}
 
 
 
