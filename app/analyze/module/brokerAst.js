@@ -160,20 +160,49 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
             const goModList = findGoModFiles(progPath);
             if(goModList.length != 0){
 
-                console.log();
+                goModList.forEach(goModPath => {
+                    const content = fs.readFileSync(goModPath, 'utf8');
+                    const moduleMatch = content.match(/^module\s+([\w.\/-]+)\s*$/m);
+                    if (moduleMatch) {
+                        
+                        //FLAG
+                        //一致する場合の探索を付け加える
+                        const modulePath = moduleMatch[1];
+                        console.log(`Found module path: ${modulePath}`);
+                    }
+                });
             
             }
+
 
             //Makefile
             const makefileList = findMakefileFiles(progPath);
             if(makefileList.length != 0){
-                console.log();
+                
+                makefileList.forEach(makefilePath => {
+                    findProtocCommands(makefilePath).forEach(command => {
+                        //FLAG
+                        // protocコマンドの解析
+
+                        console.log(`Found protoc command: ${command}`);
+                    });
+                    
+                });
             }
 
             //Dockerfile
             const dockerfileList = findDockerfiles(progPath);
             if(dockerfileList.length != 0){
-                console.log();
+                dockerfileList.forEach(dockerfilePath => {
+                    findGoGetAndProtocCommands(dockerfilePath).forEach(command => {
+                        //FLAG
+                        // Dockerfileの解析
+                        
+                        console.log(`Found go get or protoc command: ${command}`);
+                    });
+
+                    console.log(`Found Dockerfile: ${dockerfilePath}`);
+                });
             }
  
             //逆引き
@@ -294,6 +323,49 @@ function findMakefileFiles(progPath) {
 }
 
 
+
+//Array makefileからprotocコマンドの行を取得
+function findProtocCommands(makefilePath) {
+    try {
+        // Makefileを読み込む
+        const makefileContent = fs.readFileSync(makefilePath, 'utf8');
+
+        // 各行を解析する
+        const lines = makefileContent.split('\n');
+        //FLAG
+        const protocLines = lines.filter(line => line.includes('protoc') && line.includes('.proto'));
+
+        return protocLines;
+    } catch (error) {
+        console.error('Error reading the Makefile:', error);
+        return [];
+    }
+}
+
+
+function findGoGetAndProtocCommands(dockerfilePath) {
+    try {
+        // Dockerfileを読み込む
+        const dockerfileContent = fs.readFileSync(dockerfilePath, 'utf8');
+
+        // 各行を解析する
+        const lines = dockerfileContent.split('\n');
+
+        // RUNまたはCMDコマンドで`go get`または`protoc`を含む行をフィルタリング
+        const targetLines = lines.filter(line =>
+            (line.startsWith('RUN') || line.startsWith('CMD')) &&
+            (line.includes('go get') || line.includes('protoc'))
+        );
+
+        return targetLines;
+    } catch (error) {
+        console.error('Error reading the Dockerfile:', error);
+        return [];
+    }
+}
+
+
+
 //Array dockerfileのリストを取得
 function findDockerfiles(progPath) {
     const dockerfiles = [];
@@ -301,12 +373,14 @@ function findDockerfiles(progPath) {
 
     while (true) {
         // Read all files in the current directory
-        const files = fs.readdirSync(currentPath);
+        let files = [];
+        if (fs.statSync(currentPath).isDirectory()) {
+            files = fs.readdirSync(currentPath);
+        }
 
         // Filter files to find Dockerfile or files containing "dockerfile"
         files.forEach((file) => {
             if (
-                !path.extname(file) && // No extension
                 file.toLowerCase().includes('dockerfile') // Contains "dockerfile" (case-insensitive)
             ) {
                 dockerfiles.push(path.join(currentPath, file));
