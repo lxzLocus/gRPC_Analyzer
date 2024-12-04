@@ -24,7 +24,7 @@ const { main_f } = require('./module/brokerAst');
 /*__MAIN__*/
 if (require.main === module) {
     // let filePaths = process.argv.slice(2)[0];
-    let mergeStateFilePath = '/app/dataset/clone/go-micro-services/pullrequest/Add_go_output_directory_for_protos';
+    let mergeStateFilePath = '/app/dataset/clone/hmda-platform/pullrequest/Submissions_api';
     initialize(mergeStateFilePath);
 }
 
