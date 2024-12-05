@@ -110,6 +110,7 @@ function findDockerfiles(progPath) {
 
     return dockerfiles;
 }
+
 function findGoGetAndProtocCommands(dockerfilePath) {
     try {
         // Dockerfileを読み込む 

@@ -92,8 +92,6 @@ async function main_f(protoPathMap, programFileList, modifiedProtoList, modified
 }
 
 
-
-
 async function pre_Analyzedependencies(protoPathMap, programPaths) {
     const protoToPrograms = {};
     const programToPrograms = {};
@@ -164,12 +162,18 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                 //依存ファイル
                 //go.mod
                 const goModList = findGoModFiles(progPath);
-                if (goModList.length != 0) {
-                    const moduleLines = content.split('\n').filter(line => line.startsWith('module'));
+                let moduleLines = [];
+                
+                goModList.forEach(goModPath => {
+                    const content = fs.readFileSync(goModPath, 'utf8');
+                    moduleLines = moduleLines.concat(content.split('\n').filter(line => line.startsWith('module')));
+                });
+                
+                if (moduleLines.length != 0) {
                     for (const line of moduleLines) {
                         const moduleName = line.split(' ')[1].trim();
                         const fullPath = moduleName + "/" + packageName;
-                        if (importedModules.includes(fullPath)) {
+                        if (importedModules.some(module => module === fullPath)) {
                             if (!protoToPrograms[protoPath]) {
                                 protoToPrograms[protoPath] = [];
                             }
@@ -330,56 +334,6 @@ function findGoModFiles(progPath) {
     return goModFiles;
 }
 
-//Array makefileのリストを取得
-function findMakefileFiles(progPath) {
-    const makefileFiles = [];
-    let currentPath = path.resolve(progPath);
-
-    while (true) {
-        // Check if the current directory contains a Makefile
-        const makefilePath = path.join(currentPath, 'Makefile');
-        if (fs.existsSync(makefilePath)) {
-            makefileFiles.push(makefilePath);
-        }
-
-        // Check if the current path contains "merge_" or "premerge_"
-        const baseName = path.basename(currentPath);
-        if (baseName.includes('merge_') || baseName.includes('premerge_')) {
-            break;
-        }
-
-        // Move up one directory
-        const parentPath = path.dirname(currentPath);
-        if (parentPath === currentPath) {
-            // Reached the file system root
-            break;
-        }
-        currentPath = parentPath;
-    }
-
-    return makefileFiles;
-}
-
-
-
-//Array makefileからprotocコマンドの行を取得
-function findProtocCommands(makefilePath) {
-    try {
-        // Makefileを読み込む
-        const makefileContent = fs.readFileSync(makefilePath, 'utf8');
-
-        // 各行を解析する
-        const lines = makefileContent.split('\n');
-        //FLAG
-        const protocLines = lines.filter(line => line.includes('protoc') && line.includes('.proto'));
-
-        return protocLines;
-    } catch (error) {
-        console.error('Error reading the Makefile:', error);
-        return [];
-    }
-}
-
 
 //Array dockerfileのリストを取得
 function findDockerfiles(progPath) {
@@ -423,17 +377,32 @@ function findDockerfiles(progPath) {
 
 function findGoGetAndProtocCommands(dockerfilePath) {
     try {
-        // Dockerfileを読み込む
+        // Dockerfileを読み込む 
         const dockerfileContent = fs.readFileSync(dockerfilePath, 'utf8');
 
-        // 各行を解析する
+        // 各行を解析する 
         const lines = dockerfileContent.split('\n');
 
-        // RUNまたはCMDコマンドで`go get`または`protoc`を含む行をフィルタリング
-        const targetLines = lines.filter(line =>
-            (line.startsWith('RUN') || line.startsWith('CMD')) &&
-            (line.includes('go get') || line.includes('protoc'))
-        );
+        // RUNまたはCMDコマンドで`go get`または`protoc`を含む行、またはENTRYPOINTコマンドでフォルダパスを指定している行をフィルタリング 
+        const targetLines = lines.filter(line => {
+            const parts = line.split(' ');
+            return (line.startsWith('RUN') || line.startsWith('CMD') || line.startsWith('ENTRYPOINT')) &&
+                (line.includes('go get') || (parts.length > 0 && parts[0].startsWith('protoc'))) ||
+                (line.startsWith('ADD') && parts.length === 3) ||
+                line.startsWith('ENTRYPOINT'); // ENTRYPOINTもチェック 
+        });
+
+        // ENTRYPOINT行を解析 
+        const entrypointCommands = targetLines
+            .filter(line => line.startsWith('ENTRYPOINT'))
+            .map(line => {
+                // ENTRYPOINTに続く部分を取得 
+                const match = line.match(/^ENTRYPOINT\s+(.+)$/);
+                return match ? match[1].trim() : null;
+            })
+            .filter(Boolean); // nullを除外
+
+        console.log('Found ENTRYPOINT commands:', entrypointCommands);
 
         return targetLines;
     } catch (error) {
@@ -442,6 +411,55 @@ function findGoGetAndProtocCommands(dockerfilePath) {
     }
 }
 
+
+//Array makefileのリストを取得
+function findMakefileFiles(progPath) {
+    const makefileFiles = [];
+    let currentPath = path.resolve(progPath);
+
+    while (true) {
+        // Check if the current directory contains a Makefile
+        const makefilePath = path.join(currentPath, 'Makefile');
+        if (fs.existsSync(makefilePath)) {
+            makefileFiles.push(makefilePath);
+        }
+
+        // Check if the current path contains "merge_" or "premerge_"
+        const baseName = path.basename(currentPath);
+        if (baseName.includes('merge_') || baseName.includes('premerge_')) {
+            break;
+        }
+
+        // Move up one directory
+        const parentPath = path.dirname(currentPath);
+        if (parentPath === currentPath) {
+            // Reached the file system root
+            break;
+        }
+        currentPath = parentPath;
+    }
+
+    return makefileFiles;
+}
+
+
+//Array makefileからprotocコマンドの行を取得
+function findProtocCommands(makefilePath) {
+    try {
+        // Makefileを読み込む
+        const makefileContent = fs.readFileSync(makefilePath, 'utf8');
+
+        // 各行を解析する
+        const lines = makefileContent.split('\n');
+        //FLAG
+        const protocLines = lines.filter(line => line.includes('protoc') && line.includes('.proto'));
+
+        return protocLines;
+    } catch (error) {
+        console.error('Error reading the Makefile:', error);
+        return [];
+    }
+}
 
 
 

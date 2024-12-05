@@ -84,6 +84,7 @@ function findMakefileFiles(progPath) {
     return makefileFiles;
 }
 
+
 //Array makefileからprotocコマンドの行を取得
 function findProtocCommands(makefilePath) {
     try {
