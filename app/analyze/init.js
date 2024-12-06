@@ -56,8 +56,8 @@ function initialize(filePaths) {
         const { protoPathMap, programFileList } = programPaths;
         const { modifiedProtoList, modifiedFileList } = modifiedFiles;
 
-        console.log(protoPathMap, programFileList);
-        console.log(modifiedProtoList, modifiedFileList);
+        //console.log(protoPathMap, programFileList);
+        //console.log(modifiedProtoList, modifiedFileList);
 
         //checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedFileList);
         main_f(protoPathMap, programFileList, modifiedProtoList, modifiedFileList);

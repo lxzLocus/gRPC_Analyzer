@@ -68,11 +68,11 @@ if (require.main === module) {
         "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112/fortune/api/fortune.proto",
     ]
     let modifiedProgList = [
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112/doggos/main.go",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112/emoji/main.go",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112/fortune/main.go",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_p…ufs_and_improve_ci/merge_112/sidecar/src/main.rs",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112/vigoda/main.go"
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/doggos/main.go",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/emoji/main.go",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fortune/main.go",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_p…ufs_and_improve_ci/premerge_112/sidecar/src/main.rs",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/vigoda/main.go"
     ]
 
 
@@ -102,10 +102,33 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
         const importedModules = await getImportedPrograms(progPath);
         const extension = path.extname(progPath);
 
+        //for文外に移動
+        const projectName = getProjectName(progPath);
         const goPathMode = checkGoPathMode(progPath);
+        //const goVersion = getGoVersion(progPath);
+
+        if(goPathMode === true){
+            const goPathSrc = progPath.split('/').slice(progPath.split('/').findIndex(segment => segment.includes('premerge_') || segment.includes('merge_'))).join('/');
+        }else{
+            //go.modの取得
+            const goModList = findGoModFiles(progPath);
+            const goModModuleList = goModList.map(goModPath => {
+                const content = fs.readFileSync(goModPath, 'utf8');
+                const moduleLine = content.split('\n').find(line => line.startsWith('module'));
+                return moduleLine.split(' ')[1].trim();
+            });
+        }
+
 
         // どのprotoをimportしているか
         for (const [protoPath, protoMeta] of protoPathMap) {
+
+            const packagePath = getPackagePath(protoPath);
+
+            //gomod moduleとpackagepathを組み合わせてimportされているか確認
+            //ここに追加する
+
+
 
             /*bool package名一致*/
             var isPackageImported = importedModules.some(
@@ -214,7 +237,7 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                             console.log(`Found go get or protoc command: ${command}`);
                         });
 
-                        console.log(`Found Dockerfile: ${dockerfilePath}`);
+                        //console.log(`Found Dockerfile: ${dockerfilePath}`);
                     });
                 }
     
@@ -224,7 +247,11 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
 
             var isOptionImported = protoMeta.options.some(
                 function(option) {
-                    return importedModules.includes(option.value);
+                    return importedModules.some(
+                        function(module) {
+                            return module === option.value;
+                        }
+                    );
                 }
             );
 
@@ -238,6 +265,21 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
     }
 
     return { protoToPrograms, programToPrograms };
+}
+
+
+//string プロジェクト名の取得
+function getProjectName(progPath) {
+    const pathSegments = progPath.split('/');
+
+    for (let i = 0; i < pathSegments.length; i++) {
+        if (pathSegments[i].includes('premerge_') || pathSegments[i].includes('merge_')) {
+            if (i >= 3) {
+                return pathSegments[i - 3];
+            }
+            break;
+        }
+    }
 }
 
 
@@ -257,6 +299,12 @@ function checkGoPathMode(progPath) {
             return false;
         }
 
+        // Check if the current path contains "merge_" or "premerge_"
+        const baseName = path.basename(currentPath);
+        if (baseName.includes('merge_') || baseName.includes('premerge_')) {
+            break;
+        }
+
         // Move up one directory
         const parentPath = path.dirname(currentPath);
         if (parentPath === currentPath) {
@@ -268,6 +316,18 @@ function checkGoPathMode(progPath) {
 
     return true;
 }
+
+
+function getPackagePath(protoPath){
+    const protoPathSegments = protoPath.split('/');
+    const protoPathIndex = protoPathSegments.findIndex(segment => segment.includes('premerge_') || segment.includes('merge_'));
+    const protoPathSubDir = protoPathSegments.slice(protoPathIndex + 1).slice(0, -1).join('/');
+    const projectName = getProjectName(protoPath);
+    const fullPath = path.join(projectName, protoPathSubDir);
+
+    return fullPath;
+}
+
 
 
 //proto optionからpackage名の取得
@@ -289,12 +349,6 @@ function getPackageNameOption(filePath, protoMeta, importedModules){
 
             return { isOptionImported, packageNamePath };
 
-        case '.js':
-
-            break;
-        case '.py':
-
-            break;
         // 他の言語の追加
         default:
 
@@ -319,6 +373,11 @@ function findGoModFiles(progPath) {
         // Check if the current path contains "merge_" or "premerge_"
         const baseName = path.basename(currentPath);
         if (baseName.includes('merge_') || baseName.includes('premerge_')) {
+            // Move up one directory before breaking
+            const parentPath = path.dirname(currentPath);
+            if (parentPath !== currentPath) {
+                currentPath = parentPath;
+            }
             break;
         }
 

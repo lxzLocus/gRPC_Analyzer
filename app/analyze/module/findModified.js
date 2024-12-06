@@ -68,9 +68,11 @@ function getFileModifiedList(preDirPath, afterDirPath) {
             // ファイルの内容が一致しない場合
             if (!preFileContent.equals(afterFileContent)) {
                 if (path.extname(preFilePath) === '.proto') {
-                    modifiedProtoList.push(afterFilePath);
+                    //afterpathからprepathへ変更
+                    modifiedProtoList.push(preFilePath);
                 } else {
-                    modifiedFileList.push(afterFilePath);
+                    //afterpathからprepathへ変更
+                    modifiedFileList.push(preFilePath);
                 }
             }
         }
