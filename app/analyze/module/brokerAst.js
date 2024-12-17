@@ -104,11 +104,12 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
     for (const progPath of programPaths) {
         // プログラムからimportの取得
         const importedModules = await getImportedPrograms(progPath);
-        const extension = path.extname(progPath);
+        const extension = await path.extname(progPath);
 
         switch (extension) {
             case '.go':
-                
+
+
                 /*共通項目取得*/
                 if (!projectName) {
                     projectName = getProjectName(progPath);
@@ -189,28 +190,6 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                                 matchingIndices.push(importedIndex); // 該当するインデックスを保存
                             }
                         });
-
-                        // uniqueMatchingIndices を定義
-                        const uniqueMatchingIndices = [...new Set([...goModmatchingIndices, ...matchingIndices])];
-
-                        // 登録されなかった progPath を追跡する配列
-                        const unregisteredProgPaths = [];
-
-                        if (goModmatchingIndices.some(index => matchingIndices.includes(index))) {
-                            // 一致するインデックスがある場合にprotoToProgramsに追加
-                            uniqueMatchingIndices.forEach(index => {
-                                if (!protoToPrograms[protoPath]) {
-                                    protoToPrograms[protoPath] = [];
-                                }
-                                protoToPrograms[protoPath].push(progPath);
-                            });
-                        } else {
-                            // 一致するインデックスがない場合に unregisteredProgPaths に追加
-                            unregisteredProgPaths.push(progPath);
-                        }
-
-                        // unregisteredProgPaths を列挙
-                        console.log("Unregistered progPaths:", unregisteredProgPaths);
                     }
 
 
@@ -218,7 +197,7 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                     /*Protoだけで検出できる場合********************************************************************/
 
                     /*package Pathで一致する場合*/
-                    
+
 
                     // importedModulesのうちのいずれかとpackagePathが部分一致する場合
                     var isPackagePathImported = importedModules.some(
@@ -237,7 +216,7 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                         continue;
                     }
 
-                    
+
                     /*Go.modなど他のファイルを参照する場合*****************************************************************/
 
 
@@ -309,6 +288,9 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
 
                     }
 
+                    console.log(`Not Imported: ${progPath} in ${protoPath}`);
+
+
                     // var isOptionImported = protoMeta.options.some(
                     //     function (option) {
                     //         return importedModules.some(
@@ -327,9 +309,11 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                     // }
                 }
 
+                break;
 
             default:
-                break;
+                console.log(`Not Supported lang: ${progPath}`);
+              break;
         }
     }
 
