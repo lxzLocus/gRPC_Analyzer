@@ -77,26 +77,36 @@ func generateAST(filePath string, sourceCode []byte) (*token.FileSet, *ast.File)
 // ASTを解析してインポートされたモジュールを取得し、利用されているか確認する関数
 func analyzeImportsAndUsage(fset *token.FileSet, node *ast.File) []string {
 	// インポートされたパッケージを収集
-	imports := make(map[string]bool)
+	imports := make(map[string]string)
+	aliases := make(map[string]string)
 	ast.Inspect(node, func(n ast.Node) bool {
 		// ImportSpecノードを見つけてimportされたパッケージを記録
 		if imp, ok := n.(*ast.ImportSpec); ok {
 			// パッケージパスをそのまま使用
 			fullPath := strings.Trim(imp.Path.Value, `"`)
-			imports[fullPath] = false
+			packageName := ""
+			if imp.Name != nil {
+				packageName = imp.Name.Name
+				aliases[packageName] = fullPath
+			} else {
+				segments := strings.Split(fullPath, "/")
+				packageName = segments[len(segments)-1]
+			}
+			imports[packageName] = fullPath
 		}
 		return true
 	})
 
 	// ASTを解析してSelectorExprを見つけ、使用されているインポートをチェック
+	usedModules := make(map[string]bool)
 	ast.Inspect(node, func(n ast.Node) bool {
 		if sel, ok := n.(*ast.SelectorExpr); ok {
 			if ident, ok := sel.X.(*ast.Ident); ok {
-				// ident.Nameはパッケージ名を表しているので、マップに存在すれば利用フラグをtrueにする
-				for path := range imports {
-					if strings.HasSuffix(path, ident.Name) {
-						imports[path] = true
-					}
+				// ident.Nameはパッケージ名またはエイリアス名を表しているので、マップに存在すれば利用フラグをtrueにする
+				if fullPath, exists := imports[ident.Name]; exists {
+					usedModules[fullPath] = true
+				} else if fullPath, exists := aliases[ident.Name]; exists {
+					usedModules[fullPath] = true
 				}
 			}
 		}
@@ -104,12 +114,10 @@ func analyzeImportsAndUsage(fset *token.FileSet, node *ast.File) []string {
 	})
 
 	// 使用されているインポートされたモジュールをリストアップ
-	var usedModules []string
-	for module, used := range imports {
-		if used {
-			usedModules = append(usedModules, module)
-		}
+	var result []string
+	for module := range usedModules {
+		result = append(result, module)
 	}
 
-	return usedModules
+	return result
 }

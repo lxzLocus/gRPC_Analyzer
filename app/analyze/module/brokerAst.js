@@ -46,35 +46,28 @@ if (require.main === module) {
     // let mergeStateFilePath = process.argv.slice(2)[0];
     let protoPathMap = new Map([
         [
-            "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fortune/api/fortune.proto",
+            "/app/dataset/clone/forTest/premerge_112/fortune/api/fortune.proto",
             {
                 package: "api",
                 imports: [
                 ],
                 options: [
-                    {
-                        key: "go_package",
-                        value: "github.com/golang/protobuf/ptypes/any",
-                    }
                 ],
             },
         ]
     ])
     let programFileList = [
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/client-go/plugin/pkg/client/auth/exec/exec.go",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fortune/main.go"
+        "/app/dataset/clone/forTest/premerge_112/fortune/api/fortune.pb.go",
+        "/app/dataset/clone/forTest/premerge_112/fortune/main.go"
     ];
     let modifiedProtoList = [
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112/fortune/api/fortune.proto",
+        "/app/dataset/clone/forTest/premerge_112/fortune/api/fortune.proto",
     ]
     let modifiedProgList = [
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/doggos/main.go",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/emoji/main.go",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fortune/main.go",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_p…ufs_and_improve_ci/premerge_112/sidecar/src/main.rs",
-        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/vigoda/main.go"
+        "/app/dataset/clone/forTest/premerge_112/fortune/main.go"
     ]
 
+    console.log(findGoModFiles("/app/dataset/clone/forTest/premerge_112/emojivoto-emoji-svc/api/api.go"));
 
     main_f(protoPathMap, programFileList, modifiedProtoList, modifiedProgList);
 
@@ -96,75 +89,145 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
     const protoToPrograms = {};
     const programToPrograms = {};
 
+    let projectName;
+
+    /*Go*/
+    let goPathMode;
+    let goVersion;
+
+    let goModList;
+    let goModModuleList;
+    let goPathSrc;
+
+
     // プログラムからimportの取得 + どのprotoをimportしているか + どのプログラムをimportしているか
     for (const progPath of programPaths) {
         // プログラムからimportの取得
         const importedModules = await getImportedPrograms(progPath);
         const extension = path.extname(progPath);
 
-        //for文外に移動
-        const projectName = getProjectName(progPath);
-        const goPathMode = checkGoPathMode(progPath);
-        //const goVersion = getGoVersion(progPath);
-
-        if(goPathMode === true){
-            const goPathSrc = progPath.split('/').slice(progPath.split('/').findIndex(segment => segment.includes('premerge_') || segment.includes('merge_'))).join('/');
-        }else{
-            //go.modの取得
-            const goModList = findGoModFiles(progPath);
-            const goModModuleList = goModList.map(goModPath => {
-                const content = fs.readFileSync(goModPath, 'utf8');
-                const moduleLine = content.split('\n').find(line => line.startsWith('module'));
-                return moduleLine.split(' ')[1].trim();
-            });
-        }
-
-
-        // どのprotoをimportしているか
-        for (const [protoPath, protoMeta] of protoPathMap) {
-
-            const packagePath = getPackagePath(protoPath);
-
-            //gomod moduleとpackagepathを組み合わせてimportされているか確認
-            //ここに追加する
-
-
-
-            /*bool package名一致*/
-            var isPackageImported = importedModules.some(
-                function(module) {
-                return module === protoMeta.package;
+        switch (extension) {
+            case '.go':
+                
+                /*共通項目取得*/
+                if (!projectName) {
+                    projectName = getProjectName(progPath);
                 }
-            );
-
-            //package名でimportされている場合，ほかの条件を確認しない
-            if (isPackageImported) {
-                // protoToProgramsへの登録
-                if (!protoToPrograms[protoPath]) {
-                    protoToPrograms[protoPath] = [];
+                if (goPathMode === undefined) {
+                    goPathMode = checkGoPathMode(progPath);
                 }
-                protoToPrograms[protoPath].push(progPath);
-
-                continue;
-            }
 
 
+                if (goPathMode === true) {
+                    goPathSrc = progPath.split('/').slice(progPath.split('/').findIndex(segment => segment.includes('premerge_') || segment.includes('merge_'))).join('/');
+                } else {
+                    //go.modの取得
+                    goModList = findGoModFiles(progPath);
+                    goModModuleList = goModList.map(goModPath => {
+                        const content = fs.readFileSync(goModPath, 'utf8');
+                        const moduleLine = content.split('\n').find(line => line.startsWith('module'));
+                        return moduleLine.split(' ')[1].trim();
+                    });
+                }
 
-            /*proto内optionsの確認*/
-            if (protoMeta.options.length != 0){
-                //言語ごとのpackage取得
-                const optionPackagePath = getPackageNameOption(progPath, protoMeta, importedModules);
-                //属する言語がない場合 or option定義されていない場合
-                if (optionPackagePath.isOptionImported === true){
-                    //optionsで一致する場合の探索   FLAG
-                    var isOptionImported = importedModules.some(
-                        function(module) {
-                            return module === optionPackagePath.packageNamePath;
+
+
+
+                // どのprotoをimportしているか
+                for (const [protoPath, protoMeta] of protoPathMap) {
+
+
+                    /*proto内optionsの確認*/
+                    if (protoMeta.options.length != 0) {
+                        //言語ごとのpackage取得
+                        const optionPackagePath = getPackageNameOption(progPath, protoMeta, importedModules);
+                        //属する言語がない場合 or option定義されていない場合
+                        if (optionPackagePath.isOptionImported === true) {
+
+                            // protoToProgramsへの登録
+                            if (!protoToPrograms[protoPath]) {
+                                protoToPrograms[protoPath] = [];
+                            }
+                            protoToPrograms[protoPath].push(progPath);
+
+                            continue;
+                        }
+                    }
+
+                    /*Go.modの参照********************************************************************/
+                    const packagePath = getPackagePath(protoPath);
+                    //gomodlist + packagepath
+
+
+
+
+
+
+                    // 条件を満たすインデックスが一致する場合にpushする
+                    if (
+                        goModModuleList.some(module =>
+                            importedModules.some(importedModule => importedModule.includes(module))) &&
+                        importedModules.some(importedModule => importedModule.includes(packagePath))
+                    ) {
+
+
+                        const goModmatchingIndices = [];
+                        const matchingIndices = [];
+
+                        // goModModuleListの条件を満たすインデックスを探す
+                        goModModuleList.forEach((module, goModIndex) => {
+                            importedModules.forEach((importedModule, importedIndex) => {
+                                if (importedModule.includes(module)) {
+                                    goModmatchingIndices.push(importedIndex); // 該当するインデックスを保存
+                                }
+                            });
+                        });
+
+                        // packagePathの条件を満たすインデックスを探す
+                        importedModules.forEach((importedModule, importedIndex) => {
+                            if (importedModule.includes(packagePath)) {
+                                matchingIndices.push(importedIndex); // 該当するインデックスを保存
+                            }
+                        });
+
+                        // uniqueMatchingIndices を定義
+                        const uniqueMatchingIndices = [...new Set([...goModmatchingIndices, ...matchingIndices])];
+
+                        // 登録されなかった progPath を追跡する配列
+                        const unregisteredProgPaths = [];
+
+                        if (goModmatchingIndices.some(index => matchingIndices.includes(index))) {
+                            // 一致するインデックスがある場合にprotoToProgramsに追加
+                            uniqueMatchingIndices.forEach(index => {
+                                if (!protoToPrograms[protoPath]) {
+                                    protoToPrograms[protoPath] = [];
+                                }
+                                protoToPrograms[protoPath].push(progPath);
+                            });
+                        } else {
+                            // 一致するインデックスがない場合に unregisteredProgPaths に追加
+                            unregisteredProgPaths.push(progPath);
+                        }
+
+                        // unregisteredProgPaths を列挙
+                        console.log("Unregistered progPaths:", unregisteredProgPaths);
+                    }
+
+
+
+                    /*Protoだけで検出できる場合********************************************************************/
+
+                    /*package Pathで一致する場合*/
+                    
+
+                    // importedModulesのうちのいずれかとpackagePathが部分一致する場合
+                    var isPackagePathImported = importedModules.some(
+                        function (module) {
+                            return module.includes(packagePath);
                         }
                     );
 
-                    // FLAG
-                    if (isOptionImported) {
+                    if (isPackagePathImported) {
                         // protoToProgramsへの登録
                         if (!protoToPrograms[protoPath]) {
                             protoToPrograms[protoPath] = [];
@@ -173,94 +236,100 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
 
                         continue;
                     }
-                }
-            }
 
-
-            if(goPathMode === false){
-                /*package名と他の情報を組み合わせる探索*/
-                //package
-                const packageName = protoMeta.package;
-
-                //依存ファイル
-                //go.mod
-                const goModList = findGoModFiles(progPath);
-                let moduleLines = [];
-                
-                goModList.forEach(goModPath => {
-                    const content = fs.readFileSync(goModPath, 'utf8');
-                    moduleLines = moduleLines.concat(content.split('\n').filter(line => line.startsWith('module')));
-                });
-                
-                if (moduleLines.length != 0) {
-                    for (const line of moduleLines) {
-                        const moduleName = line.split(' ')[1].trim();
-                        const fullPath = moduleName + "/" + packageName;
-                        if (importedModules.some(module => module === fullPath)) {
-                            if (!protoToPrograms[protoPath]) {
-                                protoToPrograms[protoPath] = [];
-                            }
-                            protoToPrograms[protoPath].push(progPath);
-                            break; // 一致した場合、ループを抜ける
-                        }
-                    }
-                }
-
-
-
-            }else{
-
-
-                //Makefile
-                const makefileList = findMakefileFiles(progPath);
-                if(makefileList.length != 0){
                     
-                    makefileList.forEach(makefilePath => {
-                        findProtocCommands(makefilePath).forEach(command => {
-                            //FLAG
-                            // protocコマンドの解析
+                    /*Go.modなど他のファイルを参照する場合*****************************************************************/
 
-                            console.log(`Found protoc command: ${command}`);
-                        });
-                        
-                    });
-                }
 
-                //Dockerfile
-                const dockerfileList = findDockerfiles(progPath);
-                if(dockerfileList.length != 0){
-                    dockerfileList.forEach(dockerfilePath => {
-                        findGoGetAndProtocCommands(dockerfilePath).forEach(command => {
-                            //FLAG
-                            // Dockerfileの解析
-                            
-                            console.log(`Found go get or protoc command: ${command}`);
+                    if (goPathMode === false) {
+                        /*package名と他の情報を組み合わせる探索*/
+                        //package
+                        const packageName = protoMeta.package;
+
+                        //依存ファイル
+                        //go.mod
+                        const goModList = findGoModFiles(progPath);
+                        let moduleLines = [];
+
+                        goModList.forEach(goModPath => {
+                            const content = fs.readFileSync(goModPath, 'utf8');
+                            moduleLines = moduleLines.concat(content.split('\n').filter(line => line.startsWith('module')));
                         });
 
-                        //console.log(`Found Dockerfile: ${dockerfilePath}`);
-                    });
-                }
-    
-                //逆引き
-
-            }
-
-            var isOptionImported = protoMeta.options.some(
-                function(option) {
-                    return importedModules.some(
-                        function(module) {
-                            return module === option.value;
+                        if (moduleLines.length != 0) {
+                            for (const line of moduleLines) {
+                                const moduleName = line.split(' ')[1].trim();
+                                const fullPath = moduleName + "/" + packageName;
+                                if (importedModules.some(module => module === fullPath)) {
+                                    if (!protoToPrograms[protoPath]) {
+                                        protoToPrograms[protoPath] = [];
+                                    }
+                                    protoToPrograms[protoPath].push(progPath);
+                                    break; // 一致した場合、ループを抜ける
+                                }
+                            }
                         }
-                    );
-                }
-            );
 
-            if (isPackageImported || isOptionImported) { 
-                if (!protoToPrograms[protoPath]) { 
-                    protoToPrograms[protoPath] = []; 
-                } 
-                protoToPrograms[protoPath].push(progPath); 
-            } 
+
+
+                    } else {
+
+
+                        //Makefile
+                        const makefileList = findMakefileFiles(progPath);
+                        if (makefileList.length != 0) {
+
+                            makefileList.forEach(makefilePath => {
+                                findProtocCommands(makefilePath).forEach(command => {
+                                    //FLAG
+                                    // protocコマンドの解析
+
+                                    console.log(`Found protoc command: ${command}`);
+                                });
+
+                            });
+                        }
+
+                        //Dockerfile
+                        const dockerfileList = findDockerfiles(progPath);
+                        if (dockerfileList.length != 0) {
+                            dockerfileList.forEach(dockerfilePath => {
+                                findGoGetAndProtocCommands(dockerfilePath).forEach(command => {
+                                    //FLAG
+                                    // Dockerfileの解析
+
+                                    console.log(`Found go get or protoc command: ${command}`);
+                                });
+
+                                //console.log(`Found Dockerfile: ${dockerfilePath}`);
+                            });
+                        }
+
+                        //逆引き
+
+                    }
+
+                    // var isOptionImported = protoMeta.options.some(
+                    //     function (option) {
+                    //         return importedModules.some(
+                    //             function (module) {
+                    //                 return module === option.value;
+                    //             }
+                    //         );
+                    //     }
+                    // );
+
+                    // if (isPackageImported || isOptionImported) {
+                    //     if (!protoToPrograms[protoPath]) {
+                    //         protoToPrograms[protoPath] = [];
+                    //     }
+                    //     protoToPrograms[protoPath].push(progPath);
+                    // }
+                }
+
+
+            default:
+                break;
         }
     }
 
@@ -323,9 +392,10 @@ function getPackagePath(protoPath){
     const protoPathIndex = protoPathSegments.findIndex(segment => segment.includes('premerge_') || segment.includes('merge_'));
     const protoPathSubDir = protoPathSegments.slice(protoPathIndex + 1).slice(0, -1).join('/');
     const projectName = getProjectName(protoPath);
-    const fullPath = path.join(projectName, protoPathSubDir);
+   const fullPath = path.join(projectName, protoPathSubDir);
 
-    return fullPath;
+   //変更
+    return protoPathSubDir;
 }
 
 
@@ -866,4 +936,3 @@ function isProtoFileImported(ast, programFile, protoFile) {
 
 module.exports = { checkFileImportModule };
 module.exports = { main_f };
-

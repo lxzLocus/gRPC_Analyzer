@@ -24,7 +24,7 @@ const { main_f } = require('./module/brokerAst');
 /*__MAIN__*/
 if (require.main === module) {
     // let filePaths = process.argv.slice(2)[0];
-    let mergeStateFilePath = '/app/dataset/modified_proto_reps/boulder/issue/GetValidOrderAuthorizations2_is_slow_and_failing_to_use_indices';
+    let mergeStateFilePath = '/app/dataset/clone/forTest';
     initialize(mergeStateFilePath);
 }
 
