@@ -46,42 +46,64 @@ if (require.main === module) {
     // let mergeStateFilePath = process.argv.slice(2)[0];
     let protoPathMap = new Map([
         [
-            "/app/dataset/clone/forTest/premerge_112/fortune/api/fortune.proto",
+            "/app/dataset/clone/forTest/premerge_112/proto/Emoji.proto",
             {
-                package: "api",
+                package: "emojivoto.v1",
                 imports: [
                 ],
                 options: [
+                    {
+                        key: "go_package",
+                        value: "proto/",
+                    },
                 ],
             },
-        ]
+        ],
+        [
+            "/app/dataset/clone/forTest/premerge_112/proto/Voting.proto",
+            {
+                package: "emojivoto.v1",
+                imports: [
+                ],
+                options: [
+                    {
+                        key: "go_package",
+                        value: "proto/",
+                    },
+                ],
+            },
+        ]       
     ])
     let programFileList = [
-        "/app/dataset/clone/forTest/premerge_112/fortune/api/fortune.pb.go",
-        "/app/dataset/clone/forTest/premerge_112/fortune/main.go"
+        "/app/dataset/clone/forTest/premerge_112/emojivoto-emoji-svc/api/api.go",
+        "/app/dataset/clone/forTest/premerge_112/emojivoto-voting-svc/api/api.go",
+        "/app/dataset/clone/forTest/premerge_112/emojivoto-emoji-svc/cmd/server.go",
+        "/app/dataset/clone/forTest/premerge_112/emojivoto-voting-svc/cmd/server.go",
+        "/app/dataset/clone/forTest/premerge_112/emojivoto-web/web/web.go"
     ];
     let modifiedProtoList = [
-        "/app/dataset/clone/forTest/premerge_112/fortune/api/fortune.proto",
+        "/app/dataset/clone/forTest/premerge_112/proto/Emoji.proto",
+        "/app/dataset/clone/forTest/premerge_112/proto/Voting.proto"
     ]
     let modifiedProgList = [
-        "/app/dataset/clone/forTest/premerge_112/fortune/main.go"
+        "/app/dataset/clone/forTest/premerge_112/emojivoto-emoji-svc/api/api.go",
+        "/app/dataset/clone/forTest/premerge_112/emojivoto-voting-svc/api/api.go"
     ]
 
-    console.log(findGoModFiles("/app/dataset/clone/forTest/premerge_112/emojivoto-emoji-svc/api/api.go"));
+    checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedProgList);
 
-    main_f(protoPathMap, programFileList, modifiedProtoList, modifiedProgList);
-
-    //checkFileImportModule(protoPathList, programFileList, modifiedProtoList, modifiedProgList);
 }
 
 /*functions*/
-async function main_f(protoPathMap, programFileList, modifiedProtoList, modifiedProgList){
+async function checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedProgList){
     const pre_dependencies = await pre_Analyzedependencies(protoPathMap, programFileList);
 
 
-    //const dependencies = await analyzeDependencies(protoPathMap, programFileList);
-    //const affectedPrograms = findAffectedPrograms(modifiedProtoList, dependencies);
-    //console.log("Affected programs:", Array.from(affectedPrograms));
+    console.log();
+
+    const dependencies = await analyzeDependencies(protoPathMap, programFileList);
+    const affectedPrograms = findAffectedPrograms(modifiedProtoList, dependencies);
+    console.log("Affected programs:", Array.from(affectedPrograms));
 }
 
 
@@ -160,11 +182,18 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                     //gomodlist + packagepath
 
 
-
+                    importedModules.forEach((importedModule, importedIndex) => {
+                        
+                    });
 
 
 
                     // 条件を満たすインデックスが一致する場合にpushする
+                    /*
+                    go.mod内に記載されている module が存在する &
+                    packagePath が含まれている &
+                    指し示すmoduleが同じものである
+                    */
                     if (
                         goModModuleList.some(module =>
                             importedModules.some(importedModule => importedModule.includes(module))) &&
@@ -710,213 +739,6 @@ function getProtoPackageName(filePath) {
 
 
 
-/****************** */
-function getGoImportsWithAST(filePath) {
-
-}
-
-//esprima
-// JavaScriptファイルのimportをASTで解析
-function getJsImportsWithAST(filePath) {
-    // const content = readFile(filePath);
-    // // const ast = esprima.parseModule(content);
-    // const imports = [];
-
-    // ast.body.forEach(node => {
-    //     if (node.type === 'ImportDeclaration') {
-    //         imports.push(node.source.value);
-    //     }
-    // });
-
-    // return imports;
-}
-
-
-
-
-
-/************************/
-async function checkFileImportModule(protoFileList, progFileList, modifiedProtoList, modifiedProgList) {
-    const importedFiles = []; // インポートされたファイルを格納する配列
-
-    const protoPackages = extractPackageNames(modifiedProtoList);
-
-    // プログラムファイルリストをループ
-    for (let i = 0; i < progFileList.length; i++) {
-        const progFile = progFileList[i];
-        //const packageName = protoPackages[i]
-
-        try {
-            // AST生成を非同期に待機
-            const ast = await generateAstBasedOnExtension(progFile);
-
-            if (ast !== null) {
-                for (let j = 0; j < protoFileList.length; j++) {
-                    const protoFile = protoFileList[j];
-
-                    // ASTが生成された場合にprotoファイルがインポートされているかを確認
-                    if (isProtoFileImported(ast, progFile, protoFile)) {
-                        importedFiles.push(protoFile);
-                    }
-                }
-            }
-        } catch (err) {
-            console.error(`Error processing ${progFile}:`, err);
-        }
-    }
-
-    return importedFiles; // インポートされたファイルのリストを返す
-}
-
-//proto packageの取得
-function extractPackageNames(protoFiles) {
-    const packageNames = protoFiles.map(filePath => {
-        try {
-            const fileContent = fs.readFileSync(filePath, 'utf8');
-            const packageMatch = fileContent.match(/^\s*package\s+([\w\.]+)\s*;/m);
-            if (packageMatch) {
-                return packageMatch[1];
-            } else {
-                console.warn(`No package name found in file: ${filePath}`);
-                return null;
-            }
-        } catch (error) {
-            console.error(`Error reading file ${filePath}:`, error);
-            return null;
-        }
-    });
-
-    // Filter out null values (files without a package name or read errors)
-    return packageNames.filter(name => name !== null);
-}
-
-//ファイルの行数確認
-function shouldSkipAstGeneration(filePath, callback) {
-    const rl = readline.createInterface({
-        input: fs.createReadStream(filePath),
-        crlfDelay: Infinity
-    });
-
-    let lineCount = 0;
-    let hasExceeded = false;  // フラグを追加
-
-    rl.on('line', () => {
-        lineCount++;
-        // 8000行を超えたらチェックをやめてスキップ指示を返す
-        if (lineCount > 8000) {
-            hasExceeded = true;
-            rl.close();  // `close` イベントをトリガー
-        }
-    });
-
-    rl.on('close', () => {
-        // 8000行を超えたらtrueを返す
-        if (hasExceeded) {
-            callback(true);
-        } else {
-            callback(false);
-        }
-    });
-}
-
-
-//拡張子の判別
-function generateAstBasedOnExtension(filePath) {
-    
-    const ext = filePath.slice(filePath.lastIndexOf('.'));
-    const lang = allowedExtensions[ext];
-
-    if (!lang) {
-        console.log('Unsupported language');
-        return Promise.resolve(null);  // Promiseとしてnullを返す
-    }
-
-    // PromiseでAST生成を非同期に処理
-    return new Promise((resolve, reject) => {
-        shouldSkipAstGeneration(filePath, (shouldSkip) => {
-            if (shouldSkip) {
-                console.log('File too large, skipping AST generation.');
-                resolve(null);  // ファイルが大きすぎる場合はnullを返す
-            } else {
-                switch (lang) {
-                    // case 'python':
-                    //     return generatePythonAst(filePath);
-                    case 'go':
-                        analyzeGoAst(filePath)
-                        .then(ast => resolve(ast))  // 成功時にASTを返す
-                        .catch(err => {
-                            console.error("Error generating Go AST:", err);
-                            reject(err);  // エラー時はエラーを返す
-                        });
-                        break;
-                    // case 'java':
-                    //     return generateJavaAst(filePath);  
-                    // case 'csharp':
-                    //     return generateCSharpAst(filePath);
-                    // case 'scala':
-                    //     return generateScalaAst(filePath); 
-                    // case 'typescript':
-                    //     return generateTypeScriptAst(filePath);
-                    // case 'cpp':
-                    //     return generateCppAst(filePath);   
-                    // case 'javascript':
-                    //     return generateJavaScriptAst(filePath);
-                    // case 'rust':
-                    //     return generateRustAst(filePath);  
-                    default:
-                        console.log('Unsupported language');
-                        resolve(null);  // サポートされていない言語の場合
-                }
-            }
-        });
-    });
-}
-
-//AST解析を行う
-function isProtoFileImported(ast, programFile, protoFile) {
-    const ext = filePath.slice(filePath.lastIndexOf('.'));
-    const lang = allowedExtensions[ext];
-
-    return new Promise((resolve, reject) => {
-        shouldSkipAstGeneration(filePath, (shouldSkip) => {
-            if (shouldSkip) {
-                console.log('File too large, skipping AST generation.');
-                resolve(null);  // ファイルが大きすぎる場合はnullを返す
-            } else {
-                switch (lang) {
-                    // case 'python':
-                    //     return generatePythonAst(filePath);
-                    case 'go':
-                        goFetcher(filePath)
-                            .then(ast => resolve(ast))  // 成功時にASTを返す
-                            .catch(err => {
-                                console.error("Error generating Go AST:", err);
-                                reject(err);  // エラー時はエラーを返す
-                            });
-                        break;
-                    // case 'java':
-                    //     return generateJavaAst(filePath);  
-                    // case 'csharp':
-                    //     return generateCSharpAst(filePath);
-                    // case 'scala':
-                    //     return generateScalaAst(filePath); 
-                    // case 'typescript':
-                    //     return generateTypeScriptAst(filePath);
-                    // case 'cpp':
-                    //     return generateCppAst(filePath);   
-                    // case 'javascript':
-                    //     return generateJavaScriptAst(filePath);
-                    // case 'rust':
-                    //     return generateRustAst(filePath);  
-                    default:
-                        console.log('Unsupported language');
-                        resolve(null);  // サポートされていない言語の場合
-                }
-            }
-        });
-    });
-}
 
 
 module.exports = { checkFileImportModule };
-module.exports = { main_f };

@@ -59,8 +59,7 @@ function initialize(filePaths) {
         //console.log(protoPathMap, programFileList);
         //console.log(modifiedProtoList, modifiedFileList);
 
-        //checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedFileList);
-        main_f(protoPathMap, programFileList, modifiedProtoList, modifiedFileList);
+        checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedFileList);
     })
     .catch((error) => {
         console.error('An error occurred:', error);
