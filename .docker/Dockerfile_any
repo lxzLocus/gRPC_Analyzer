@@ -25,10 +25,7 @@ ENV GOPATH=/go
 ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
 
 # 特定のバージョンのGoをインストール
-RUN apk add --no-cache wget tar \
-    && wget https://go.dev/dl/go1.23.1.linux-amd64.tar.gz \
-    && tar -C /usr/local -xzf go1.23.1.linux-amd64.tar.gz \
-    && rm go1.23.1.linux-amd64.tar.gz
+RUN apk add --no-cache go
 
 # termialでインストール
 RUN go install golang.org/x/tools/gopls@latest

@@ -1,3 +1,4 @@
+
 /*import module*/
 const { exec } = require('child_process');
 const path = require('path');
@@ -5,54 +6,61 @@ const fs = require('fs');
 
 /*__MAIN__*/
 if (require.main === module) {
-    let sourcefilePath = "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/k8s.io/client-go/plugin/pkg/client/auth/exec/exec.go";
-    analyzeGoAst(sourcefilePath)
+    let sourcefilePath = "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api.go";
+    let analysisType = "imports"; // "imports" または "functions" を指定
+    analyzeGoAst(sourcefilePath, analysisType) 
         .then(temp => console.log(temp))
         .catch(err => console.error(err));
 }
 
-/*import module*/
-function analyzeGoAst(filePath) {
+/*分析関数*/
+/**
+ * Analyzes a Go source file for either imports or functions.
+ * 
+ * @param {string} filePath - The path to the Go source file to analyze.
+ * @param {string} analysisType - The type of analysis to perform. Either "imports" or "functions".
+ * @returns {Promise<string[]>} A promise that resolves to an array of analysis results.
+ * @throws Will throw an error if there is an issue generating the analysis or reading/deleting the output file.
+ */
+function analyzeGoAst(filePath, analysisType) { 
     const progGoFileName = 'analyzeGo';
-    const protoGoFileName = 'analyzeProtoGo';
+    const funcGoFileName = 'analyzeFuncGo'; 
 
-    const progGoFilePath = path.join(__dirname, "prog");
-    const protoGoFilePath = path.join(__dirname, "proto");
+    const progGoFilePath = path.join(__dirname, "prog", progGoFileName); 
+    const funcGoFilePath = path.join(__dirname, "func", funcGoFileName); 
 
-    const progGoPath = path.join(progGoFilePath, progGoFileName);
-    const protoGoPath = path.join(protoGoFilePath, protoGoFileName)
+    const outputFileName = "temp";
+    const outputDir = analysisType === "imports" ? "prog" : "func";
+    const outputFilePath = path.join(__dirname, outputFileName); 
 
-
-    const tempFilePath = path.join(progGoFilePath, "temp");
-
+    const goExecFilePath = "/app/app/analyze/module/analyzeAst/Go/main";
 
     return new Promise((resolve, reject) => {
-        exec(`${progGoPath} ${filePath}`, { maxBuffer: 1024 * 1024 * 100 },
+        exec(`${goExecFilePath} ${analysisType} ${filePath}`, { maxBuffer: 1024 * 1024 * 100 }, 
             (err, stdout, stderr) => {
                 if (err) {
-                    reject(`Error generating Imported Module: ${err.message}`);
+                    reject(`Error generating analysis: ${err.message}`); 
                 } else {
-                    // 読み込むファイルの解析
-                    fs.readFile(tempFilePath, 'utf8', (readErr, data) => {
+                    // 結果ファイルの読み込み 
+                    fs.readFile(outputFilePath, 'utf8', (readErr, data) => { 
                         if (readErr) {
-                            reject(`Error reading temp file: ${readErr.message}`);
+                            reject(`Error reading output file: ${readErr.message}`); 
                         } else {
-                            // 文字列を配列に変換し、スペースや改行で分割
-                            const modulesArray = data.trim().slice(1, -1).split(/\s+/);
+                            const resultArray = data.trim().split(/\r?\n/); 
 
                             // ファイルを削除
-                            fs.unlink(tempFilePath, (unlinkErr) => {
+                            fs.unlink(outputFilePath, (unlinkErr) => { 
                                 if (unlinkErr) {
-                                    reject(`Error deleting temp file: ${unlinkErr.message}`);
+                                    reject(`Error deleting output file: ${unlinkErr.message}`); 
                                 } else {
-                                    resolve(modulesArray);
+                                    resolve(resultArray); 
                                 }
                             });
                         }
                     });
                 }
             }
-        )
+        ); 
     });
 }
 
