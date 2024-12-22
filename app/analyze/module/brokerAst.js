@@ -79,6 +79,8 @@ if (require.main === module) {
     let programFileList = [
         "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api.go",
         "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/api/api.go",
+        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api_test.go",
+        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/api/api_test.go",
         "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/cmd/server.go",
         "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/cmd/server.go",
         "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-web/web/web.go"
@@ -132,24 +134,29 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
 
         switch (extension) {
             case '.go':
-    
+
+               const goProgFunctions = await analyzeGoAst(progPath, "functions");
+
                 for (const [protoPath, protoMeta] of protoPathMap) {
                     
-                    const protoServices = analyzeProtoService(protoPath);
- 
-                    protoServices.forEach(service => {
-                        if (importedModules.includes(service)) {
+                    
+                    const protoServices = await analyzeProtoService(protoPath);
+
+                    let found = false;
+                    for (const service of protoServices) {
+                        if (goProgFunctions.includes(service)) {
                             if (!protoToPrograms[protoPath]) {
                                 protoToPrograms[protoPath] = [];
                             }
                             protoToPrograms[protoPath].push(progPath);
+                            found = true;
+                            break;
                         }
-                    });
+                    }
 
-
-
-
-                    
+                    if (found) {
+                        break;
+                    }
                 }
 
                 break;

@@ -10,7 +10,7 @@ if (require.main === module) {
     console.log(analyzeProtoService(sourcefilePath));
 }
 
-function analyzeProtoService(filePath) {
+async function analyzeProtoService(filePath) {
     try {
         const fileContent = fs.readFileSync(filePath, 'utf8');
 

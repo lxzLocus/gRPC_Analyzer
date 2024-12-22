@@ -6,8 +6,8 @@ const fs = require('fs');
 
 /*__MAIN__*/
 if (require.main === module) {
-    let sourcefilePath = "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api.go";
-    let analysisType = "imports"; // "imports" または "functions" を指定
+    let sourcefilePath = "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api_test.go";
+    let analysisType = "functions"; // "imports" または "functions" を指定
     analyzeGoAst(sourcefilePath, analysisType) 
         .then(temp => console.log(temp))
         .catch(err => console.error(err));
@@ -22,7 +22,7 @@ if (require.main === module) {
  * @returns {Promise<string[]>} A promise that resolves to an array of analysis results.
  * @throws Will throw an error if there is an issue generating the analysis or reading/deleting the output file.
  */
-function analyzeGoAst(filePath, analysisType) { 
+async function analyzeGoAst(filePath, analysisType) { 
     const progGoFileName = 'analyzeGo';
     const funcGoFileName = 'analyzeFuncGo'; 
 
@@ -46,7 +46,7 @@ function analyzeGoAst(filePath, analysisType) {
                         if (readErr) {
                             reject(`Error reading output file: ${readErr.message}`); 
                         } else {
-                            const resultArray = data.trim().split(/\r?\n/); 
+                            const resultArray = data.trim().slice(1, -1).split(/\s+/);
 
                             // ファイルを削除
                             fs.unlink(outputFilePath, (unlinkErr) => { 
