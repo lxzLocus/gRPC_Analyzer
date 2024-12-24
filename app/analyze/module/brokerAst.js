@@ -295,13 +295,30 @@ function checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, pro
     for (const service of protoServices) {
         // サービスのRPCをすべて確認
         for (const rpc of service.rpcs) {
+
+            
             if (goProgFunctions.functions.includes(rpc)) {
+                //関数で解決
                 if (!protoToPrograms[protoPath]) {
                     protoToPrograms[protoPath] = [];
                 }
                 protoToPrograms[protoPath].push(progPath);
                 return true; // RPCが見つかった場合、早期リターン
+
+            }else {
+                //メソッドで解決
+                for (const funcCalls of Object.values(goProgFunctions.functionCalls)) {
+                    if (funcCalls.some(funcCall => funcCall.includes(rpc))) {
+                        if (!protoToPrograms[protoPath]) {
+                            protoToPrograms[protoPath] = [];
+                        }
+                        protoToPrograms[protoPath].push(progPath);
+                        return true; // RPCが見つかった場合、早期リターン
+                    }
+                }
             }
+
+            
         }
     }
     return false;
