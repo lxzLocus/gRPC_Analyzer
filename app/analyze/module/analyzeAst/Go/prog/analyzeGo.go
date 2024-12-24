@@ -6,6 +6,7 @@ Go
 package prog
 
 import (
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -38,15 +39,20 @@ func RunAnalyzeGo(filePath string) {
 	execDir := filepath.Dir(os.Args[0])
 
 	// ファイルに結果を出力
-	outputFilePath := filepath.Join(execDir, "temp")
+	outputFilePath := filepath.Join(execDir, "temp.json")
 	file, err := os.Create(outputFilePath)
 	if err != nil {
 		log.Fatalf("Error creating output file: %v", err)
 	}
 	defer file.Close()
 
-	// 結果をファイルに書き込む
-	_, err = file.WriteString(fmt.Sprintf("%v\n", importedModules))
+	// 結果をJSONファイルに書き込む
+	jsonData, err := json.MarshalIndent(importedModules, "", "  ")
+	if err != nil {
+		log.Fatalf("Error marshaling to JSON: %v", err)
+	}
+
+	_, err = file.Write(jsonData)
 	if err != nil {
 		log.Fatalf("Error writing to file: %v", err)
 	}

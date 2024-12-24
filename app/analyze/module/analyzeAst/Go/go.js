@@ -29,11 +29,13 @@ async function analyzeGoAst(filePath, analysisType) {
     const progGoFilePath = path.join(__dirname, "prog", progGoFileName); 
     const funcGoFilePath = path.join(__dirname, "func", funcGoFileName); 
 
-    const outputFileName = "temp";
+    const outputFileName = "temp.json";
     const outputDir = analysisType === "imports" ? "prog" : "func";
     const outputFilePath = path.join(__dirname, outputFileName); 
 
     const goExecFilePath = "/app/app/analyze/module/analyzeAst/Go/main";
+
+    console.log(`${goExecFilePath} ${analysisType} ${filePath}`);
 
     return new Promise((resolve, reject) => {
         exec(`${goExecFilePath} ${analysisType} ${filePath}`, { maxBuffer: 1024 * 1024 * 100 }, 
@@ -46,17 +48,19 @@ async function analyzeGoAst(filePath, analysisType) {
                         if (readErr) {
                             reject(`Error reading output file: ${readErr.message}`); 
                         } else {
-                            const resultArray = data.trim().slice(1, -1).split(/\s+/);
+                            
+                            const resultObject = JSON.parse(data.trim());
 
                             // ファイルを削除
                             fs.unlink(outputFilePath, (unlinkErr) => { 
                                 if (unlinkErr) {
                                     reject(`Error deleting output file: ${unlinkErr.message}`); 
                                 } else {
-                                    resolve(resultArray); 
+                                    resolve(resultObject); 
                                 }
                             });
                         }
+                        
                     });
                 }
             }

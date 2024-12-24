@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -15,6 +16,8 @@ func main() {
 
 	command := os.Args[1]
 	filePath := os.Args[2]
+
+	fmt.Printf("Runnning main.go")
 
 	switch command {
 	case "imports":
