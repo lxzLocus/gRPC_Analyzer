@@ -24,7 +24,7 @@ const { main_f } = require('./module/brokerAst');
 /*__MAIN__*/
 if (require.main === module) {
     // let filePaths = process.argv.slice(2)[0];
-    let mergeStateFilePath = '/app/dataset/clone/forTest';
+    let mergeStateFilePath = '/app/dataset/clone/emojivote/pullrequest/01_pr';
     initialize(mergeStateFilePath);
 }
 

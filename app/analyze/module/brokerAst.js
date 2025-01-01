@@ -125,7 +125,9 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
     // プログラムからimportの取得 + どのprotoをimportしているか + どのプログラムをimportしているか
     for (const progPath of programPaths) {
         // プログラムからimportの取得
-        const importedModules = await getImportedPrograms(progPath, "functions");
+        const importedModules = await getImportedPrograms(progPath, "imports");
+        if (importedModules === null) continue;
+
         const extension = await path.extname(progPath);
 
         switch (extension) {
@@ -135,6 +137,13 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                 if (goPathMode === undefined) {
                     //初回ループ
                     goPathMode = checkGoPathMode(progPath);
+                    //go.modがある場合
+                    goModList = findGoModFiles(progPath);
+                    goModModuleList = goModList.map(goModPath => {
+                        const content = fs.readFileSync(goModPath, 'utf8');
+                        const moduleLine = content.split('\n').find(line => line.startsWith('module'));
+                        return moduleLine.split(' ')[1].trim();
+                    });
 
                 }else if (goPathMode === false) {
                     //go.modがある場合
@@ -158,24 +167,100 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                     
                     // protoのサービスを取得
                     const { services: protoServices, messages: protoMessages, enums: protoEnums } = await analyzeProtoService(protoPath);
+                    // protoのpackage pathを取得
+                    const packagePath = getPackagePath(protoPath);
+                    
+
+                    /*
+                    protoファイルのoptionからpackage名を取得
+                    package名がimportされているかを確認
+                    */
+                    if (protoMeta.options.length != 0) {
+                        //言語ごとのpackage取得
+                        const optionPackagePath = getPackageNameOption(progPath, protoMeta, importedModules);
+                        //属する言語がない場合 or option定義されていない場合
+                        if (optionPackagePath.isOptionImported === true) {
+                            // 関数利用の確認
+                            if (checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
+                                break; // protoPathMapのループを抜ける
+                            }                            
+                        }
+                    }
+
+
+
+
+
+                    /*
+                    package Pathで一致する場合
+                    importedModulesのうちのいずれかとpackagePathが
+                    完全一致する場合
+                    */
+                    var isPackagePathImported = importedModules.some(
+                        function (module) {
+                            return module === packagePath;
+                        }
+                    );
+
+                    if (isPackagePathImported) {
+                        // 関数利用の確認
+                        if (checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
+                            break; // protoPathMapのループを抜ける
+                        }        
+                    }
                     
 
 
 
 
 
+                    /*Go.modの参照********************************************************************/
+
+                    /*
+                    go.modが存在する場合
+                    go.mod内に記載されている module が存在する & packagePath が含まれている & 指し示すmoduleが同じものである
+                    */
+                    if (goPathMode === false) {
+                        /*
+                        プログラム内のimport文に記載されているモジュール名と、go.mod内のmodule名を比較
+                        protoのpackage pathと一致するmoduleがあるかを確認
+
+                        あいまい条件
+                        厳格な一致ではない
+                        */
+                        importedModules.forEach((importedModule) => {
+                            goModModuleList.forEach((module) => {
+                                if (importedModule.includes(module)) {
+                                    if (importedModule.includes(packagePath)) {
+                                        console.log(`Found ${packagePath} in ${importedModule}`);
+
+                                        //関数利用の確認
+                                        if (checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
+                                            return;
+                                        }
+                                    }
+                                }
+                            });
+                        });
 
 
 
+                    }else {
+                        /*Dockerfile, Makefile 他のファイルを参照する場合*****************************************************************/
 
 
 
-
-
-                    // 関数利用の確認
-                    if (checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
-                        break; // protoPathMapのループを抜ける
                     }
+
+
+
+
+
+
+                    //関数利用の確認
+                    // if (checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
+                    //     break; // protoPathMapのループを抜ける
+                    // }
                     
 
 
@@ -290,6 +375,33 @@ function findGoModFiles(progPath) {
     return goModFiles;
 }
 
+//proto optionからpackage名の取得
+function getPackageNameOption(filePath, protoMeta, importedModules) {
+    const extension = path.extname(filePath);
+    let isOptionImported = false;
+    let packageName;
+    let packageNamePath = null;
+
+    switch (extension) {
+        case '.go':
+            packageName = protoMeta.options.find(option => option.key === 'go_package');
+            if (packageName && importedModules.includes(packageName.value)) {
+                isOptionImported = true;
+                packageNamePath = packageName.value;
+
+                return { isOptionImported, packageNamePath };
+            }
+
+            return { isOptionImported, packageNamePath };
+
+        // 他の言語の追加
+        default:
+
+            //どれにも属さない為，falseを返す
+            return { isOptionImported, packageNamePath };
+    }
+}
+
 //protoファイルの関数利用の確認を行う関数
 function checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath) {
     for (const service of protoServices) {
@@ -297,7 +409,7 @@ function checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, pro
         for (const rpc of service.rpcs) {
 
             
-            if (goProgFunctions.functions.includes(rpc)) {
+            if (goProgFunctions.functions && goProgFunctions.functions.includes(rpc)) {
                 //関数で解決
                 if (!protoToPrograms[protoPath]) {
                     protoToPrograms[protoPath] = [];
@@ -308,12 +420,12 @@ function checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, pro
             }else {
                 //メソッドで解決
                 for (const funcCalls of Object.values(goProgFunctions.functionCalls)) {
-                    if (funcCalls.some(funcCall => funcCall.includes(rpc))) {
+                    if (funcCalls?.some(funcCall => funcCall.includes(rpc))) {
                         if (!protoToPrograms[protoPath]) {
                             protoToPrograms[protoPath] = [];
                         }
                         protoToPrograms[protoPath].push(progPath);
-                        return true; // RPCが見つかった場合、早期リターン
+                        return true; // RPCが見つかった場合、早期リターン 
                     }
                 }
             }
@@ -324,5 +436,30 @@ function checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, pro
     return false;
 }
 
+//パッケージパスの取得
+function getPackagePath(protoPath) {
+    const protoPathSegments = protoPath.split('/');
+    const protoPathIndex = protoPathSegments.findIndex(segment => segment.includes('premerge_') || segment.includes('merge_'));
+    const protoPathSubDir = protoPathSegments.slice(protoPathIndex + 1).slice(0, -1).join('/');
+    const repositoryName = getrepositoryName(protoPath);
+    const fullPath = path.join(repositoryName, protoPathSubDir);
+
+    //変更
+    return protoPathSubDir;
+}
+
+//string プロジェクト名の取得
+function getrepositoryName(progPath) {
+    const pathSegments = progPath.split('/');
+
+    for (let i = 0; i < pathSegments.length; i++) {
+        if (pathSegments[i].includes('premerge_') || pathSegments[i].includes('merge_')) {
+            if (i >= 3) {
+                return pathSegments[i - 3];
+            }
+            break;
+        }
+    }
+}
 
 module.exports = { checkFileImportModule };
