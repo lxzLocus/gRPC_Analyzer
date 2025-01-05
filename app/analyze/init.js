@@ -6,25 +6,18 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
-const { exec } = require('child_process');
-
 
 const { getProgramFilePaths } = require('./module/findProgramFiles');
 const { getFileModifiedList } = require('./module/findModified');
 
 const { checkFileImportModule } = require('./module/brokerAst');
-const { promiseHooks } = require('v8');
-
-
-//test
-const { main_f } = require('./module/brokerAst');
 
 
 
 /*__MAIN__*/
 if (require.main === module) {
     // let filePaths = process.argv.slice(2)[0];
-    let mergeStateFilePath = '/app/dataset/clone/emojivote/pullrequest/01_pr';
+    let mergeStateFilePath = '/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci';
     initialize(mergeStateFilePath);
 }
 

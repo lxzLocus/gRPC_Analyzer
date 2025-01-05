@@ -10,9 +10,6 @@ FLAG : 要確認，デバッグ必要箇所
 /*import module*/
 const fs = require('fs');
 const path = require('path');
-const readline = require('readline');
-
-const { exec } = require('child_process');
 
 const { analyzeProtoService } = require('./analyzeAst/proto/proto');
 const { analyzeGoAst } = require('./analyzeAst/Go/go');
@@ -20,81 +17,46 @@ const { analyzeGoAst } = require('./analyzeAst/Go/go');
 
 
 /*config*/
-const allowedExtensions = {
-    '.go': 'go',         // Go
-    '.cs': 'csharp',     // C#
-    '.java': 'java',     // Java
-    '.scala': 'scala',   // Scala
-    '.ts': 'typescript', // TypeScript
-    '.py': 'python',     // Python
-    '.c': 'c',           // C
-    '.js': 'javascript', // JavaScript
-    '.sh': 'shell',      // Shell
-    '.html': 'html',     // HTML
-    '.htm': 'html',      // HTML (alternative extension)
-    '.css': 'css',       // CSS
-    '.pl': 'perl',       // Perl
-    '.pm': 'perl',       // Perl module
-    '.cpp': 'cpp',       // C++
-    '.cc': 'cpp',        // C++
-    '.cx': 'cpp',        // C++
-    '.rs': 'rust',       // Rust
-    '.proto': 'proto',  //Proto
-};
 
 
 /*__MAIN__*/
 if (require.main === module) {
     // let mergeStateFilePath = process.argv.slice(2)[0];
-    let protoPathMap = new Map([
-        [
-            "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/proto/Emoji.proto",
-            {
-                package: "emojivoto.v1",
-                imports: [
-                ],
-                options: [
-                    {
-                        key: "go_package",
-                        value: "proto/",
-                    },
-                ],
-            },
-        ],
-        [
-            "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/proto/Voting.proto",
-            {
-                package: "emojivoto.v1",
-                imports: [
-                ],
-                options: [
-                    {
-                        key: "go_package",
-                        value: "proto/",
-                    },
-                ],
-            },
-        ]       
-    ])
-    let programFileList = [
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api.go",
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/api/api.go",
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api_test.go",
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/api/api_test.go",
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/cmd/server.go",
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/cmd/server.go",
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-web/web/web.go"
-    ];
-    let modifiedProtoList = [
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/proto/Emoji.proto",
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/proto/Voting.proto"
-    ]
-    let modifiedProgList = [
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api.go",
-        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/api/api.go"
+    let dockerfilePath = [
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/.circleci/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/doggos/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/emoji/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/golang.org/x/net/http2/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fortune/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/hypothesizer/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/secrets/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/sidecar/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/sleeper/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/snack/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/spoonerisms/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/vigoda/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/words/Dockerfile",
     ]
 
-    checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedProgList);
+    let makefilePath = [
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/Makefile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/github.com/gogo/protobuf/proto/Makefile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/golang.org/x/net/http2/Makefile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/golang.org/x/text/language/Makefile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fortune/Makefile",
+    ]
+
+    // for (const makefile of makefilePath) {
+    //     const commands = getMakefileCommands(makefile);
+    //     console.log(commands);
+    // }
+
+
+    for (const dockerfile of dockerfilePath) {
+        const commands = getDockerfileCommands(dockerfile);
+        console.log(commands);
+    }
 
 }
 
@@ -115,20 +77,34 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
     const protoToPrograms = {};
     const programToPrograms = {};
 
-    let repositoryName;
+    /*general*/
+    let makefilePaths = [];
+    let dockerfilePaths = [];
 
     /*Go*/
     let goPathMode;
     let goModList;
+    let goPathSrc;
 
 
-    // プログラムからimportの取得 + どのprotoをimportしているか + どのプログラムをimportしているか
+
+    /*
+    プログラムからimportの取得 + どのprotoをimportしているか + どのプログラムをimportしているか
+    */
     for (const progPath of programPaths) {
         // プログラムからimportの取得
         const importedModules = await getImportedPrograms(progPath, "imports");
         if (importedModules === null) continue;
 
         const extension = await path.extname(progPath);
+
+        /*共通項目取得*/
+        if (makefilePaths.length === 0 || dockerfilePaths.length === 0) {
+            const { makefilePaths: makefiles, dockerfilePaths: dockers } = findMakeAndDockerFiles(progPath);
+            makefilePaths = makefiles;
+            dockerfilePaths = dockers;
+        }
+
 
         switch (extension) {
             case '.go':
@@ -138,12 +114,14 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                     //初回ループ
                     goPathMode = checkGoPathMode(progPath);
                     //go.modがある場合
-                    goModList = findGoModFiles(progPath);
-                    goModModuleList = goModList.map(goModPath => {
-                        const content = fs.readFileSync(goModPath, 'utf8');
-                        const moduleLine = content.split('\n').find(line => line.startsWith('module'));
-                        return moduleLine.split(' ')[1].trim();
-                    });
+                    if (goPathMode === false) {
+                        goModList = findGoModFiles(progPath);
+                        goModModuleList = goModList.map(goModPath => {
+                            const content = fs.readFileSync(goModPath, 'utf8');
+                            const moduleLine = content.split('\n').find(line => line.startsWith('module'));
+                            return moduleLine.split(' ')[1].trim();
+                        });
+                    }
 
                 }else if (goPathMode === false) {
                     //go.modがある場合
@@ -232,8 +210,6 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                             goModModuleList.forEach((module) => {
                                 if (importedModule.includes(module)) {
                                     if (importedModule.includes(packagePath)) {
-                                        console.log(`Found ${packagePath} in ${importedModule}`);
-
                                         //関数利用の確認
                                         if (checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
                                             return;
@@ -248,22 +224,30 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                     }else {
                         /*Dockerfile, Makefile 他のファイルを参照する場合*****************************************************************/
 
+                        /*
+                        Dockerfileの参照
+                        */
+                        dockerfilePaths.forEach((dockerfilePath) => {
+                             
+                                    
+                            if(importedModules){
 
+                            }
+                        });
+
+
+                        /*
+                        Makefileの参照
+                        */
+                        makefilePaths.forEach((makefilePath) => {
+
+                        });
 
                     }
-
-
-
-
-
-
                     //関数利用の確認
                     // if (checkFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
                     //     break; // protoPathMapのループを抜ける
                     // }
-                    
-
-
                 }
 
                 break;
@@ -276,7 +260,58 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
 
 
     /*programToProgramsの取得*/
+    for (const progPath of programPaths) {
+        const importedModules = await getImportedPrograms(progPath, "imports");
+        if (importedModules === null) continue;
 
+        const extension = await path.extname(progPath);
+
+        switch (extension) {
+            case '.go':
+
+                /*共通項目取得*/
+                //おそらく取得済みである
+
+                // プログラムがimportしている関数の取得
+                const goProgFunctions = await analyzeGoAst(progPath, "functions");
+
+
+                /*
+                関数化すべき項目
+                */
+                for (const importingProgPath of programPaths) {
+                    //同じプログラムの場合スキップ
+                    if(importingProgPath === progPath) continue;
+
+                    // プログラムからimportの取得
+                    const importedProgModules = await getImportedPrograms(importingProgPath, "imports");
+                    const ext = await path.extname(importedProgModules);
+
+                    switch (ext) {
+                        case '.go':
+
+                            // プログラムがimportしている関数の取得
+                            const goImportingProgFunctions = await analyzeGoAst(importingProgPath, "functions");
+
+
+                            break;
+                    
+                        default:
+                            console.log(`Not Supported lang: ${importingProgPath}`);
+                            break;
+                    }        
+                }
+                /*
+                ↑ここまで関数化
+                */
+
+                break;
+
+            default:
+                console.log(`Not Supported lang: ${progPath}`);
+                break;
+        }
+    }
 
     return { protoToPrograms, programToPrograms };
 }
@@ -460,6 +495,103 @@ function getrepositoryName(progPath) {
             break;
         }
     }
+}
+
+//Makefile Dockerfileリストの取得
+function findMakeAndDockerFiles(progPath) {
+    const makefilePaths = [];
+    const dockerfilePaths = [];
+
+    // premerge_ または merge_ を含む部分を探す正規表現
+    const regex = /(.*\/(premerge_|merge_)[^/]+)/;
+    const match = progPath.match(regex);
+
+    // repositoryPath を取得
+    const repositoryPath = match ? match[1] : path.dirname(progPath);
+
+    // ディレクトリを再帰的に探索する関数
+    function traverseDirectory(directory) {
+        const entries = fs.readdirSync(directory, { withFileTypes: true });
+
+        for (const entry of entries) {
+            const entryPath = path.join(directory, entry.name);
+
+            if (entry.isDirectory()) {
+                // サブディレクトリを再帰的に探索
+                traverseDirectory(entryPath);
+            } else if (entry.isFile()) {
+                // Makefile または Dockerfile のパスを保存
+                if (entry.name === 'Makefile') {
+                    makefilePaths.push(entryPath);
+                } else if (entry.name === 'Dockerfile') {
+                    dockerfilePaths.push(entryPath);
+                }
+            }
+        }
+    }
+
+    // repositoryPath から探索を開始
+    traverseDirectory(repositoryPath);
+
+    return { makefilePaths, dockerfilePaths };
+}
+
+//dockerfileの解析
+function getDockerfileCommands(dockerfilePath) {
+    const dockerfileContent = fs.readFileSync(dockerfilePath, 'utf8');
+    const lines = dockerfileContent.split('\n');
+    const commands = [];
+
+    let currentCommand = '';
+    lines.forEach(line => {
+        const trimmedLine = line.trim();
+        if (
+            (trimmedLine.startsWith('RUN') || trimmedLine.startsWith('CMD') || trimmedLine.startsWith('ADD') || trimmedLine.startsWith('ENTRYPOINT')) &&
+            (trimmedLine.includes('protoc') || trimmedLine.includes('grpc') || trimmedLine.includes('protoc-gen-') ||
+                trimmedLine.includes('go') || trimmedLine.includes('make') || trimmedLine.includes('cmake') ||
+                trimmedLine.includes('bash') || trimmedLine.includes('sh'))
+        ) {
+
+            if (currentCommand) {
+                commands.push(currentCommand);
+                currentCommand = '';
+            }
+            currentCommand = trimmedLine;
+        } else if (currentCommand) {
+            currentCommand += ' ' + trimmedLine;
+        }
+    });
+    if (currentCommand) {
+        commands.push(currentCommand);
+    }
+
+    return commands;
+}
+
+//makefileの解析
+function getMakefileCommands(makefilePath) {
+    const makefileContent = fs.readFileSync(makefilePath, 'utf8');
+    const lines = makefileContent.split('\n');
+    const commands = [];
+
+    let currentCommand = '';
+    lines.forEach(line => {
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith('protoc')) {
+            if (currentCommand) {
+                commands.push(currentCommand);
+                currentCommand = '';
+            }
+            currentCommand = trimmedLine;
+        } else if (currentCommand) {
+            currentCommand += ' ' + trimmedLine;
+        }
+    });
+    if (currentCommand) {
+        commands.push(currentCommand);
+    }
+
+    return commands;
 }
 
 module.exports = { checkFileImportModule };
