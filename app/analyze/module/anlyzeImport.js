@@ -54,13 +54,19 @@ if (require.main === module) {
     ]);
 
     let programFileList = [
-        "/app/dataset/premerge_project/main.go",
-        "/app/dataset/premerge_project/utils/math.go",
-        "/app/dataset/premerge_project/utils/strings.go",
-        "/app/dataset/premerge_project/services/calculator.go",
-        "/app/dataset/premerge_project/services/greeter.go",
-        "/app/dataset/premerge_project/tests/services_test.go"
+        "/app/dataset/premerge_project/go.mod",
+        "/app/dataset/premerge_project/cmd/main.go",
+        "/app/dataset/premerge_project/pkg/utils/math.go",
+        "/app/dataset/premerge_project/pkg/utils/strings.go",
+        "/app/dataset/premerge_project/pkg/services/calculator.go",
+        "/app/dataset/premerge_project/pkg/services/greeter.go",
+        "/app/dataset/premerge_project/pkg/services/logger.go",
+        "/app/dataset/premerge_project/pkg/config/loader.go",
+        "/app/dataset/premerge_project/tests/calculator_test.go",
+        "/app/dataset/premerge_project/tests/greeter_test.go",
+        "/app/dataset/premerge_project/tests/loader_test.go"
     ];
+
 
 
     let modifiedProtoList = [
@@ -207,13 +213,12 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                                 */
                                 importedModules.forEach((importedModule) => {
                                     goModModuleList.forEach((module) => {
-                                        if (importedModule.includes(module)) {
-                                            if (importedModule.includes(packagePath)) {
-                                                //関数利用の確認
-                                                if (checkFunctionUsage(goImportingProgFunctions, goProgFunctions, programToPrograms, importingProgPath, progPath)) {
-                                                    return;
-                                                }
+                                        if (importedModule.includes(module) && importedModule.includes(packagePath)) {
+                                            //関数利用の確認
+                                            if (checkFunctionUsage(goImportingProgFunctions, goProgFunctions, programToPrograms, importingProgPath, progPath)) {
+                                                return;
                                             }
+                                           
                                         }
                                     });
                                 });
