@@ -24,8 +24,10 @@ RUN mvn dependency:get -Dartifact=com.github.javaparser:javaparser-core:3.23.1
 ENV GOPATH=/go
 ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
 
-# 特定のバージョンのGoをインストール
-RUN apk add --no-cache go
+# 特定のバージョンのGoを公式サイトからダウンロードしてインストール
+RUN wget https://golang.org/dl/go1.23.1.linux-amd64.tar.gz \
+    && tar -C /usr/local -xzf go1.23.1.linux-amd64.tar.gz \
+    && rm go1.23.1.linux-amd64.tar.gz
 
 # termialでインストール
 RUN go install golang.org/x/tools/gopls@latest
