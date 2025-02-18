@@ -22,13 +22,13 @@
             "outFiles": ["app/**/*.js"],
         },
         {
-            "name": "Docker Debug TypeScript",
-            "type": "node",
-            "request": "launch",
-            "preLaunchTask": "Compile TypeScript",
-            "program": "${file}",
-            "cwd": "${fileDirname}",
-            // "args": ["aaa"]
+        "name": "Docker Debug TypeScript",
+        "type": "node",
+        "request": "launch",
+        "preLaunchTask": "Compile TypeScript",
+        "program": "${file}",
+        "cwd": "${workspaceFolder}",
+        "outFiles": ["${workspaceFolder}/build/js/**/*.js"]
         },
         {
             "name": "Docker Debug go",
