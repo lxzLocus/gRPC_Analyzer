@@ -8,11 +8,11 @@ FLAG : 要確認，デバッグ必要箇所
 
 */
 /*import module*/
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
-const { analyzeProtoService } = require('./analyzeAst/proto/proto');
-const { analyzeGoAst } = require('./analyzeAst/Go/go');
+import { analyzeProtoService } from './analyzeAst/proto/proto';
+import { analyzeGoAst } from './analyzeAst/Go/go';
 
 
 
@@ -111,7 +111,12 @@ if (require.main === module) {
 }
 
 /*functions*/
-async function checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedProgList){
+async function checkFileImportModule(
+  protoPathMap: Map<string, any>,
+  programFileList: string[],
+  modifiedProtoList: string[],
+  modifiedProgList: string[]
+): Promise<void> {
     const pre_dependencies = await pre_Analyzedependencies(protoPathMap, programFileList);
 
 
@@ -123,7 +128,10 @@ async function checkFileImportModule(protoPathMap, programFileList, modifiedProt
 }
 
 
-async function pre_Analyzedependencies(protoPathMap, programPaths) {
+async function pre_Analyzedependencies(
+  protoPathMap: Map<string, any>,
+  programPaths: string[]
+): Promise<{ protoToPrograms: Record<string, any>; programToPrograms: Record<string, any> }> {
     const protoToPrograms = {};
     const programToPrograms = {};
 
@@ -437,7 +445,7 @@ async function getImportedPrograms(filePath, mode) {
 }
 
 //bool GOPATHモードであるかを確認
-function checkGoPathMode(progPath) {
+function checkGoPathMode(progPath: string): boolean {
     let currentPath = path.resolve(progPath);
 
     while (true) {
@@ -471,7 +479,7 @@ function checkGoPathMode(progPath) {
 }
 
 //Array go.modファイルパスの取得
-function findGoModFiles(progPath) {
+function findGoModFiles(progPath: string): string[] {
     const goModFiles = [];
     let currentPath = path.resolve(progPath);
 
@@ -506,7 +514,11 @@ function findGoModFiles(progPath) {
 }
 
 //proto optionからpackage名の取得
-function getPackageNameOption(filePath, protoMeta, importedModules) {
+function getPackageNameOption(
+  filePath: string,
+  protoMeta: any,
+  importedModules: string[]
+): { isOptionImported: boolean; packageNamePath: string | null } {
     const extension = path.extname(filePath);
     let isOptionImported = false;
     let packageName;
@@ -533,7 +545,13 @@ function getPackageNameOption(filePath, protoMeta, importedModules) {
 }
 
 //protoファイルの関数利用の確認を行う関数
-function checkProtoFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath) {
+function checkProtoFunctionUsage(
+  protoServices: any[],
+  goProgFunctions: any,
+  protoToPrograms: Record<string, any>,
+  protoPath: string,
+  progPath: string
+): boolean {
     for (const service of protoServices) {
         // サービスのRPCをすべて確認
         for (const rpc of service.rpcs) {
@@ -567,7 +585,7 @@ function checkProtoFunctionUsage(protoServices, goProgFunctions, protoToPrograms
 }
 
 //パッケージパスの取得
-function getPackagePath(protoPath) {
+function getPackagePath(protoPath: string): string {
     const protoPathSegments = protoPath.split('/');
     const protoPathIndex = protoPathSegments.findIndex(segment => segment.includes('premerge_') || segment.includes('merge_'));
     const protoPathSubDir = protoPathSegments.slice(protoPathIndex + 1).slice(0, -1).join('/');
@@ -579,7 +597,7 @@ function getPackagePath(protoPath) {
 }
 
 //string プロジェクト名の取得
-function getrepositoryName(progPath) {
+function getrepositoryName(progPath: string): string | undefined {
     const pathSegments = progPath.split('/');
 
     for (let i = 0; i < pathSegments.length; i++) {
@@ -593,7 +611,7 @@ function getrepositoryName(progPath) {
 }
 
 //Makefile Dockerfileリストの取得
-function findMakeAndDockerFiles(progPath) {
+function findMakeAndDockerFiles(progPath: string): { makefilePaths: string[]; dockerfilePaths: string[] } {
     const makefilePaths = [];
     const dockerfilePaths = [];
 
@@ -632,7 +650,7 @@ function findMakeAndDockerFiles(progPath) {
 }
 
 //dockerfileの解析
-function getDockerfileCommands(dockerfilePath) {
+function getDockerfileCommands(dockerfilePath: string): string[] {
     const dockerfileContent = fs.readFileSync(dockerfilePath, 'utf8');
     const lines = dockerfileContent.split('\n');
     const commands = [];
@@ -664,7 +682,7 @@ function getDockerfileCommands(dockerfilePath) {
 }
 
 //makefileの解析
-function getMakefileCommands(makefilePath) {
+function getMakefileCommands(makefilePath: string): string[] {
     const makefileContent = fs.readFileSync(makefilePath, 'utf8');
     const lines = makefileContent.split('\n');
     const commands = [];
@@ -689,4 +707,4 @@ function getMakefileCommands(makefilePath) {
     return commands;
 }
 
-module.exports = { checkFileImportModule };
+export { checkFileImportModule };
