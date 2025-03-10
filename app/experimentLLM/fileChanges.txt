@@ -1,0 +1,39 @@
+{
+  "diffs": [
+        {
+            "path": "src/control/common/proto/logging.go",
+            "before":"fmt.Fprintf(&bld, "%T svc_ldr:%d ", m, m.Leader)",
+            "after":"fmt.Fprintf(&bld, "%T svc_ldr:%d ", m, m.SvcLdr)"
+        },
+        {
+            "path": "",
+            "before":"",
+            "after":""
+        },
+        {
+            "path": "",
+            "before":"",
+            "after":""
+        },
+        {
+            "path": "",
+            "before":"",
+            "after":""
+        },
+        {
+            "path": "",
+            "before":"",
+            "after":""
+        },
+        {
+            "path": "",
+            "before":"",
+            "after":""
+        },
+        {
+            "path": "",
+            "before":"",
+            "after":""
+        },
+  ]
+}

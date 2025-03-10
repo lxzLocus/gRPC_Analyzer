@@ -1,0 +1,49 @@
+## Instruction ##
+You are tasked with identifying and fixing gRPC-related issues in the source code based on the provided proto file and the given differences. 
+
+### What you should do:
+- Analyze the "### proto file ###" to ensure all message and service definitions are correctly implemented in the "### source code ###".
+- Use the given changes in "### difference of changes ###" as a **hint**, but do not assume they are fully correct.
+- Correct any type mismatches, field names, or methods based on the proto file.
+- Identify potential errors **beyond** the given changes if necessary.
+- Handle exceptions properly based on the updated proto file structure.
+- Output only the corrected source code with no additional explanations.
+
+---
+
+## Context ##
+
+### Proto file ###
+{{protoFile}}
+
+
+### Dependency Tree of Proto ###
+The following is a representation of how this proto file relates to other parts of the codebase:
+{{dependencyTree}}
+
+
+### Difference of Proto File Changes ###
+The following differences show modifications made to the proto file(s), which might have caused gRPC-related issues:
+{{protoFileChanges}}
+
+
+### Difference of Changes (Issue/Pull Request) ###
+The following differences represent modifications made to fix the bug. **However, these changes may not be entirely correct.** Your task is to analyze them and determine if further corrections are needed.
+{{fileChanges}}
+
+
+### Source Code (Before Fix) ###
+This is the current (possibly buggy) implementation before the changes:
+{{sourceCode}}
+
+
+---
+
+## **Your Task**:
+1. Use the provided proto file and its dependency tree to understand the overall structure.
+2. Analyze the changes in "difference of changes" and "difference of proto file changes" to identify what **might** have caused the bug.
+3. **Do not blindly trust the given changes**—verify their correctness and modify them as needed.
+4. Provide only the corrected source code as output.
+
+
+

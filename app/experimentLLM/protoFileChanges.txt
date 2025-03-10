@@ -1,0 +1,9 @@
+{
+  "diffs": [
+        {
+            "path": "src/proto/mgmt/pool.proto",
+            "before":"uint32 leader = 2; // Current service leader",
+            "after":"uint32 svc_ldr = 2; // Current service leader rank"
+        }
+  ]
+}
