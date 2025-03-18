@@ -44,3 +44,5 @@ RUN apk add --no-cache rust cargo
 RUN apk add curl
 RUN curl -L -o /usr/local/bin/rust-analyzer https://github.com/rust-lang/rust-analyzer/releases/download/2024-10-16/rust-analyzer-linux \
     && chmod +x /usr/local/bin/rust-analyzer
+
+ RUN apk add -y icu-devtools

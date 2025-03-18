@@ -16,7 +16,6 @@ You are tasked with identifying and fixing gRPC-related issues in the source cod
 ### Proto file ###
 {{protoFile}}
 
-
 ### Dependency Tree of Proto ###
 The following is a representation of how this proto file relates to other parts of the codebase:
 {{dependencyTree}}

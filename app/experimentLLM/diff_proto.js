@@ -6,6 +6,24 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const outputDir = '/app/analyze/experimentLLM/output';
+
+/* __MAIN__ */
+if (require.main === module) {
+    const inputDir = '/app/dataset/clone/loop/pullrequest/update_api_for_loop_in';
+
+    (async () => {
+        try {
+            const results = await compareProtoFiles(inputDir);
+            console.log(results);
+        } catch (error) {
+            console.error(error.message);
+        }
+    });
+
+}
+
+
 // .protoファイルを再帰的に探索する関数
 function getProtoFilesRecursive(dir) {
     let results = [];
@@ -32,7 +50,7 @@ function getProtoFilesRecursive(dir) {
 function diffFiles(file1, file2) {
     return new Promise((resolve, reject) => {
         console.log(`Running diff between: ${file1} and ${file2}`); // デバッグ用
-        exec(`diff "${file1}" "${file2}"`, (err, stdout, stderr) => {
+        exec(`diff -u "${file1}" "${file2}"`, (err, stdout, stderr) => {
             if (err && err.code === 1) {
                 // 差分が見つかる場合
                 resolve({

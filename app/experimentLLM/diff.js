@@ -51,7 +51,7 @@ premergeFiles.forEach(file1 => {
 
     if (fs.existsSync(file2)) {
         // 同名ファイルが見つかったら、diffコマンドを実行（パスをクォーテーションで囲む）
-        exec(`diff "${file1}" "${file2}"`, (err, stdout, stderr) => {
+        exec(`diff -u "${file1}" "${file2}"`, (err, stdout, stderr) => {
             if (err) {
                 // 差分が見つかると終了コード1になる
                 if (err.code === 1) {
