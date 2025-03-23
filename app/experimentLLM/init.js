@@ -5,7 +5,7 @@
 const { exec } = require('child_process');
 
 //module import
-const { compareProtoFiles } = require('./diff_proto.js');
+const { compareProtoFiles } = require('./module/diff_proto.js');
 const { requestOpenAI } = require('./request.js');
 
 

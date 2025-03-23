@@ -1,7 +1,7 @@
-/*
-protoファイルの差分取得
-再帰的に探索，全てのdiffを取得
-*/
+/**
+ * .protoファイルの差分を取得する
+ * 再帰的に探索し、すべての差分を取得
+ */
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -10,7 +10,7 @@ const outputDir = '/app/analyze/experimentLLM/output';
 
 /* __MAIN__ */
 if (require.main === module) {
-    const inputDir = '/app/dataset/clone/loop/pullrequest/update_api_for_loop_in';
+    const inputDir = '/app/dataset/clone/loop/pullrequest//app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14334_control-_Fix_PoolCreateResp-leader';
 
     (async () => {
         try {
@@ -24,7 +24,9 @@ if (require.main === module) {
 }
 
 
-// .protoファイルを再帰的に探索する関数
+/**
+ * .protoファイルを再帰的に探索する関数
+ */
 function getProtoFilesRecursive(dir) {
     let results = [];
     const list = fs.readdirSync(dir);
@@ -46,7 +48,9 @@ function getProtoFilesRecursive(dir) {
     return results;
 }
 
-// premerge と merge ディレクトリ内で同名の .proto ファイルを diff
+/**
+ * premerge と merge ディレクトリ内で同名の .proto ファイルを比較
+ */
 function diffFiles(file1, file2) {
     return new Promise((resolve, reject) => {
         console.log(`Running diff between: ${file1} and ${file2}`); // デバッグ用
@@ -70,7 +74,9 @@ function diffFiles(file1, file2) {
     });
 }
 
-// メインの比較関数
+/**
+ * メインの比較関数
+ */
 async function compareProtoFiles(inputDir) {
     try {
         // inputDir の存在チェック
