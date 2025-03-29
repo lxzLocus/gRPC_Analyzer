@@ -8,7 +8,7 @@ const outputFilePath = path.join(outputDir, 'diff_results.txt');
 /* __MAIN__ */
 if (require.main === module) {
     const inputDir = '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers';
-    const fileExtension = ''; // 必要に応じて変更可能
+    const fileExtension = 'proto'; // 必要に応じて変更可能
 
     // 出力ファイルを初期化
     fs.writeFileSync(outputFilePath, '', 'utf8');

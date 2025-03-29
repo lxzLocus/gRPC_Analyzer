@@ -1,0 +1,83 @@
+/*
+unix diff ぽい形式で，ファイルの内容を出力するスクリプト
+*/
+
+const fs = require('fs');
+const path = require('path');
+
+const outputDir = '/app/app/experimentLLM/output';
+const outputFilePath = path.join(outputDir, 'copied_files.txt');
+
+/* __MAIN__ */
+if (require.main === module) {
+    const filePaths = [
+        '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/src/bio/smd.pb-c.c',
+        '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/src/control/server/harness.go',
+        '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/src/mgmt/smd.pb-c.c'
+    ]; // ここにファイルパスを配列で指定
+
+    // 出力ファイルを初期化
+    fs.writeFileSync(outputFilePath, '', 'utf8');  // 初期化して空にする
+
+    (async () => {
+        try {
+            const results = await copyFiles(filePaths);
+            console.log(results);
+        } catch (error) {
+            console.error(error.message);
+        }
+    })();
+}
+
+// メインのコピー関数
+async function copyFiles(filePaths) {
+    try {
+        const copiedResults = [];
+
+        for (const filePath of filePaths) {
+            if (fs.existsSync(filePath)) {
+                try {
+                    const copyResult = await copyFile(filePath);
+                    if (copyResult) {
+                        copiedResults.push(copyResult);
+                    }
+                } catch (err) {
+                    console.error(`Error copying file: ${err.message}`);
+                }
+            } else {
+                console.log(`No such file: ${filePath}`);
+            }
+        }
+
+        console.log('Copied Results:', copiedResults); // デバッグ用
+        return copiedResults;
+    } catch (error) {
+        console.error(error.message);
+        throw error;
+    }
+}
+
+/**
+ * ファイルをコピーする関数
+ * @param {string} filePath - コピーするファイルのパス
+ * @returns {Object} - コピー結果
+ */
+function copyFile(filePath) {
+    return new Promise((resolve, reject) => {
+        console.log(`Copying file: ${filePath}`); // デバッグ用
+
+        try {
+            const data = fs.readFileSync(filePath, 'utf8');  // ファイル内容を読み込む
+            fs.appendFileSync(outputFilePath, `--- ${filePath}\n`);  // コピー元ファイル名を書き込む
+            fs.appendFileSync(outputFilePath, data);  // ファイル内容を追記
+            fs.appendFileSync(outputFilePath, `\n\n`);  // 2ファイル分けるために改行
+
+            resolve({
+                relativePath: path.relative(path.dirname(filePath), filePath),
+                copied: true
+            });
+        } catch (err) {
+            reject(new Error(`Error copying file from ${filePath}: ${err.message}`));
+        }
+    });
+}
