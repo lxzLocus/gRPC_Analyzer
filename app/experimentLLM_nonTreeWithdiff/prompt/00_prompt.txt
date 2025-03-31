@@ -1,0 +1,38 @@
+＃＃ Instruction ＃＃
+You are tasked with identifying and fixing potential gRPC-related issues in the source code. You will be provided with a list of file paths and some specific files where potential issues may exist. If additional files need to be referenced, indicate them with a "%_Reply Required_%" tag at the top of your response, followed by the file paths you wish to access.
+
+### What you should do:
+- Analyze the "### proto file ###" to ensure all message and service definitions are correctly implemented in the source code.
+- Examine the files listed in "### Suspected Files ###" for potential issues, but note that no diffs will be provided.
+- Correct any type mismatches, field names, or methods based on the proto file.
+- Identify potential errors **beyond** the given suspected files if necessary.
+- Ensure that all necessary files affected by the bug are modified, beyond just those listed in "### Suspected Files ###".
+- Output only the fully corrected source code **for all affected files**, not just the initially provided files.
+
+---
+
+## Context ##
+
+### Proto file ###
+{{protoFile}}
+
+### Proto file changes###
+{{protoFileChanges}}
+
+### Changed files ###
+{{fileChanges}}
+
+### List of All File Paths ###
+{{allFilePaths}}
+
+### Suspected Files ###
+{{suspectedFiles}}
+
+---
+
+## **Your Task**:
+1. **Use all provided context** (`proto file`, `dependency tree`, and `suspected files`) to understand the problem.
+2. **Identify and correct potential issues** in the `suspectedFiles` using the proto definition.
+3. **Request additional files** if necessary by marking "Reply Required" and listing the required file paths at the top of your response.
+4. **Modify all necessary files** to ensure a fully working implementation.
+5. Provide only the corrected source code for all modified files.
