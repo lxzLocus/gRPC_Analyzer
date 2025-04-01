@@ -1,0 +1,11 @@
+--- src/control/server/harness.go
++++ src/control/server/harness.go
+@@ -85,7 +85,7 @@
+ 	rs := make([]ranklist.Rank, 0)
+ 	for idx, ei := range h.instances {
+ 		if ei.IsReady() {
+-			rank, err := ei.GetRank()
++			rank, err := ei.GetRank()
+ 			if err != nil {
+ 				h.log.Errorf("instance %d: no rank (%s)", idx, err)
+ 				continue

@@ -1,0 +1,48 @@
+%_Reply Required_%
+[src/control/common/proto/ctl/smd.proto] 
+
+---
+
+%_Modifed_%
+```diff
+--- src/control/server/harness.go
++++ src/control/server/harness.go
+@@ -112,7 +112,7 @@
+ 	sync.RWMutex
+ 	log           logging.Logger
+ 	instances     []Engine
+-	started       atm.Bool
++	started       *atm.Bool
+ 	faultDomain   *system.FaultDomain
+ 	onDrpcFailure []func(context.Context, error)
+ }
+@@ -140,7 +140,7 @@
+ // isStarted indicates whether the EngineHarness is in a running state.
+ func (h *EngineHarness) isStarted() bool {
+-	return h.started.Load()
++	return h.started != nil && h.started.Load()
+ }
+
+--- src/control/server/ctl_smd_rpc.go
++++ src/control/server/ctl_smd_rpc.go
+@@ -90,7 +90,7 @@
+ 	for _, ei := range svc.harness.Instances() {
+ 		if !ei.IsReady() {
+-			svc.log.Debugf("skipping not-ready instance %d", ei.Index())			svc.log.Debugf("skipping not-ready instance %d", ei.Index())
++			svc.log.Debugf("skipping not-ready instance %d", ei.Index())
+ 			continue
+ 		}
+
+@@ -178,7 +178,7 @@
+ // Map requested device IDs provided in comma-separated string to the engine
+ // that controls the given device. Device can be identified either by UUID or
+ // transport (PCI) address.
+ func (svc *ControlService) mapIDsToEngine(ctx context.Context, ids string, useTrAddr bool) (engineDevMap, error) {
+-	trAddrs := make(idMap)
++	trAddrs := make(devIDMap)
+ 	devUUIDs := make(idMap)
+ 	matchAll := false
+
+```
+
+The code changes were made to address issues related to the handling of the `started` field in the `EngineHarness` struct, where it was changed to a pointer type to safely check if it was initialized, and to correct the type used for `trAddrs` in the `mapIDsToEngine` function. Please note that these changes are made based on the current information and assumptions. Additional information from the file `src/control/common/proto/ctl/smd.proto` is required to verify and ensure all changes are accurately applied.

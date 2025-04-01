@@ -1,0 +1,38 @@
+%_Reply Required_%
+[{
+  "File Path_01": "src/proto/ctl/smd.proto"
+}]
+
+--- src/proto/ctl/smd.proto (Old Content Truncated)
++++ src/proto/ctl/smd.proto (Updated Content Truncated)
+@@ -76,7 +76,7 @@
+ }
+
+ enum NvmeDevState {
+- UNKNOWN   = 0; // Device state is unknown, zer6o value
++ UNKNOWN   = 0; // Device state is unknown, zero value
+   NORMAL    = 1; // Device is in a normal operational state
+   NEW       = 2; // Device is new and is not yet in-use
+   EVICTED   = 3; // Device is faulty and has been evicted
+
+%_Modified_%
+--- src/control/server/ctl_smd_rpc.go
++++ src/control/server/ctl_smd_rpc.go
+@@ -172,7 +172,7 @@
+          if err != nil {
+              return errors.Wrapf(err, "rank %d", engineRank)
+          }
+-         if len(listDevsResp.Devices) = 0 {
++         if len(listDevsResp.Devices) == 0 {
+              rResp.Devices = nil
+              resp.Ranks = append(resp.Ranks, rResp)
+              continue
+@@ -221,7 +221,7 @@
+          if err != nil {
+              return err
+          }
+-         if len(listDevsResp.Devices) = 0 {
++         if len(listDevsResp.Devices) == 0 {
+              rResp.Devices = nil
+              resp.Ranks = append(resp.Ranks, rResp)
+              continue

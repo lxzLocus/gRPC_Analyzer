@@ -54,9 +54,14 @@ if (require.main === module) {
                 console.log('レスポンスに"%_Reply Required_%"は含まれていません');
             }
 
+            // 出力ディレクトリに新しいファイル名を生成して保存
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const tmpOutputPath = path.join('/app/tmp', `response_${timestamp}.txt`);
+            fs.writeFileSync(tmpOutputPath, response);
+            console.log(`レスポンスが/tmpに保存されました: ${tmpOutputPath}`);
 
-            fs.writeFileSync(path.join(outputDir, 'response.txt'), response);
-            console.log('修正されたコードがtxtに保存されました');
+            //fs.writeFileSync(path.join(outputDir, 'response.txt'), response);
+            //console.log('修正されたコードがtxtに保存されました');
         }
     } catch (error) {
         console.error('OpenAIリクエスト中のエラー:', error);

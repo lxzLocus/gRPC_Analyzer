@@ -33,25 +33,74 @@ You are tasked with identifying and fixing potential gRPC-related issues in the 
 ## **Your Task**:
 1. **Use all provided context** (`proto file`, `dependency tree`, and `suspected files`) to understand the problem.
 2. **Identify and correct potential issues** in the `suspectedFiles` using the proto definition.
-3. **Request additional files** if necessary by marking "Reply Required" and listing the required file paths at the top of your response.
+3. **Request additional files** if necessary by marking "%_Reply Required_%" and listing the required file paths at the top of your response.
 4. **Modify all necessary files** to ensure a fully working implementation.
 5. Provide only the corrected source code for all modified files.
-6. modified files should be in unix diff format.
+6. Modified files should be in unix diff format.
+7. Do not write comments in "%_Reply Required_%" or "%_Modified_%". Comments within code are allowed.
 
 ---
 
-## Response Format ##
+## Response ##
+
+### Response Format:
 %_Reply Required_%
-[{File Path_01}]
+[
+    {File Path_01},
+    {File Path_02}
+];
 
-[{File Path_02}]
 
 
-
-%_Modifed_%
+%_Modified_%
 --- [{Old File Path}]
 +++ [{New File Path}]
 @@ -[{Old Line Num Start}],[{Old Line Num End}] +[{New Line Num Start}],[{New Line Num End}] @@
 - [{Old line}]
 + [{New line}]
 
+
+%_Comment_%
+[{If you have comment. Write here.}]
+
+---
+
+### Response example:
+%_Reply Required_%
+
+[
+    "/app/src/file1",
+    "/app/src/module/module1"
+];
+
+
+%_Modified_%
+
+--- src/proto/ctl/smd.proto
++++ src/proto/ctl/smd.proto
+@@ -76,7 +76,7 @@
+ }
+ 
+ enum NvmeDevState {
+-	UNKNOWN   = 0; // Device state is unknown, zer6o value
++	UNKNOWN   = 0; // Device state is unknown, zero value
+ 	NORMAL    = 1; // Device is in a normal operational state
+ 	NEW       = 2; // Device is new and is not yet in-use
+ 	EVICTED   = 3; // Device is faulty and has been evicted
+
+--- src/proto/ctl/smd.proto
++++ src/proto/ctl/smd.proto
+@@ -76,7 +76,7 @@
+ }
+ 
+ enum NvmeDevState {
+-	UNKNOWN   = 0; // Device state is unknown, zer6o value
++	UNKNOWN   = 0; // Device state is unknown, zero value
+ 	NORMAL    = 1; // Device is in a normal operational state
+ 	NEW       = 2; // Device is new and is not yet in-use
+ 	EVICTED   = 3; // Device is faulty and has been evicted
+
+%_Comment_%
+I've reviewed the code and compared it with the proto definitions provided. 
+
+I fixed 5 typos.

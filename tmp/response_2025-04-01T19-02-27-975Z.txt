@@ -1,0 +1,17 @@
+%_Modified_%
+```diff
+--- src/proto/ctl/smd.proto
++++ src/proto/ctl/smd.proto
+@@ -76,7 +76,7 @@
+ }
+ 
+ enum NvmeDevState {
+-	UNKNOWN   = 0; // Device state is unknown, zer6o value
++	UNKNOWN   = 0; // Device state is unknown, zero value
+ 	NORMAL    = 1; // Device is in a normal operational state
+ 	NEW       = 2; // Device is new and is not yet in-use
+ 	EVICTED   = 3; // Device is faulty and has been evicted
+```
+
+%_Comment_%
+The typo in the `NvmeDevState` enum comment was fixed from "zer6o" to "zero". This correction aligns the comment with its intended meaning, mentioning a zero value for an unknown state.
