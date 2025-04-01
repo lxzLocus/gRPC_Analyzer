@@ -36,3 +36,22 @@ You are tasked with identifying and fixing potential gRPC-related issues in the 
 3. **Request additional files** if necessary by marking "Reply Required" and listing the required file paths at the top of your response.
 4. **Modify all necessary files** to ensure a fully working implementation.
 5. Provide only the corrected source code for all modified files.
+6. modified files should be in unix diff format.
+
+---
+
+## Response Format ##
+%_Reply Required_%
+[{File Path_01}]
+
+[{File Path_02}]
+
+
+
+%_Modifed_%
+--- [{Old File Path}]
++++ [{New File Path}]
+@@ -[{Old Line Num Start}],[{Old Line Num End}] +[{New Line Num Start}],[{New Line Num End}] @@
+- [{Old line}]
++ [{New line}]
+
