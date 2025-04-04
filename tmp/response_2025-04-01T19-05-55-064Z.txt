@@ -1,3 +1,9 @@
+%_Reply Required_%
+
+src/proto/ctl/smd.proto
+src/control/server/ctl_smd_rpc.go
+src/control/server/harness.go
+
 %_Modified_%
 
 --- src/proto/ctl/smd.proto
