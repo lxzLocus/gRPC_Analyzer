@@ -23,8 +23,8 @@ const outputDir = '/app/app/experimentLLM_nonTreeWithdiff/output';
 const promptDir = '/app/app/experimentLLM_nonTreeWithdiff/prompt';
 const promptTextfile = '00_prompt.txt';
 
-let maxTokens = 128000;
-let maxCharacters = 1048576;
+const maxTokens = 128000;
+const maxCharacters = 1048576;
 
 const client = new OpenAI({
     apiKey: process.env.OPENAI_TOKEN,
@@ -49,18 +49,38 @@ if (require.main === module) {
 
     fetchOpenAPI(initMessages)
         .then((response) => {
-            if (response !== 0) {
+            let responseMessages = response.choices[0].message.content;
+            let splitContents = analyzeMessages(responseMessages);
 
-                
+            let availableTokens = maxTokens - Number(response.usage.total_tokens);
+            if (splitContents.requiredFilepaths.length != 0 && (maxTokens *0.08 < availableTokens) ){
 
-                let availableTokens = maxTokens - Number(response.usage.total_tokens);
-                if (MaxTokens*0.08 < availableTokens ){
+                splitContents.requiredFilepaths.forEach((filePath) => {
+                    const filePathWithInputDir = path.join(inputProjectDir, filePath);
 
-                }
+                    if (fs.existsSync(filePathWithInputDir)) {
+                        let fileContent = fs.readFileSync(filePathWithInputDir, 'utf-8');
+                        fileContent = `--- ${filePath}\n` + fileContent;
 
-                fs.writeFileSync(path.join(outputDir, 'response.txt'), response.choices[0].message.content);
-                console.log('修正されたコードがtxtに保存されました');
+                        messagesTemplate = attachMessages("user", fileContent);
+                        fetchOpenAPI(messagesTemplate)
+                            .then((response) => {
+                                responseMessages = response.choices[0].message.content;
+                                fs.writeFileSync(tmpOutputPath, responseMessages);
+                                console.log('修正されたコードがtxtに保存されました');
+                            })
+                            .catch((error) => {
+                                console.error('OpenAIリクエスト中のエラー:', error);
+                            });
+                    } else {
+                        console.log(`ファイルが見つかりません: ${filePath}`);
+                    }
+                });
             }
+
+            fs.writeFileSync(path.join(outputDir, 'response.txt'), response.choices[0].message.content);
+            console.log('修正されたコードがtxtに保存されました');
+        
         })
         .catch((error) => {
             console.error('OpenAIリクエスト中のエラー:', error);
@@ -96,21 +116,52 @@ function splitMessages(messages) {
 }
 
 function analyzeMessages(messages) {
-    const requiredFilepaths = [];
+    const sections = {
+        requiredFilepaths: [],
+        modifiedDiff: '',
+        commentText: ''
+    };
 
-    if (messages.includes("%_Reply Required_%")) {
-        const regex = /"([^"]+)"/g;
-        let match;
-        while ((match = regex.exec(messages)) !== null) {
-            requiredFilepaths.push(match[1]);
+    const lines = messages.split('\n');
+    let currentTag = null;
+    let modifiedBuffer = [];
+    let commentBuffer = [];
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+
+        if (trimmed === '%_Reply Required_%') {
+            currentTag = 'required';
+            continue;
+        } else if (trimmed === '%_Modified_%') {
+            currentTag = 'modified';
+            continue;
+        } else if (trimmed === '%_Comment_%') {
+            currentTag = 'comment';
+            continue;
         }
-        return requiredFilepaths;
 
-    } else if (!messages.includes("%_Reply Required_%") && messages.includes("%_Modified_%")){
-
+        if (currentTag === 'required' && trimmed !== '') {
+            // JSON風の配列形式に対応
+            const match = trimmed.match(/"(.+?)"/);
+            if (match) {
+                sections.requiredFilepaths.push(match[1]);
+            } else if (!trimmed.startsWith('[') && !trimmed.startsWith(']')) {
+                // 通常の行形式にも対応
+                sections.requiredFilepaths.push(trimmed);
+            }
+        } else if (currentTag === 'modified') {
+            modifiedBuffer.push(line);
+        } else if (currentTag === 'comment') {
+            commentBuffer.push(line);
+        }
     }
-}
 
+    sections.modifiedDiff = modifiedBuffer.join('\n').trim();
+    sections.commentText = commentBuffer.join('\n').trim();
+
+    return sections;
+}
 
 
 async function fetchOpenAPI(messages){
@@ -125,7 +176,6 @@ async function fetchOpenAPI(messages){
         console.error(error.message);
     }
 }
-
 
 function attachMessages(role, messages) {
     messagesTemplate.push({
