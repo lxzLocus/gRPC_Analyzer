@@ -23,6 +23,9 @@ const outputDir = '/app/app/experimentLLM_nonTreeWithdiff/output';
 const promptDir = '/app/app/experimentLLM_nonTreeWithdiff/prompt';
 const promptTextfile = '00_prompt.txt';
 
+let maxTokens = 128000;
+let maxCharacters = 1048576;
+
 const client = new OpenAI({
     apiKey: process.env.OPENAI_TOKEN,
 });
@@ -37,9 +40,31 @@ let messagesTemplate = [
 
 //* main
 if (require.main === module) {
-    const tmp = fs.readFileSync("/app/tmp/response_2025-04-01T19-05-55-064Z.txt");
+    //timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const tmpOutputPath = path.join(outputDir, `response_${timestamp}.txt`);
 
-    analyzeMessages(tmp.toString());
+    //初期メッセージ作成
+    const initMessages = attachMessages("user", readPromptFile());
+
+    fetchOpenAPI(initMessages)
+        .then((response) => {
+            if (response !== 0) {
+
+                
+
+                let availableTokens = maxTokens - Number(response.usage.total_tokens);
+                if (MaxTokens*0.08 < availableTokens ){
+
+                }
+
+                fs.writeFileSync(path.join(outputDir, 'response.txt'), response.choices[0].message.content);
+                console.log('修正されたコードがtxtに保存されました');
+            }
+        })
+        .catch((error) => {
+            console.error('OpenAIリクエスト中のエラー:', error);
+        });
 }
 
 
@@ -102,11 +127,13 @@ async function fetchOpenAPI(messages){
 }
 
 
-function attachMessages(messages) {
-    return messages.map(message => ({
-        role: message.role,
-        content: message.content
-    }));
+function attachMessages(role, messages) {
+    messagesTemplate.push({
+        role: role,
+        content: messages
+    });
+
+    return messagesTemplate;
 }
 
 
