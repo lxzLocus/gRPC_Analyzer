@@ -10,7 +10,9 @@ const fs = require('fs');
 const Handlebars = require('handlebars');
 const dotenv = require('dotenv');
 const path = require('path');
-const { exec } = require('child_process');
+
+const  {logInteraction} = require('./module/logger.js');
+const { log } = require('console');
 
 // Load environment variables from .env file
 dotenv.config();
@@ -40,58 +42,15 @@ let messagesTemplate = [
 
 //* main
 if (require.main === module) {
-    //timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const tmpOutputPath = path.join(outputDir, `response_${timestamp}.txt`);
-
-    //初期メッセージ作成
     const initMessages = attachMessages("user", readPromptFile());
 
-    let continueFetching = true;
-
-    while (continueFetching) {
-        fetchOpenAPI(initMessages)
-            .then((response) => {
-                let responseMessages = response.choices[0].message.content;
-                let splitContents = analyzeMessages(responseMessages);
-
-                let availableTokens = maxTokens - Number(response.usage.total_tokens);
-                if (splitContents.requiredFilepaths.length != 0 && (maxTokens *0.08 < availableTokens) ){
-
-                    splitContents.requiredFilepaths.forEach((filePath) => {
-                        const filePathWithInputDir = path.join(inputProjectDir, filePath);
-
-                        if (fs.existsSync(filePathWithInputDir)) {
-                            let fileContent = fs.readFileSync(filePathWithInputDir, 'utf-8');
-                            fileContent = `--- ${filePath}\n` + fileContent;
-
-                            messagesTemplate = attachMessages("user", fileContent);
-                            fetchOpenAPI(messagesTemplate)
-                                .then((response) => {
-                                    responseMessages = response.choices[0].message.content;
-                                    fs.writeFileSync(tmpOutputPath, responseMessages);
-                                    console.log('修正されたコードがtxtに保存されました');
-                                })
-                                .catch((error) => {
-                                    console.error('OpenAIリクエスト中のエラー:', error);
-                                });
-                        } else {
-                            console.log(`ファイルが見つかりません: ${filePath}`);
-                        }
-                    });
-                } else {
-                    continueFetching = false;
-                }
-
-                fs.writeFileSync(path.join(outputDir, 'response.txt'), response.choices[0].message.content);
-                console.log('修正されたコードがtxtに保存されました');
-            
-            })
-            .catch((error) => {
-                console.error('OpenAIリクエスト中のエラー:', error);
-                continueFetching = false;
-            });
-    }
+    fetchAndProcessMessages(initMessages)
+        .then(() => {
+            console.log('処理が完了しました');
+        })
+        .catch((error) => {
+            console.error('処理中にエラーが発生しました:', error);
+        });
 }
 
 
@@ -118,8 +77,43 @@ function readPromptFile() {
     return prompt;
 }
 
-function splitMessages(messages) {
-    const promptTokens = messages.usage.prompt;
+async function fetchAndProcessMessages(messages, continueFetching = true) {
+    if (!continueFetching) {
+        return;
+    }
+
+    try {
+        const response = await fetchOpenAPI(messages);
+
+        //ログの出力
+        logInteraction(messages[1].content, response.choices[0].message.content);
+
+        let responseMessages = response.choices[0].message.content;
+        let splitContents = analyzeMessages(responseMessages);
+
+        let availableTokens = maxTokens - Number(response.usage.total_tokens);
+
+        if (splitContents.requiredFilepaths.length !== 0 && (maxTokens * 0.08 < availableTokens)) {
+            for (const filePath of splitContents.requiredFilepaths) {
+                const filePathWithInputDir = path.join(inputProjectDir, filePath);
+
+                if (fs.existsSync(filePathWithInputDir)) {
+                    let fileContent = fs.readFileSync(filePathWithInputDir, 'utf-8');
+                    fileContent = `--- ${filePath}\n` + fileContent;
+                    // 必要な処理（例えば、メッセージに追加するなど）
+                } else {
+                    console.log(`ファイルが見つかりません: ${filePath}`);
+                }
+            }
+            // もう一度fetchして再帰呼び出し
+            await fetchAndProcessMessages(attachMessages("user", splitContents.modifiedDiff), continueFetching);
+        } else {
+            continueFetching = false;
+        }
+
+    } catch (error) {
+        console.error('OpenAIリクエスト中のエラー:', error);
+    }
 }
 
 function analyzeMessages(messages) {
