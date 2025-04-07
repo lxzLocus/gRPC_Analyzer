@@ -47,44 +47,51 @@ if (require.main === module) {
     //初期メッセージ作成
     const initMessages = attachMessages("user", readPromptFile());
 
-    fetchOpenAPI(initMessages)
-        .then((response) => {
-            let responseMessages = response.choices[0].message.content;
-            let splitContents = analyzeMessages(responseMessages);
+    let continueFetching = true;
 
-            let availableTokens = maxTokens - Number(response.usage.total_tokens);
-            if (splitContents.requiredFilepaths.length != 0 && (maxTokens *0.08 < availableTokens) ){
+    while (continueFetching) {
+        fetchOpenAPI(initMessages)
+            .then((response) => {
+                let responseMessages = response.choices[0].message.content;
+                let splitContents = analyzeMessages(responseMessages);
 
-                splitContents.requiredFilepaths.forEach((filePath) => {
-                    const filePathWithInputDir = path.join(inputProjectDir, filePath);
+                let availableTokens = maxTokens - Number(response.usage.total_tokens);
+                if (splitContents.requiredFilepaths.length != 0 && (maxTokens *0.08 < availableTokens) ){
 
-                    if (fs.existsSync(filePathWithInputDir)) {
-                        let fileContent = fs.readFileSync(filePathWithInputDir, 'utf-8');
-                        fileContent = `--- ${filePath}\n` + fileContent;
+                    splitContents.requiredFilepaths.forEach((filePath) => {
+                        const filePathWithInputDir = path.join(inputProjectDir, filePath);
 
-                        messagesTemplate = attachMessages("user", fileContent);
-                        fetchOpenAPI(messagesTemplate)
-                            .then((response) => {
-                                responseMessages = response.choices[0].message.content;
-                                fs.writeFileSync(tmpOutputPath, responseMessages);
-                                console.log('修正されたコードがtxtに保存されました');
-                            })
-                            .catch((error) => {
-                                console.error('OpenAIリクエスト中のエラー:', error);
-                            });
-                    } else {
-                        console.log(`ファイルが見つかりません: ${filePath}`);
-                    }
-                });
-            }
+                        if (fs.existsSync(filePathWithInputDir)) {
+                            let fileContent = fs.readFileSync(filePathWithInputDir, 'utf-8');
+                            fileContent = `--- ${filePath}\n` + fileContent;
 
-            fs.writeFileSync(path.join(outputDir, 'response.txt'), response.choices[0].message.content);
-            console.log('修正されたコードがtxtに保存されました');
-        
-        })
-        .catch((error) => {
-            console.error('OpenAIリクエスト中のエラー:', error);
-        });
+                            messagesTemplate = attachMessages("user", fileContent);
+                            fetchOpenAPI(messagesTemplate)
+                                .then((response) => {
+                                    responseMessages = response.choices[0].message.content;
+                                    fs.writeFileSync(tmpOutputPath, responseMessages);
+                                    console.log('修正されたコードがtxtに保存されました');
+                                })
+                                .catch((error) => {
+                                    console.error('OpenAIリクエスト中のエラー:', error);
+                                });
+                        } else {
+                            console.log(`ファイルが見つかりません: ${filePath}`);
+                        }
+                    });
+                } else {
+                    continueFetching = false;
+                }
+
+                fs.writeFileSync(path.join(outputDir, 'response.txt'), response.choices[0].message.content);
+                console.log('修正されたコードがtxtに保存されました');
+            
+            })
+            .catch((error) => {
+                console.error('OpenAIリクエスト中のエラー:', error);
+                continueFetching = false;
+            });
+    }
 }
 
 
@@ -185,10 +192,3 @@ function attachMessages(role, messages) {
 
     return messagesTemplate;
 }
-
-
-
-
-
-
-
