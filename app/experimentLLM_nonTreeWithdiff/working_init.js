@@ -11,8 +11,7 @@ const Handlebars = require('handlebars');
 const dotenv = require('dotenv');
 const path = require('path');
 
-const  {logInteraction} = require('./module/logger.js');
-const { log } = require('console');
+const { logInteraction } = require("/app/app/experimentLLM_nonTreeWithdiff/module/logger.js");
 
 // Load environment variables from .env file
 dotenv.config();
