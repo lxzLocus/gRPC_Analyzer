@@ -11,7 +11,7 @@ const Handlebars = require('handlebars');
 const dotenv = require('dotenv');
 const path = require('path');
 
-const { logInteraction } = require("/app/app/experimentLLM_nonTreeWithdiff/module/logger.js");
+const logInteraction = require("/app/app/experimentLLM_nonTreeWithdiff/module/logger.js");
 
 // Load environment variables from .env file
 dotenv.config();
@@ -41,9 +41,12 @@ let messagesTemplate = [
 
 //* main
 if (require.main === module) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');  // タイムスタンプを最初に作成
+    const logFilePath = path.join(`${outputDir}/log`, `${timestamp}_log.txt`); // ログファイルのパスを一度決めておく
+
     const initMessages = attachMessages("user", readPromptFile());
 
-    fetchAndProcessMessages(initMessages)
+    fetchAndProcessMessages(initMessages, logFilePath)
         .then(() => {
             console.log('処理が完了しました');
         })
@@ -64,19 +67,19 @@ function readPromptFile() {
     const suspectedFiles = fs.readFileSync(path.join(promptDir, '05_suspectedFiles.txt'), 'utf-8');
 
     const context = {
-        protoFileContent: protoFileContent,
+        protoFile: protoFileContent,
         protoFileChanges: protoFileChanges,
-        fileChangesContent: fileChangesContent,
+        fileChanges: fileChangesContent,
         allFilePaths: allFilePaths,
         suspectedFiles: suspectedFiles
     };
-    const template = Handlebars.compile(promptText);
+    const template = Handlebars.compile(promptText, { noEscape: true });
     const prompt = template(context);
 
     return prompt;
 }
 
-async function fetchAndProcessMessages(messages, continueFetching = true) {
+async function fetchAndProcessMessages(messages, logFilePath, continueFetching = true) {
     if (!continueFetching) {
         return;
     }
@@ -84,15 +87,16 @@ async function fetchAndProcessMessages(messages, continueFetching = true) {
     try {
         const response = await fetchOpenAPI(messages);
 
-        //ログの出力
-        logInteraction(messages[1].content, response.choices[0].message.content);
+        // ログ出力：ログのパスも渡す
+        logInteraction(messages[1].content, response.choices[0].message.content, logFilePath);
 
         let responseMessages = response.choices[0].message.content;
         let splitContents = analyzeMessages(responseMessages);
 
         let availableTokens = maxTokens - Number(response.usage.total_tokens);
 
-        if (splitContents.requiredFilepaths.length !== 0 && (maxTokens * 0.08 < availableTokens)) {
+        // ファイルの内容を適切に処理
+        if (splitContents.requiredFilepaths.length !== 0) {
             for (const filePath of splitContents.requiredFilepaths) {
                 const filePathWithInputDir = path.join(inputProjectDir, filePath);
 
@@ -104,16 +108,25 @@ async function fetchAndProcessMessages(messages, continueFetching = true) {
                     console.log(`ファイルが見つかりません: ${filePath}`);
                 }
             }
-            // もう一度fetchして再帰呼び出し
-            await fetchAndProcessMessages(attachMessages("user", splitContents.modifiedDiff), continueFetching);
+
+            // `%_Reply Required_%`を使ってファイルを取得する
+            await fetchAndProcessMessages(attachMessages("user", splitContents.modifiedDiff), logFilePath, continueFetching);
         } else {
+            // もしファイルがない場合は`continueFetching`をfalseに設定して終了
             continueFetching = false;
+        }
+
+        // 必要に応じてdiffを適用したファイルの内容を更新して再度fetchする場合
+        if (splitContents.modifiedDiff) {
+            // diffがある場合、再度fetchし、再帰的に処理を行う
+            await fetchAndProcessMessages(attachMessages("user", splitContents.modifiedDiff), logFilePath, continueFetching);
         }
 
     } catch (error) {
         console.error('OpenAIリクエスト中のエラー:', error);
     }
 }
+
 
 function analyzeMessages(messages) {
     const sections = {

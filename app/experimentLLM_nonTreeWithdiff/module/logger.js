@@ -1,13 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 
-const outputDir = "app/app/experimentLLM_nonTreeWithdiff/output/log";
-
-const timestamp = new Date().toISOString();
-
-// ログファイルのパスを設定
-const logFilePath = path.join(outputDir, `${timestamp}_log.txt`);
-
 /**
  * 入力プロンプトとレスポンスをログファイルに出力します。
  * 複数回呼び出された場合でも、1つのファイルに追記されます。
@@ -15,12 +8,16 @@ const logFilePath = path.join(outputDir, `${timestamp}_log.txt`);
  *
  * @param {string} prompt - 入力プロンプト
  * @param {string} response - レスポンス
+ * @param {string} logFilePath - ログファイルのパス
  */
-function logInteraction(prompt, response) {
-  const logEntry = `Input Prompt: \n ${prompt}\n Response: \n ${response}\n --- \n`;
+// logInteractionの変更
+function logInteraction(prompt, response, logFilePath) {
+  const logEntry = `%_Input Prompt_%: \n ${prompt}\n\n%_Response_%: \n ${response}\n\n ---------- \n\n`;
+
   try {
     fs.appendFileSync(logFilePath, logEntry, 'utf8');
     console.log('ログに保存しました。');
+
   } catch (error) {
     console.error('ログファイルへの書き込みに失敗しました:', error);
   }
