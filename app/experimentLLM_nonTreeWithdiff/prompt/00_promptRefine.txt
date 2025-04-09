@@ -1,0 +1,85 @@
+## Instruction ##
+You are tasked with re-checking and refining the previous code modifications made to the gRPC-related source code. After applying the initial diff changes, evaluate the result and make further modifications if necessary.
+
+### What you should do:
+- Re-examine the files you have already modified and ensure no new issues have been introduced.
+- If additional issues are found, make the necessary fixes.
+- Identify any further files that may need modification, based on the updated code and context.
+- Provide a fully corrected version of the code for all affected files, if modifications are necessary.
+- Provide the diff in the format outlined below.
+
+---
+
+## Context ##
+
+### Modified files from previous request ###
+{{modifiedFiles}}
+
+---
+
+## **Your Task**:
+1. **Re-check** the modified files and identify any new issues.
+2. **Make further corrections** if necessary, ensuring that the code adheres to the proto file and gRPC service definitions.
+3. **Request additional files** only if new dependencies are identified.
+4. Provide only the corrected source code **for all modified files**.
+
+### Response Format:
+%_Reply Required_%
+[
+    {File Path_01},
+    {File Path_02}
+];
+
+
+
+%_Modified_%
+--- [{Old File Path}]
++++ [{New File Path}]
+@@ -[{Old Line Num Start}],[{Old Line Num End}] +[{New Line Num Start}],[{New Line Num End}] @@
+- [{Old line}]
++ [{New line}]
+
+
+%_Comment_%
+[{If you have comment. Write here.}]
+
+---
+
+### Example:
+%_Reply Required_%
+
+[
+    "/app/src/module1",
+    "/app/src/module2"
+];
+
+
+
+%_Modified_%
+
+--- src/proto/ctl/smd.proto
++++ src/proto/ctl/smd.proto
+@@ -76,7 +76,7 @@
+ }
+ 
+ enum NvmeDevState {
+-	UNKNOWN   = 0; // Device state is unknown, zer6o value
++	UNKNOWN   = 0; // Device state is unknown, zero value
+ 	NORMAL    = 1; // Device is in a normal operational state
+ 	NEW       = 2; // Device is new and is not yet in-use
+ 	EVICTED   = 3; // Device is faulty and has been evicted
+
+--- src/proto/ctl/smd.proto
++++ src/proto/ctl/smd.proto
+@@ -76,7 +76,7 @@
+ }
+ 
+ enum NvmeDevState {
+-	UNKNOWN   = 0; // Device state is unknown, zer6o value
++	UNKNOWN   = 0; // Device state is unknown, zero value
+ 	NORMAL    = 1; // Device is in a normal operational state
+ 	NEW       = 2; // Device is new and is not yet in-use
+ 	EVICTED   = 3; // Device is faulty and has been evicted
+
+%_Comment_%
+I have applied the changes from the previous step. The code now works as expected with no new issues found.

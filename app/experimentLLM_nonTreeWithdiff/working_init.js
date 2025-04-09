@@ -23,6 +23,7 @@ const outputDir = '/app/app/experimentLLM_nonTreeWithdiff/output';
 
 const promptDir = '/app/app/experimentLLM_nonTreeWithdiff/prompt';
 const promptTextfile = '00_prompt.txt';
+const promptRefineTextfile = '00_promptRefine.txt';
 
 const maxTokens = 128000;
 const maxCharacters = 1048576;
