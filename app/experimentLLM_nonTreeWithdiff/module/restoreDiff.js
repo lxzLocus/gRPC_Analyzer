@@ -1,79 +1,74 @@
-/*
-Docs
-
-元ソースコードとDiffをマージする
-
-
-*/
-
-
-/*
-modules
-*/
 const fs = require('fs');
 const path = require('path');
 
-const outputPath = '/app/app/experimentLLM_nonTreeWithdiff/output/diffMerge.txt';
+class RestoreDiff {
+    constructor(sourceCodePath) {
+        this.sourceCodePath = sourceCodePath;
+    }
 
+    applyDiff(diffOutput) {
+        const lines = diffOutput.split('\n');
+        let currentFile = null;
+        let relativePath = null;
+        let fileLines = [];
+        let inHunk = false;
+        let hunkIndex = 0;
+        let result = ''; // すべての修正内容を文字列型でまとめる
 
-if (require.main === module) {
-    const sourceCodePath = '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/src/control/server/harness.go';
-    const diffContentPath = 'app/experimentLLM_nonTreeWithdiff/module/diff.txt';
+        lines.forEach(line => {
+            if (line.startsWith('--- ')) {
+                // 1つ前のファイルの内容をresultに追加
+                if (relativePath && fileLines.length > 0) {
+                    result += `--- ${relativePath}\n`;
+                    result += fileLines.join('\n') + '\n\n';
+                }
 
-    mergeAndSave(sourceCodePath, diffContentPath, outputPath);
-}
+                // 新しいファイルの処理を開始
+                relativePath = line.substring(4).trim().replace(/^a\//, '');
+                fileLines = []; // 新しいファイルの内容を初期化
+            } else if (line.startsWith('+++ ')) {
+                const newPath = line.substring(4).trim().replace(/^b\//, '');
+                currentFile = path.join(this.sourceCodePath, newPath);
 
-/**
- * ソースコードとDiffをマージして結果をファイルに保存する
- * @param {string} sourceCodePath ソースコードのファイルパス
- * @param {string} diffContentPath Diffのファイルパス
- * @param {string} outputPath 出力先のファイルパス
- */
-function mergeAndSave(sourceCodePath, diffContentPath, outputPath) {
-    try {
-        // ソースコードとDiffを読み込む
-        const sourceCode = fs.readFileSync(sourceCodePath, 'utf-8');
-        const diffContent = fs.readFileSync(diffContentPath, 'utf-8');
+                if (fs.existsSync(currentFile)) {
+                    fileLines = fs.readFileSync(currentFile, 'utf-8').split('\n');
+                } else {
+                    console.warn(`File not found: ${currentFile}`);
+                    fileLines = [];
+                }
 
-        // applyDiffを適用してマージ
-        const mergedCode = applyDiff(sourceCode, diffContent);
+                inHunk = false;
+                hunkIndex = 0;
+            } else if (line.startsWith('@@')) {
+                const match = /@@ -(\d+),?\d* \+(\d+),?\d* @@/.exec(line);
+                if (match) {
+                    inHunk = true;
+                    hunkIndex = parseInt(match[2], 10) - 1;
+                }
+            } else if (inHunk && currentFile !== null) {
+                if (line.startsWith('-')) {
+                    const expectedLine = line.substring(1);
+                    if (fileLines[hunkIndex] === expectedLine) {
+                        fileLines.splice(hunkIndex, 1);
+                    }
+                } else if (line.startsWith('+')) {
+                    const addedLine = line.substring(1);
+                    fileLines.splice(hunkIndex, 0, addedLine);
+                    hunkIndex++;
+                } else {
+                    hunkIndex++;
+                }
+            }
+        });
 
-        // 結果をファイルに書き込む
-        fs.writeFileSync(outputPath, mergedCode, 'utf-8');
-        console.log(`Merged code written to ${outputPath}`);
-    } catch (error) {
-        console.error('Error during merge and save:', error);
+        // 最後のファイルの内容をresultに追加
+        if (relativePath && fileLines.length > 0) {
+            result += `--- ${relativePath}\n`;
+            result += fileLines.join('\n') + '\n';
+        }
+
+        return result.trim(); // 余分な改行を削除して返す
     }
 }
 
-/**
- * ソースコードにDiffを適用する
- * @param {string} originalCode 元のソースコード
- * @param {string} diffOutput Diffの内容
- * @returns {string} マージ後のコード
- */
-function applyDiff(originalCode, diffOutput) {
-    const originalLines = originalCode.split('\n'); // 元のコードを行ごとに分割
-    let resultLines = [...originalLines]; // 結果用のコード（最初は元のコードと同じ）
-
-    // diffOutputを行ごとに分割
-    const diffLines = diffOutput.split('\n');
-
-    // 各diff行を処理
-    diffLines.forEach(line => {
-        if (line.startsWith('-')) {
-            // `-` で始まる行は削除された行なので、元のコードから削除
-            const lineNumber = resultLines.indexOf(line.slice(1).trim()); // 追加前の行
-            if (lineNumber !== -1) {
-                resultLines.splice(lineNumber, 1); // 該当行を削除
-            }
-        } else if (line.startsWith('+')) {
-            // `+` で始まる行は追加された行なので、修正後のコードに追加
-            const newLine = line.slice(1).trim(); // `+` 記号を削除して行を取得
-            resultLines.push(newLine); // 結果に追加
-        }
-    });
-
-    // 最終的に修正後のコードを行ごとに結合して返す
-    return resultLines.join('\n');
-}
+module.exports = RestoreDiff;

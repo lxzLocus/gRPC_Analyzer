@@ -4,24 +4,45 @@ const Handlebars = require('handlebars');
 const dotenv = require('dotenv');
 const path = require('path');
 const logInteraction = require("/app/app/experimentLLM_nonTreeWithdiff/module/logger.js");
+const mergeAndSave = require('./module/restoreDiff.js'); // DiffManagerをインポート
+
+//実行ファイルが置かれているパス
+const appDirRoot = "/app/app/experimentLLM_nonTreeWithdiff";
+
 
 dotenv.config();
 
 class Config {
     constructor() {
-        this.inputProjectDir = "app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/";
-        this.outputDir = '/app/app/experimentLLM_nonTreeWithdiff/output';
-        this.promptDir = '/app/app/experimentLLM_nonTreeWithdiff/prompt';
+        this.inputProjectDir = "/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/";
+        this.outputDir = path.join(appDirRoot, 'output');
+        this.inputDir = path.join(appDirRoot, 'input');
         this.promptTextfile = '00_prompt.txt';
         this.promptRefineTextfile = '00_promptRefine.txt';
+        this.tmpDiffRestorePath = path.join(this.outputDir + 'tmpDiffRestore.txt');
         this.maxTokens = 128000;
+
+        // 一時ファイルを削除
+        if (fs.existsSync(this.tmpDiffRestorePath)) fs.unlinkSync(this.tmpDiffRestorePath);
     }
 
-    readPromptRefineFile() {
-        const promptRefineText = fs.readFileSync(path.join(this.config.promptDir, '00_promptRefine.txt'), 'utf-8');
-        
+    readPromptReplyFile(filesRequested, previousModifications, filesToReview) {
+        const promptRefineText = fs.readFileSync(path.join(this.config.promptDir, '00_promptReply.txt'), 'utf-8');
+
         const context = {
-            modifiedFiles: '{{modifiedFiles}}' // Placeholder for actual modified files
+            filesRequested: filesRequested,
+            previousModifications: previousModifications,
+            filesToReview: filesToReview
+        };
+        const template = Handlebars.compile(promptRefineText, { noEscape: true });
+        return template(context);
+    }
+
+    readPromptModifiedFile(modifiedFiles) {
+        const promptRefineText = fs.readFileSync(path.join(this.config.promptDir, '00_promptModified.txt'), 'utf-8');
+
+        const context = {
+            modifiedFiles: modifiedFiles
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
@@ -98,7 +119,7 @@ class FileManager {
         this.config = config;
     }
 
-    readPromptFile() {
+    readFirstPromptFile() {
         const promptText = fs.readFileSync(path.join(this.config.promptDir, this.config.promptTextfile), 'utf-8');
         const protoFileContent = fs.readFileSync(path.join(this.config.promptDir, '01_proto.txt'), 'utf-8');
         const protoFileChanges = fs.readFileSync(path.join(this.config.promptDir, '02_protoFileChanges.txt'), 'utf-8');
@@ -149,28 +170,61 @@ async function main() {
 
     try {
         await fetchAndProcessMessages(initMessages, logFilePath, openAIClient, messageHandler, config);
+
+        // 一時ファイルを削除
+        const diffFilePath = path.join(config.outputDir, 'tmp_modifiedDiff.txt');
+        if (fs.existsSync(diffFilePath)) fs.unlinkSync(diffFilePath);
+
         console.log('処理が完了しました');
     } catch (error) {
         console.error('処理中にエラーが発生しました:', error);
     }
 }
-
+/**
+ * OpenAI APIを使用してメッセージを処理し、必要に応じて再帰的に処理を続行します。
+ * また、`modified`タグのdiff結果を一時スペースに保存します。
+ *
+ * @param {Array<Object>} messages - OpenAI APIに送信するメッセージの配列。
+ * @param {string} logFilePath - ログファイルのパス。
+ * @param {OpenAIClient} openAIClient - OpenAI APIクライアントのインスタンス。
+ * @param {MessageHandler} messageHandler - メッセージを解析および操作するためのハンドラー。
+ * @param {Config} config - 設定情報を格納したオブジェクト。
+ * @param {boolean} [continueFetching=true] - 処理を続行するかどうかを示すフラグ。
+ * @returns {Promise<void>} - 非同期処理の完了を示すPromise。
+ *
+ * @throws {Error} - OpenAI APIリクエスト中のエラーやファイル操作エラーが発生した場合。
+ *
+ * @example
+ * const messages = [
+ *     { role: 'user', content: 'What is the weather today?' }
+ * ];
+ * const logFilePath = '/path/to/log.txt';
+ * const openAIClient = new OpenAIClient('your-api-key');
+ * const messageHandler = new MessageHandler();
+ * const config = new Config();
+ *
+ * await fetchAndProcessMessages(messages, logFilePath, openAIClient, messageHandler, config);
+ */
 async function fetchAndProcessMessages(messages, logFilePath, openAIClient, messageHandler, config, continueFetching = true) {
-    if (!continueFetching) {
-        return;
-    }
+    if (!continueFetching) return;
 
     try {
         const response = await openAIClient.fetchOpenAPI(messages);
 
         logInteraction(messages[1].content, response.choices[0].message.content, logFilePath);
 
-        let responseMessages = response.choices[0].message.content;
-        let splitContents = messageHandler.analyzeMessages(responseMessages);
+        const splitContents = messageHandler.analyzeMessages(response.choices[0].message.content);
+        const availableTokens = config.maxTokens - Number(response.usage.total_tokens);
 
-        let availableTokens = config.maxTokens - Number(response.usage.total_tokens);
+        // `modified`タグのdiff結果を保存
+        if (splitContents.modifiedDiff) {
+            
+        }
 
-        if (splitContents.requiredFilepaths.length !== 0) {
+
+        // `required`タグのファイルパスを取得
+        if (splitContents.requiredFilepaths) {
+            
             for (const filePath of splitContents.requiredFilepaths) {
                 const filePathWithInputDir = path.join(config.inputProjectDir, filePath);
 
@@ -178,16 +232,20 @@ async function fetchAndProcessMessages(messages, logFilePath, openAIClient, mess
                     let fileContent = fs.readFileSync(filePathWithInputDir, 'utf-8');
                     fileContent = `--- ${filePath}\n` + fileContent;
                 } else {
-                    console.log(`ファイルが見つかりません: ${filePath}`);
+                    console.error(`ファイルが見つかりません: ${filePath}`);
+                    return;
                 }
             }
 
-            await fetchAndProcessMessages(messageHandler.attachMessages("user", splitContents.modifiedDiff), logFilePath, openAIClient, messageHandler, config, continueFetching);
+            const promptReply = config.readPromptReplyFile(splitContents.requiredFilepaths, splitContents.modifiedDiff, splitContents.commentText);
+            await fetchAndProcessMessages(messageHandler.attachMessages("user", promptReply), logFilePath, openAIClient, messageHandler, config, continueFetching);
         } else {
             continueFetching = false;
         }
 
         if (splitContents.modifiedDiff) {
+            const restoredDiff = mergeAndSave(filePathWithInputDir, splitContents.modifiedDiff, path.join(config.outputDir, 'restoredDiff.txt'));
+            const promptModified = config.readPromptModifiedFile(restoredDiff);
             await fetchAndProcessMessages(messageHandler.attachMessages("user", splitContents.modifiedDiff), logFilePath, openAIClient, messageHandler, config, continueFetching);
         }
 

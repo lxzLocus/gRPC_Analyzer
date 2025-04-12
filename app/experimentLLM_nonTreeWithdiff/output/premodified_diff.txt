@@ -1,0 +1,61 @@
+--- src/proto/ctl/smd.proto
++++ src/proto/ctl/smd.proto
+@@ -75,7 +75,7 @@
+ message BioHealthResp {
+ 	reserved 1, 2;
+ 	uint64 timestamp = 3;
+ 	// Device health details
+ 	uint32 warn_temp_time = 5;
+ 	uint32 crit_temp_time = 6;
+-	// Zer6o value here indicates unknown state
++	// Zero value here indicates unknown state
+ 	uint64 ctrl_busy_time = 7;
+ 	uint64 power_cycles = 8;
+ 	uint64 power_on_hours = 9;
+ }
+
+--- src/control/server/ctl_smd_rpc.go
++++ src/control/server/ctl_smd_rpc.go
+@@ -54,7 +54,7 @@
+ 
+ 	"github.com/daos-stack/daos/src/control/common"
+ 	"github.com/daos-stack/daos/src/control/common/proto/convert"
+ 	ctlpb "github.com/daos-stack/daos/src/control/common/proto/ctl"
+-	"github.com/daos-stack/daos/src/control/drpc"
++	"github.com/daos-stack/daos/src/control/dRPC"
+ 	"github.com/daos-stack/daos/src/control/lib/daos"
+ 	"github.com/daos-stack/daos/src/control/lib/hardware"
+ 	"github.com/daos-stack/daos/src/control/lib/ranklist"
+
+@@ -464,7 +464,7 @@
+ }
+ 
+ // SmdManage implements the method defined for the Management Service.
+ //
+-// Manage SMD devices by dispatching appropriate dRPC requests
++// Manage SMD devices by dispatching appropriate dRPC requests.
+ // based on the operation specified in the request.
+ // For replace or faulty operations, expects only one device ID.
+ // For LED operations, supports multiple device IDs.
+ func (svc *ControlService) SmdManage(ctx context.Context, req *ctlpb.SmdManageReq) (*ctlpb.SmdManageResp, error) {
+@@ -549,7 +549,7 @@
+ 			devRes, err := sendManageReq(ctx, engine, drpc.MethodSetFaultyState, dReq)
+ 			if err != nil {
+ 				return nil, errors.Wrap(err, msg)
+ 			}
+-			addManageRespIDOnFail(svc.log, devRes, devs.getFirst())
++			addManageRespIDOnFail(svc.log, devRes, devs.getFirst())
+ 			devResults = append(devResults, devRes)
+ 		case *ctlpb.SmdManageReq_Led:
+ 			if len(devs) == 0 {
+ 				// Operate on all devices by default.
+@@ -553,7 +553,7 @@
+ 			}
+ 			// Multiple addresses are supported in LED request.
+ 			for _, dev := range devs {
+ 				dReq := req.GetLed()
+-				// ID should by now have been resolved to a transport (PCI) address.
++				// ID should have been resolved to a transport (PCI) address by now.
+ 				if dev.trAddr == "" {
+ 					return nil, errors.Errorf("device uuid %s not resolved to a PCI address",
+ 						dev.uuid)

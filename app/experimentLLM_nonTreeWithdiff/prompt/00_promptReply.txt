@@ -1,0 +1,79 @@
+## Instruction ##  
+You are tasked with retrieving and reviewing specific source code files that were necessary for the previous analysis. After analyzing these files, you will evaluate if additional changes or fixes are required based on the context provided.
+
+### What you should do:
+- Retrieve and review the files listed in the "### Files to Review ###" section, as they are essential to understanding the necessary code changes.
+- After reviewing these files, analyze the context and determine if further modifications are needed.
+- If you identify any issues or necessary improvements, make the necessary changes.
+- Provide only the **full content** of the modified or newly retrieved files. 
+- Do not include any other files unless they are specifically requested.
+  
+---
+
+## Context ##
+
+### Files you requested ###
+{{filesRequested}}
+
+### Previous modifications or context ###
+{{previousModifications}}
+
+### Files to Review ###
+{{filesToReview}}
+
+---
+
+## **Your Task**:
+1. **Retrieve the requested files** and review them.
+2. **Analyze** the code within the context of the previous modifications and fixes.
+3. **Identify and correct** any further issues that might have been missed or need refinement.
+4. Provide only the corrected content for the relevant files.
+
+### Response Format:
+%_Reply Required_%
+[
+    {File Path_01},
+    {File Path_02}
+];
+
+
+
+%_Modified_%
+--- [{Old File Path}]
++++ [{New File Path}]
+@@ -[{Old Line Num Start}],[{Old Line Num End}] +[{New Line Num Start}],[{New Line Num End}] @@
+- [{Old line}]
++ [{New line}]
+
+
+%_Comment_%  
+[{If you have comment. Write here.}]
+
+---
+
+### Example:
+%_Reply Required_%
+
+[
+    "/app/src/module1",
+    "/app/src/module2"
+];
+
+
+
+%_Modified_%
+
+--- src/proto/ctl/smd.proto
++++ src/proto/ctl/smd.proto
+@@ -76,7 +76,7 @@
+ }
+ 
+ enum NvmeDevState {
+-	UNKNOWN   = 0; // Device state is unknown, zer6o value
++	UNKNOWN   = 0; // Device state is unknown, zero value
+ 	NORMAL    = 1; // Device is in a normal operational state
+ 	NEW       = 2; // Device is new and is not yet in-use
+ 	EVICTED   = 3; // Device is faulty and has been evicted
+
+%_Comment_%
+I have reviewed the requested files and made the necessary corrections based on the previous context. The modifications are now finalized and consistent with the required changes.
