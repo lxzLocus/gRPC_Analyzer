@@ -4,7 +4,8 @@ const Handlebars = require('handlebars');
 const dotenv = require('dotenv');
 const path = require('path');
 const logInteraction = require("/app/app/experimentLLM_nonTreeWithdiff/module/logger.js");
-const mergeAndSave = require('./module/restoreDiff.js'); // DiffManagerをインポート
+const RestoreDiff = require('/app/app/experimentLLM_nonTreeWithdiff/module/restoreDiff.js');
+
 
 //実行ファイルが置かれているパス
 const appDirRoot = "/app/app/experimentLLM_nonTreeWithdiff";
@@ -17,6 +18,7 @@ class Config {
         this.inputProjectDir = "/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/";
         this.outputDir = path.join(appDirRoot, 'output');
         this.inputDir = path.join(appDirRoot, 'input');
+        this.promptDir = path.join(appDirRoot, 'prompt');
         this.promptTextfile = '00_prompt.txt';
         this.promptRefineTextfile = '00_promptRefine.txt';
         this.tmpDiffRestorePath = path.join(this.outputDir + 'tmpDiffRestore.txt');
@@ -26,23 +28,23 @@ class Config {
         if (fs.existsSync(this.tmpDiffRestorePath)) fs.unlinkSync(this.tmpDiffRestorePath);
     }
 
-    readPromptReplyFile(filesRequested, previousModifications, filesToReview) {
-        const promptRefineText = fs.readFileSync(path.join(this.config.promptDir, '00_promptReply.txt'), 'utf-8');
+    readPromptReplyFile(filesRequested, modifiedDiff, commentText) {
+        const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptReply.txt'), 'utf-8');
 
         const context = {
-            filesRequested: filesRequested,
-            previousModifications: previousModifications,
-            filesToReview: filesToReview
+            filesToReview: filesRequested, // required section from previous message
+            previousModifications: modifiedDiff, // diff from previous step
+            commentText: commentText // any explanation from LLM
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
     }
 
     readPromptModifiedFile(modifiedFiles) {
-        const promptRefineText = fs.readFileSync(path.join(this.config.promptDir, '00_promptModified.txt'), 'utf-8');
+        const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified.txt'), 'utf-8');
 
         const context = {
-            modifiedFiles: modifiedFiles
+            modifiedFiles: modifiedFiles // diff that was just applied or restored
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
@@ -157,6 +159,14 @@ class OpenAIClient {
     }
 }
 
+
+
+if (require.main === module) {
+    main();
+}
+
+
+
 async function main() {
     const config = new Config();
     const fileManager = new FileManager(config);
@@ -166,13 +176,13 @@ async function main() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const logFilePath = path.join(`${config.outputDir}/log`, `${timestamp}_log.txt`);
 
-    const initMessages = messageHandler.attachMessages("user", fileManager.readPromptFile());
+    const initMessages = messageHandler.attachMessages("user", fileManager.readFirstPromptFile());
 
     try {
         await fetchAndProcessMessages(initMessages, logFilePath, openAIClient, messageHandler, config);
 
         // 一時ファイルを削除
-        const diffFilePath = path.join(config.outputDir, 'tmp_modifiedDiff.txt');
+        const diffFilePath = path.join(config.outputDir, 'tmp_restoredDiff.txt');
         if (fs.existsSync(diffFilePath)) fs.unlinkSync(diffFilePath);
 
         console.log('処理が完了しました');
@@ -218,42 +228,63 @@ async function fetchAndProcessMessages(messages, logFilePath, openAIClient, mess
 
         // `modified`タグのdiff結果を保存
         if (splitContents.modifiedDiff) {
-            
+            const restoreDiff = new RestoreDiff(config.inputProjectDir);
+            const restoredContent = restoreDiff.applyDiff(splitContents.modifiedDiff);
+            fs.writeFileSync(path.join(config.outputDir, 'tmp_restoredDiff.txt'), restoredContent, 'utf-8');
         }
 
 
-        // `required`タグのファイルパスを取得
-        if (splitContents.requiredFilepaths) {
-            
-            for (const filePath of splitContents.requiredFilepaths) {
-                const filePathWithInputDir = path.join(config.inputProjectDir, filePath);
+        // reply required部分を使って再帰的に問い合わせ
+        if (splitContents.requiredFilepaths.length > 0) {
+            const requiredFileContents = [];
 
-                if (fs.existsSync(filePathWithInputDir)) {
-                    let fileContent = fs.readFileSync(filePathWithInputDir, 'utf-8');
-                    fileContent = `--- ${filePath}\n` + fileContent;
+            for (const filePath of splitContents.requiredFilepaths) {
+                const fullPath = path.join(config.inputProjectDir, filePath);
+
+                if (fs.existsSync(fullPath)) {
+                    const content = fs.readFileSync(fullPath, 'utf-8');
+                    requiredFileContents.push(`--- ${filePath}\n${content}`);
                 } else {
-                    console.error(`ファイルが見つかりません: ${filePath}`);
-                    return;
+                    console.warn(`ファイルが見つかりません: ${filePath}`);
                 }
             }
 
-            const promptReply = config.readPromptReplyFile(splitContents.requiredFilepaths, splitContents.modifiedDiff, splitContents.commentText);
-            await fetchAndProcessMessages(messageHandler.attachMessages("user", promptReply), logFilePath, openAIClient, messageHandler, config, continueFetching);
-        } else {
-            continueFetching = false;
+            const promptReply = config.readPromptReplyFile(
+                requiredFileContents.join('\n\n'),
+                splitContents.modifiedDiff,
+                splitContents.commentText
+            );
+
+            await fetchAndProcessMessages(
+                messageHandler.attachMessages("user", promptReply),
+                logFilePath,
+                openAIClient,
+                messageHandler,
+                config,
+                continueFetching
+            );
         }
 
+        // diff部分が存在すれば、それを適用し次の問い合わせ
         if (splitContents.modifiedDiff) {
-            const restoredDiff = mergeAndSave(filePathWithInputDir, splitContents.modifiedDiff, path.join(config.outputDir, 'restoredDiff.txt'));
-            const promptModified = config.readPromptModifiedFile(restoredDiff);
-            await fetchAndProcessMessages(messageHandler.attachMessages("user", splitContents.modifiedDiff), logFilePath, openAIClient, messageHandler, config, continueFetching);
+            const promptModified = config.readPromptModifiedFile(splitContents.modifiedDiff);
+
+            await fetchAndProcessMessages(
+                messageHandler.attachMessages("user", promptModified),
+                logFilePath,
+                openAIClient,
+                messageHandler,
+                config,
+                continueFetching
+            );
         }
 
     } catch (error) {
-        console.error('OpenAIリクエスト中のエラー:', error);
+        console.error('Error in fetchAndProcessMessages:', error);
+        throw error; // エラーを再スローして呼び出し元で処理できるようにする
     }
 }
 
-if (require.main === module) {
-    main();
-}
+module.exports = {
+    main,
+};
