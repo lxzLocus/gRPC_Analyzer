@@ -267,6 +267,12 @@ async function fetchAndProcessMessages(messages, logFilePath, openAIClient, mess
 
         // diff部分が存在すれば、それを適用し次の問い合わせ
         if (splitContents.modifiedDiff) {
+
+            const tmpDiffRestorePath = path.join(config.outputDir, 'tmp_restoredDiff.txt');
+            if (fs.existsSync(tmpDiffRestorePath)) {
+                const restoredDiffContent = fs.readFileSync(tmpDiffRestorePath, 'utf-8');
+                splitContents.modifiedDiff = restoredDiffContent;
+            }
             const promptModified = config.readPromptModifiedFile(splitContents.modifiedDiff);
 
             await fetchAndProcessMessages(
@@ -278,6 +284,9 @@ async function fetchAndProcessMessages(messages, logFilePath, openAIClient, mess
                 continueFetching
             );
         }
+
+        // 処理を終了する
+        if()
 
     } catch (error) {
         console.error('Error in fetchAndProcessMessages:', error);
