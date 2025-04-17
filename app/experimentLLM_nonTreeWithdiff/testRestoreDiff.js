@@ -17,6 +17,16 @@ function testRestoreDiff() {
 
     const modifiedFiles = restoreDiff.applyDiff(diffOutput);
 
+    // "%%_Fin_%%"が返された場合のみ処理を終了する（出力のみに厳密判定）
+    const isFinTag =
+        modifiedFiles.trim() === '%%_Fin_%%' ||
+        modifiedFiles.split('\n').pop().trim() === '%%_Fin_%%';
+
+    if (isFinTag) {
+        console.log('終了タグ(%%_Fin_%%)が返されたため処理を終了します。');
+        return;
+    }
+
     fs.writeFileSync(path.join(outputDir, 'restored.txt'), modifiedFiles, 'utf-8');
 
     console.log('All diffs applied and written to one file successfully.');

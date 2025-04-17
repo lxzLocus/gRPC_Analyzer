@@ -15,7 +15,7 @@ dotenv.config();
 
 class Config {
     constructor() {
-        this.inputProjectDir = "/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/";
+        this.inputProjectDir = "/app/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/";
         this.outputDir = path.join(appDirRoot, 'output');
         this.inputDir = path.join(appDirRoot, 'input');
         this.promptDir = path.join(appDirRoot, 'prompt');
@@ -34,7 +34,6 @@ class Config {
         const context = {
             filesToReview: filesRequested, // required section from previous message
             previousModifications: modifiedDiff, // diff from previous step
-            commentText: commentText // any explanation from LLM
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
@@ -62,10 +61,17 @@ class MessageHandler {
     }
 
     attachMessages(role, messages) {
-        this.messagesTemplate.push({
-            role: role,
-            content: messages
-        });
+        // 新しいテンプレートのみをセットし、過去のメッセージをリセット
+        this.messagesTemplate = [
+            {
+                role: 'system',
+                content: "Fix or improve program code related to gRPC. It may contain potential bugs. Refer to the proto to make code corrections."
+            },
+            {
+                role: role,
+                content: messages
+            }
+        ];
         return this.messagesTemplate;
     }
 
@@ -252,7 +258,6 @@ async function fetchAndProcessMessages(messages, logFilePath, openAIClient, mess
             const promptReply = config.readPromptReplyFile(
                 requiredFileContents.join('\n\n'),
                 splitContents.modifiedDiff,
-                splitContents.commentText
             );
 
             await fetchAndProcessMessages(
@@ -286,7 +291,14 @@ async function fetchAndProcessMessages(messages, logFilePath, openAIClient, mess
         }
 
         // 処理を終了する
-        if()
+        const isFinTag =
+            response.choices[0].message.content.trim() === '%%_Fin_%%' ||
+            response.choices[0].message.content.split('\n').pop().trim() === '%%_Fin_%%';
+ 
+        if (isFinTag) {
+            console.log('終了タグ(%%_Fin_%%)が返されたため処理を終了します。');
+            return;
+        }
 
     } catch (error) {
         console.error('Error in fetchAndProcessMessages:', error);
