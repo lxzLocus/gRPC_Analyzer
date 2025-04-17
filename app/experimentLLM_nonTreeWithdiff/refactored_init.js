@@ -107,7 +107,7 @@ class MessageHandler {
                     sections.requiredFilepaths.push(match[1]);
                 } else if (!trimmed.startsWith('[') && !trimmed.startsWith(']')) {
                     sections.requiredFilepaths.push(trimmed);
-                }
+                }[]
             } else if (currentTag === 'modified') {
                 modifiedBuffer.push(line);
             } else if (currentTag === 'comment') {
