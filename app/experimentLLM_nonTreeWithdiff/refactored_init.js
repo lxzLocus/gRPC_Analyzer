@@ -274,10 +274,17 @@ async function fetchAndProcessMessages(messages, logFilePath, openAIClient, mess
         if (splitContents.modifiedDiff) {
 
             const tmpDiffRestorePath = path.join(config.outputDir, 'tmp_restoredDiff.txt');
+
+            //すでにdiffを適用したファイルが存在するかどうか
             if (fs.existsSync(tmpDiffRestorePath)) {
                 const restoredDiffContent = fs.readFileSync(tmpDiffRestorePath, 'utf-8');
                 splitContents.modifiedDiff = restoredDiffContent;
+            }else{
+                const restoreDiff = new RestoreDiff(config.inputProjectDir);
+                const restoredContent = restoreDiff.applyDiff(splitContents.modifiedDiff);
+                fs.writeFileSync(tmpDiffRestorePath, restoredContent, 'utf-8');
             }
+
             const promptModified = config.readPromptModifiedFile(splitContents.modifiedDiff);
 
             await fetchAndProcessMessages(

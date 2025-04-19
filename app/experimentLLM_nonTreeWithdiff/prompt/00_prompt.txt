@@ -1,4 +1,4 @@
-＃＃ Instruction ＃＃
+## Instruction ##
 You are tasked with identifying and fixing potential gRPC-related issues in the source code. You will be provided with a list of file paths and some specific files where potential issues may exist. If additional files need to be referenced, indicate them with a "%_Reply Required_%" tag at the top of your response, followed by the file paths you wish to access.
 
 ### What you should do:
