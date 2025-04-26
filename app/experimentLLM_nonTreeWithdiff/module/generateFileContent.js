@@ -1,15 +1,22 @@
-/*
-unix diff ぽい形式で，ファイルの内容を出力するスクリプト
-*/
+/**
+ * unix diff ぽい形式で，ファイルの内容を出力するスクリプト
+ * 
+ * #05_suspectedFiles.txt
+ * 
+ * @module generateFileContent
+ * @description ファイルの内容を出力する
+ * @example
+ * // 使用例
+ * const results = await copyFiles(filePaths);
+ */
 
 const fs = require('fs');
 const path = require('path');
 
-const outputDir = '/app/app/experimentLLM/output';
-const outputFilePath = path.join(outputDir, 'copied_files.txt');
-
 /* __MAIN__ */
 if (require.main === module) {
+    const outputDir = '/app/app/experimentLLM/output';
+    const outputFilePath = path.join(outputDir, 'copied_files.txt');
     const filePaths = [
         '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/src/bio/smd.pb-c.c',
         '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/src/control/server/harness.go',

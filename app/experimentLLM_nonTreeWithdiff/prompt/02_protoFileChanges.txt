@@ -9,3 +9,15 @@
  	NORMAL    = 1; // Device is in a normal operational state
  	NEW       = 2; // Device is new and is not yet in-use
  	EVICTED   = 3; // Device is faulty and has been evicted
+
+--- /app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/src/proto/ctl/smd.proto
++++ /app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/merge_12944/src/proto/ctl/smd.proto
+@@ -76,7 +76,7 @@
+ }
+ 
+ enum NvmeDevState {
+-	UNKNOWN   = 0; // Device state is unknown, zer6o value
++	UNKNOWN   = 0; // Device state is unknown, zero value
+ 	NORMAL    = 1; // Device is in a normal operational state
+ 	NEW       = 2; // Device is new and is not yet in-use
+ 	EVICTED   = 3; // Device is faulty and has been evicted

@@ -1,9 +1,21 @@
+/**
+ * `premerge` ディレクトリと `merge` ディレクトリ内のファイルを比較し、
+ * 変更のあったファイルを検出して結果を JSON ファイルとして保存するモジュール
+ * 
+ * #03_fileChanges.txt
+ * 
+ * @module generateFileChanged
+ * @description ファイルの内容差分を出力するものではない
+ * @example
+ * // 使用例
+ * const results = await getChangedFiles(inputDir, '');
+ */
+
+
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const outputDir = '/app/app/experimentLLM_nonTrreeWithdiff/output';
-const outputFilePath = path.join(outputDir, 'changed_files.json');
 
 // 無視するフォルダや拡張子を定義
 const ignore = {
@@ -13,6 +25,8 @@ const ignore = {
 
 /* __MAIN__ */
 if (require.main === module) {
+    const outputDir = '/app/app/experimentLLM_nonTrreeWithdiff/output';
+    const outputFilePath = path.join(outputDir, 'changed_files.json');
     const inputDir = '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers';
     const fileExtension = ''; // 必要に応じて変更可能
 
@@ -21,7 +35,7 @@ if (require.main === module) {
 
     (async () => {
         try {
-            const results = await compareFiles(inputDir, fileExtension);
+            const results = await getChangedFiles(inputDir, fileExtension);
             fs.writeFileSync(outputFilePath, JSON.stringify(results, null, 2), 'utf8');
             console.log(`変更のあったファイルが ${outputFilePath} に保存されました。`);
         } catch (error) {
@@ -31,34 +45,10 @@ if (require.main === module) {
 }
 
 // メインの比較関数
-async function compareFiles(inputDir, extension) {
+async function getChangedFiles(premergePath, mergePath, extension) {
     try {
-        // 拡張子が指定されていない場合の警告
-        if (!extension) {
-            console.warn('Warning: No file extension specified. All files will be processed.');
-        }
-
-        // inputDir の存在チェック
-        if (!fs.existsSync(inputDir)) {
-            throw new Error(`Input directory ${inputDir} does not exist`);
-        }
-
-        // `premerge`と`merge`ディレクトリを検出
-        const premergeDir = fs.readdirSync(inputDir).find(dir => dir.startsWith('premerge'));
-        const mergeDir = fs.readdirSync(inputDir).find(dir => dir.startsWith('merge'));
-
-        if (!premergeDir || !mergeDir) {
-            throw new Error('premerge または merge ディレクトリが見つかりません');
-        }
-
-        // フルパスの生成
-        const premergePath = path.join(inputDir, premergeDir);
-        const mergePath = path.join(inputDir, mergeDir);
-
         // 2つのディレクトリから対象ファイルリストを取得（無視リストを考慮）
         const premergeFiles = getFilesRecursive(premergePath, extension, ignore);
-
-        console.log('Premerge Files:', premergeFiles); // デバッグ用
 
         const diffResults = [];
 
@@ -147,3 +137,4 @@ function diffFiles(file1, file2) {
     });
 }
 
+module.exports = { getChangedFiles };
