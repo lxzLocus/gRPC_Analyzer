@@ -25,9 +25,10 @@ const ignore = {
 
 /* __MAIN__ */
 if (require.main === module) {
-    const outputDir = '/app/app/experimentLLM_nonTrreeWithdiff/output';
+    const outputDir = '/app/app/experimentLLM_nonTreeWithdiff/output';
     const outputFilePath = path.join(outputDir, 'changed_files.json');
-    const inputDir = '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers';
+    const premergePath = '/app/dataset/confirmed/pravega/Issue_850-_Fix_for_intermittent_end_to_end_test_failures/premerge_853';
+    const mergePath = '/app/dataset/confirmed/pravega/Issue_850-_Fix_for_intermittent_end_to_end_test_failures/merge_853';
     const fileExtension = ''; // 必要に応じて変更可能
 
     // 出力ファイルを初期化
@@ -35,7 +36,7 @@ if (require.main === module) {
 
     (async () => {
         try {
-            const results = await getChangedFiles(inputDir, fileExtension);
+            const results = await getChangedFiles(premergePath, mergePath,fileExtension);
             fs.writeFileSync(outputFilePath, JSON.stringify(results, null, 2), 'utf8');
             console.log(`変更のあったファイルが ${outputFilePath} に保存されました。`);
         } catch (error) {

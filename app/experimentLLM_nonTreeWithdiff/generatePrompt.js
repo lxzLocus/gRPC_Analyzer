@@ -72,33 +72,55 @@ if (require.main === module) {
             // 01_proto
         const protoContentList = findFiles(premergePath, '.proto');
         const protoFilePath = path.join(dirPath, '01_proto.txt');
-        if (!fs.existsSync(protoFilePath)) {
-            fs.writeFileSync(protoFilePath, JSON.stringify(protoContentList, null, 2), 'utf8');
+
+        // 既存のファイルがあれば削除
+        if (fs.existsSync(protoFilePath)) {
+            fs.unlinkSync(protoFilePath);
         }
+        fs.writeFileSync(protoFilePath, JSON.stringify(protoContentList, null, 2), 'utf8');
+        
 
         // 02_protoFileChanges
         (async () => {
             const diffResults = await getFilesDiff(premergePath, mergePath, '.proto');
             const protoFileChangesPath = path.join(dirPath, '02_protoFileChanges.txt');
+            // 既存のファイルがあれば削除
+            if (fs.existsSync(protoFileChangesPath)) {
+                fs.unlinkSync(protoFileChangesPath);
+            }
+            // 新しいファイルを作成
             for (const result of diffResults) {
-                fs.appendFileSync(protoFileChangesPath, result.diff + '\n', 'utf8');
+                try {
+                    fs.appendFileSync(protoFileChangesPath, result.diff + '\n', 'utf8');
+                } catch (error) {
+                    console.error(`Error appending to file: ${protoFileChangesPath}`, error);
+                }
             }
         })();
 
         // 03_fileChanges
-        const changedFiles = getChangedFiles(premergePath, mergePath, '.proto');
-        const fileChangesPath = path.join(dirPath, '03_fileChanges.txt');
-        if (!fs.existsSync(fileChangesPath)) {
+        (async () => {
+            const changedFiles = await getChangedFiles(premergePath, mergePath, '');
+            console.log('Changed Files:', changedFiles); // デバッグ用
+            const fileChangesPath = path.join(dirPath, '03_fileChanges.txt');
+
+            // 既存のファイルがあれば削除
+            if (fs.existsSync(fileChangesPath)) {
+                fs.unlinkSync(fileChangesPath);
+            }
             fs.writeFileSync(fileChangesPath, JSON.stringify(changedFiles, null, 2), 'utf8');
-        }
+        })();
 
         // 04_allFilePaths
         const allFilePaths = getPathTree(premergePath);
         const allFilePathsPath = path.join(dirPath, '04_allFilePaths.txt');
-        if (!fs.existsSync(allFilePathsPath)) {
-            fs.writeFileSync(allFilePathsPath, JSON.stringify(allFilePaths, null, 2), 'utf8');
+
+        // 既存のファイルがあれば削除
+        if (fs.existsSync(allFilePathsPath)) {
+            fs.unlinkSync(allFilePathsPath);
         }
+        fs.writeFileSync(allFilePathsPath, JSON.stringify(allFilePaths, null, 2), 'utf8');
+        
         
     });
 }
-

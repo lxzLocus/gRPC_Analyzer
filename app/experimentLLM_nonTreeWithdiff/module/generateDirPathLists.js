@@ -10,6 +10,7 @@
  * const filePaths = getPathTree(targetDir, ignore);
  */
 
+const { create } = require('domain');
 const fs = require('fs');
 const path = require('path');
 
@@ -17,7 +18,7 @@ const ignore = ['.git', 'node_modules', 'output', '.git_disabled'];
 
 // メイン処理
 if (require.main === module) {
-    const targetDir = '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/';
+    const targetDir = '/app/dataset/confirmed/WAII/Protobuf_compression';
     const outputPath = '/app/app/experimentLLM_nonTreeWithdiff/output';
     const outputFilePath = path.join(outputPath, 'filePaths.json');
     
@@ -37,19 +38,28 @@ if (require.main === module) {
  * @returns {string[]} - ファイルパスリスト
  */
 function getPathTree(dir) {
-    let fileList = [];
-    fs.readdirSync(dir).forEach((file) => {
-        const fullPath = path.join(dir, file);
-        if (ignore.some((ignored) => fullPath.includes(ignored))) return;
-        fs.statSync(fullPath).isDirectory()
-            ? fileList.push(...getPathTree(fullPath, ignore))
-            : fileList.push(fullPath);
-    });
-
+    const fileList = createPathList(dir);
     const tree = buildPathTree(fileList, dir);
 
     return tree;
 }
+
+
+function createPathList(dirPath) {
+    let fileList = [];
+
+    fs.readdirSync(dirPath).forEach((file) => {
+        const fullPath = path.join(dirPath, file);
+        if (ignore.some((ignored) => fullPath.includes(ignored))) return;
+
+        fs.statSync(fullPath).isDirectory()
+            ? fileList.push(...createPathList(fullPath))
+            : fileList.push(fullPath);
+    });
+
+    return fileList; // 修正: fileListを返す
+}
+
 
 /**
  * ファイルパスのリストをツリー構造のオブジェクトに変換
@@ -82,6 +92,9 @@ function buildPathTree(filePaths, baseDir) {
  * @param {object} data - 階層構造データ
  */
 function writePathsToJson(outputFilePath, data) {
+    if (fs.existsSync(outputFilePath)) {
+        fs.unlinkSync(outputFilePath);
+    }
     fs.writeFileSync(outputFilePath, JSON.stringify(data, null, 2), 'utf-8');
     console.log(`ファイルパスが ${outputFilePath} にJSON形式で保存されました。`);
 }
