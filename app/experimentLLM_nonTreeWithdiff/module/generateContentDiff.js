@@ -16,8 +16,8 @@ const path = require('path');
 
 /* __MAIN__ */
 if (require.main === module) {
-    const premergePath = '/app/dataset/confirmed/daos/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944';
-    const mergePath = '/app/dataset/confirmed/daos/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/merge_12944';
+    const premergePath = '/app/dataset/confirmed/pravega/Issue_2460-_When_sending_no_credentials-_exception_returned_has_UNKNOWN_status/premerge_2475';
+    const mergePath = '/app/dataset/confirmed/pravega/Issue_2460-_When_sending_no_credentials-_exception_returned_has_UNKNOWN_status/merge_2475';
     const fileExtension = 'proto'; // 必要に応じて変更可能
 
     (async () => {

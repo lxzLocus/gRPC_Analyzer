@@ -82,19 +82,23 @@ if (require.main === module) {
 
         // 02_protoFileChanges
         (async () => {
-            const diffResults = await getFilesDiff(premergePath, mergePath, '.proto');
+            const diffResults = await getFilesDiff(premergePath, mergePath, 'proto');
             const protoFileChangesPath = path.join(dirPath, '02_protoFileChanges.txt');
-            // 既存のファイルがあれば削除
-            if (fs.existsSync(protoFileChangesPath)) {
-                fs.unlinkSync(protoFileChangesPath);
-            }
-            // 新しいファイルを作成
-            for (const result of diffResults) {
-                try {
-                    fs.appendFileSync(protoFileChangesPath, result.diff + '\n', 'utf8');
-                } catch (error) {
-                    console.error(`Error appending to file: ${protoFileChangesPath}`, error);
+            if (diffResults.length > 0) {
+                // 既存のファイルがあれば削除
+                if (fs.existsSync(protoFileChangesPath)) {
+                    fs.unlinkSync(protoFileChangesPath);
                 }
+                // 新しいファイルを作成
+                for (const result of diffResults) {
+                    try {
+                        fs.appendFileSync(protoFileChangesPath, result.diff + '\n', 'utf8');
+                    } catch (error) {
+                        console.error(`Error appending to file: ${protoFileChangesPath}`, error);
+                    }
+                }
+            } else {
+                console.log('No proto file changes detected, no file created.');
             }
         })();
 
