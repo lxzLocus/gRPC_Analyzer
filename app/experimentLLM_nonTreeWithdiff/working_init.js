@@ -17,9 +17,13 @@ const logInteraction = require("/app/app/experimentLLM_nonTreeWithdiff/module/lo
 dotenv.config();
 
 //* configs
+const datasetProjectDir = "/app/dataset/confirmed/daos/DAOS-14334_control-_Fix_PoolCreateResp-leader";
+
 // premergeまで指定
-const inputProjectDir = "app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/";
-const outputDir = '/app/app/experimentLLM_nonTreeWithdiff/output';
+const inputPreProjectDir = fs.readdirSync(datasetProjectDir)
+    .map(dir => path.join(datasetProjectDir, dir))  // フルパスに変換
+    .find(filePath => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('premerge_'));
+
 
 const promptDir = '/app/app/experimentLLM_nonTreeWithdiff/prompt';
 const promptTextfile = '00_prompt.txt';
@@ -43,7 +47,11 @@ let messagesTemplate = [
 //* main
 if (require.main === module) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');  // タイムスタンプを最初に作成
-    const logFilePath = path.join(`${outputDir}/log`, `${timestamp}_log.txt`); // ログファイルのパスを一度決めておく
+    const logDir = path.join(datasetProjectDir, 'log');
+    if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+    }
+    const logFilePath = path.join(logDir, `${timestamp}_log.txt`); // ログファイルのパスを一度決めておく
 
     const initMessages = attachMessages("user", readPromptFile());
 
@@ -61,11 +69,11 @@ if (require.main === module) {
 //* functions
 function readPromptFile() {
     const promptText = fs.readFileSync(path.join(promptDir, promptTextfile), 'utf-8')
-    const protoFileContent = fs.readFileSync(path.join(promptDir, '01_proto.txt'), 'utf-8');
-    const protoFileChanges = fs.readFileSync(path.join(promptDir, '02_protoFileChanges.txt'), 'utf-8');
-    const fileChangesContent = fs.readFileSync(path.join(promptDir, '03_fileChanges.txt'), 'utf-8');
-    const allFilePaths = fs.readFileSync(path.join(promptDir, '04_allFilePaths.txt'), 'utf-8');
-    const suspectedFiles = fs.readFileSync(path.join(promptDir, '05_suspectedFiles.txt'), 'utf-8');
+    const protoFileContent = fs.readFileSync(path.join(datasetProjectDir, '01_proto.txt'), 'utf-8');
+    const protoFileChanges = fs.readFileSync(path.join(datasetProjectDir, '02_protoFileChanges.txt'), 'utf-8');
+    const fileChangesContent = fs.readFileSync(path.join(datasetProjectDir, '03_fileChanges.txt'), 'utf-8');
+    const allFilePaths = fs.readFileSync(path.join(datasetProjectDir, '04_allFilePaths.txt'), 'utf-8');
+    const suspectedFiles = fs.readFileSync(path.join(datasetProjectDir, '05_suspectedFiles.txt'), 'utf-8');
 
     const context = {
         protoFile: protoFileContent,
@@ -89,6 +97,7 @@ async function fetchAndProcessMessages(messages, logFilePath, continueFetching =
         const response = await fetchOpenAPI(messages);
 
         // ログ出力：ログのパスも渡す
+        //入力プロンプト無効化中
         logInteraction(messages[1].content, response.choices[0].message.content, logFilePath);
 
         let responseMessages = response.choices[0].message.content;
@@ -99,7 +108,7 @@ async function fetchAndProcessMessages(messages, logFilePath, continueFetching =
         // ファイルの内容を適切に処理
         if (splitContents.requiredFilepaths.length !== 0) {
             for (const filePath of splitContents.requiredFilepaths) {
-                const filePathWithInputDir = path.join(inputProjectDir, filePath);
+                const filePathWithInputDir = path.join(inputPreProjectDir, filePath);
 
                 if (fs.existsSync(filePathWithInputDir)) {
                     let fileContent = fs.readFileSync(filePathWithInputDir, 'utf-8');

@@ -62,11 +62,12 @@ async function getChangedFiles(premergePath, mergePath, extension) {
                 try {
                     const diffResult = await diffFiles(file1, file2);
                     if (diffResult) {
-                        const content = fs.readFileSync(file1, 'utf8');
-                        diffResults.push({
-                            path: relativePath,
-                            content: content
-                        });
+                        //const content = fs.readFileSync(file1, 'utf8');
+                        // diffResults.push({
+                        //     path: relativePath,
+                        //     content: content
+                        // });
+                        diffResults.push(relativePath);
                     }
                 } catch (err) {
                     console.error(`Error comparing files: ${err.message}`);
@@ -77,7 +78,7 @@ async function getChangedFiles(premergePath, mergePath, extension) {
         }
 
         console.log('Diff Results:', diffResults); // デバッグ用
-        return { changed_files: diffResults };
+        return diffResults;
     } catch (error) {
         console.error(error.message);
         throw error;

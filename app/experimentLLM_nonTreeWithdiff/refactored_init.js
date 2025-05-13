@@ -15,7 +15,8 @@ dotenv.config();
 
 class Config {
     constructor() {
-        this.inputProjectDir = "/app/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/";
+        //premergeまで指定
+        this.inputProjectDir = "/app/dataset/confirmed/pravega/Issue_3758-_Fix_typo_in_controller_API_call_name/premerge_3759";
         this.outputDir = path.join(appDirRoot, 'output');
         this.inputDir = path.join(appDirRoot, 'input');
         this.promptDir = path.join(appDirRoot, 'prompt');

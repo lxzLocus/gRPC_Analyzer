@@ -12,7 +12,9 @@ const path = require('path');
  */
 // logInteractionの変更
 function logInteraction(prompt, response, logFilePath) {
-  const logEntry = `%_Input Prompt_%: \n ${prompt}\n\n%_Response_%: \n ${response}\n\n ---------- \n\n`;
+  //const logEntry = `%_Input Prompt_%: \n ${prompt}\n\n%_Response_%: \n ${response}\n\n ---------- \n\n`;
+
+  const logEntry = `\n\n%_Response_%: \n ${response}\n\n ---------- \n\n`;
 
   try {
     fs.appendFileSync(logFilePath, logEntry, 'utf8');

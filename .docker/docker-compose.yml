@@ -11,3 +11,21 @@ services:
       - type: bind
         source: ../
         target: /app
+  grpc-analyzer-node:
+    build:
+      context: ./
+      dockerfile: Dockerfile_node
+    container_name: grpc-analyzer-node
+    # restart: always
+    tty: true
+    volumes:
+      - /app/node_modules # ←追加
+      - type: bind
+        source: ../
+        target: /app
+      - type: bind
+        source: E:/Workspace/gRPC_Analyzer/dataset/F
+        target: /app/dataset/filtered
+      - type: bind
+        source: E:/Workspace/gRPC_Analyzer/dataset/modified_proto_reps
+        target: /app/dataset/import
