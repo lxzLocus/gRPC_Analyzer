@@ -5,11 +5,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-        "name": "Docker Debug Python",
-        "type": "debugpy",
-        "request": "launch",
-        "program": "${file}",
-        "console": "integratedTerminal"
+            "name": "Docker Debug Python",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
         },
         {
             "name": "Docker Debug JavaScript",
@@ -22,13 +22,23 @@
             "outFiles": ["app/**/*.js"],
         },
         {
-        "name": "Docker Debug TypeScript",
-        "type": "node",
-        "request": "launch",
-        "preLaunchTask": "Compile TypeScript",
-        "program": "${file}",
-        "cwd": "${workspaceFolder}",
-        "outFiles": ["${workspaceFolder}/build/js/**/*.js"]
+            "name": "Docker Debug TypeScript",
+            "type": "node",
+            "request": "launch",
+            "preLaunchTask": "Compile TypeScript",
+            "program": "${file}",
+            "cwd": "${workspaceFolder}",
+            "outFiles": ["${workspaceFolder}/build/js/**/*.js"]
+        },
+        {
+            "name": "Bun Debug TypeScript",
+            "type": "pwa-node",
+            "request": "launch",
+            "runtimeExecutable": "bun",
+            "runtimeArgs": ["run"],
+            "program": "${file}",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
         },
         {
             "name": "Docker Debug go",
