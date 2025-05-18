@@ -31,7 +31,7 @@
             "outFiles": ["${workspaceFolder}/build/js/**/*.js"]
         },
         {
-            "name": "Bun Debug TypeScript",
+            "name": "Bun Debug",
             "type": "pwa-node",
             "request": "launch",
             "runtimeExecutable": "bun",
