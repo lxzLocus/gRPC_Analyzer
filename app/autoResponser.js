@@ -1,8 +1,19 @@
+/*
+Docs
+
+LLMに自律的に思考させるソースコード
+自動レスポンスに対応
+*/
+
 const OpenAI = require('openai');
 const fs = require('fs');
 const Handlebars = require('handlebars');
 const dotenv = require('dotenv');
 const path = require('path');
+
+/*
+modules
+*/
 const logInteraction = require("/app/app/module/logger.js");
 const RestoreDiff = require('/app/app/module/restoreDiff.js');
 
