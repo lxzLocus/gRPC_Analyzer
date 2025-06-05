@@ -8,11 +8,11 @@ FLAG : 要確認，デバッグ必要箇所
 
 */
 /*import module*/
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
-const { analyzeProtoService } = require('./analyzeAst/proto/proto');
-const { analyzeGoAst } = require('./analyzeAst/Go/go');
+import { analyzeProtoService } from './analyzeAst/proto/proto';
+import { analyzeGoAst } from './analyzeAst/Go/go';
 
 
 
@@ -21,6 +21,32 @@ const { analyzeGoAst } = require('./analyzeAst/Go/go');
 
 /*__MAIN__*/
 if (require.main === module) {
+    // let mergeStateFilePath = process.argv.slice(2)[0];
+    let dockerfilePath = [
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/.circleci/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/doggos/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/emoji/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/golang.org/x/net/http2/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fortune/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/hypothesizer/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/secrets/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/sidecar/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/sleeper/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/snack/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/spoonerisms/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/vigoda/Dockerfile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/words/Dockerfile",
+    ];
+
+    let makefilePath = [
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/Makefile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/github.com/gogo/protobuf/proto/Makefile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/golang.org/x/net/http2/Makefile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fe/vendor/golang.org/x/text/language/Makefile",
+        "/app/dataset/clone/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112/fortune/Makefile",
+    ];
+
 
     let protoPathMap = new Map([
         [
@@ -54,20 +80,14 @@ if (require.main === module) {
     ]);
 
     let programFileList = [
-        "/app/dataset/premerge_project/go.mod",
-        "/app/dataset/premerge_project/cmd/main.go",
-        "/app/dataset/premerge_project/pkg/utils/math.go",
-        "/app/dataset/premerge_project/pkg/utils/strings.go",
-        "/app/dataset/premerge_project/pkg/services/calculator.go",
-        "/app/dataset/premerge_project/pkg/services/greeter.go",
-        "/app/dataset/premerge_project/pkg/services/logger.go",
-        "/app/dataset/premerge_project/pkg/config/loader.go",
-        "/app/dataset/premerge_project/tests/calculator_test.go",
-        "/app/dataset/premerge_project/tests/greeter_test.go",
-        "/app/dataset/premerge_project/tests/loader_test.go"
+        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api.go",
+        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/api/api.go",
+        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api_test.go",
+        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/api/api_test.go",
+        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/cmd/server.go",
+        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/cmd/server.go",
+        "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-web/web/web.go"
     ];
-
-
 
     let modifiedProtoList = [
         "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/proto/Emoji.proto",
@@ -79,21 +99,39 @@ if (require.main === module) {
         "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-voting-svc/api/api.go"
     ];
 
-
     checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedProgList);
+
+
+
+    // for (const dockerfile of dockerfilePath) {
+    //     const commands = getDockerfileCommands(dockerfile);
+    //     console.log(commands);
+    // }
 
 }
 
 /*functions*/
-async function checkFileImportModule(protoPathMap, programFileList, modifiedProtoList, modifiedProgList) {
+async function checkFileImportModule(
+  protoPathMap: Map<string, any>,
+  programFileList: string[],
+  modifiedProtoList: string[],
+  modifiedProgList: string[]
+): Promise<void> {
     const pre_dependencies = await pre_Analyzedependencies(protoPathMap, programFileList);
 
 
     console.log();
+
+    const dependencies = await analyzeDependencies(protoPathMap, programFileList);
+    const affectedPrograms = findAffectedPrograms(modifiedProtoList, dependencies);
+    console.log("Affected programs:", Array.from(affectedPrograms));
 }
 
 
-async function pre_Analyzedependencies(protoPathMap, programPaths) {
+async function pre_Analyzedependencies(
+  protoPathMap: Map<string, any>,
+  programPaths: string[]
+): Promise<{ protoToPrograms: Record<string, any>; programToPrograms: Record<string, any> }> {
     const protoToPrograms = {};
     const programToPrograms = {};
 
@@ -109,30 +147,27 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
 
 
     /*
-    プログラムからimportの取得 + どのprotoをimportしているか + どのプログラムをimportしているか]
-
-
-    一回目のループがここに入る
-
+    プログラムからimportの取得 + どのprotoをimportしているか + どのプログラムをimportしているか
     */
- 
-
-
-    /*programToProgramsの取得*/
     for (const progPath of programPaths) {
+        // プログラムからimportの取得
         const importedModules = await getImportedPrograms(progPath, "imports");
         if (importedModules === null) continue;
 
         const extension = await path.extname(progPath);
 
+        /*共通項目取得*/
+        if (makefilePaths.length === 0 || dockerfilePaths.length === 0) {
+            const { makefilePaths: makefiles, dockerfilePaths: dockers } = findMakeAndDockerFiles(progPath);
+            makefilePaths = makefiles;
+            dockerfilePaths = dockers;
+        }
+
+
         switch (extension) {
             case '.go':
 
-                /*
-
-                共通項目取得
-                
-                */
+                /*共通項目取得*/
                 if (goPathMode === undefined) {
                     //初回ループ
                     goPathMode = checkGoPathMode(progPath);
@@ -146,7 +181,7 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                         });
                     }
 
-                } else if (goPathMode === false) {
+                }else if (goPathMode === false) {
                     //go.modがある場合
                     goModList = findGoModFiles(progPath);
                     goModModuleList = goModList.map(goModPath => {
@@ -154,18 +189,146 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                         const moduleLine = content.split('\n').find(line => line.startsWith('module'));
                         return moduleLine.split(' ')[1].trim();
                     });
-
-                } else {
+                    
+                }else {
                     //go.modがない場合 goPATHモードである場合
                     goPathSrc = progPath.split('/').slice(progPath.split('/').findIndex(segment => segment.includes('premerge_') || segment.includes('merge_'))).join('/');
                 }
-                /*
 
-                ↑処理の削除
-
-                */
+                // プログラムがimportしている関数の取得
+               const goProgFunctions = await analyzeGoAst(progPath, "functions");
 
 
+                for (const [protoPath, protoMeta] of protoPathMap) {
+                    
+                    // protoのサービスを取得
+                    const { services: protoServices, messages: protoMessages, enums: protoEnums } = await analyzeProtoService(protoPath);
+                    // protoのpackage pathを取得
+                    const packagePath = getPackagePath(protoPath);
+                    
+
+                    /*
+                    protoファイルのoptionからpackage名を取得
+                    package名がimportされているかを確認
+                    */
+                    if (protoMeta.options.length != 0) {
+                        //言語ごとのpackage取得
+                        const optionPackagePath = getPackageNameOption(progPath, protoMeta, importedModules);
+                        //属する言語がない場合 or option定義されていない場合
+                        if (optionPackagePath.isOptionImported === true) {
+                            // 関数利用の確認
+                            if (checkProtoFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
+                                break; // protoPathMapのループを抜ける
+                            }                            
+                        }
+                    }
+
+
+
+
+
+                    /*
+                    package Pathで一致する場合
+                    importedModulesのうちのいずれかとpackagePathが
+                    完全一致する場合
+                    */
+                    var isPackagePathImported = importedModules.some(
+                        function (module) {
+                            return module === packagePath;
+                        }
+                    );
+
+                    if (isPackagePathImported) {
+                        // 関数利用の確認
+                        if (checkProtoFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
+                            break; // protoPathMapのループを抜ける
+                        }        
+                    }
+                    
+
+
+
+
+
+                    /*Go.modの参照********************************************************************/
+
+                    /*
+                    go.modが存在する場合
+                    go.mod内に記載されている module が存在する & packagePath が含まれている & 指し示すmoduleが同じものである
+                    */
+                    if (goPathMode === false) {
+                        /*
+                        プログラム内のimport文に記載されているモジュール名と、go.mod内のmodule名を比較
+                        protoのpackage pathと一致するmoduleがあるかを確認
+
+                        あいまい条件
+                        厳格な一致ではない
+                        */
+                        importedModules.forEach((importedModule) => {
+                            goModModuleList.forEach((module) => {
+                                if (importedModule.includes(module)) {
+                                    if (importedModule.includes(packagePath)) {
+                                        //関数利用の確認
+                                        if (checkProtoFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
+                                            return;
+                                        }
+                                    }
+                                }
+                            });
+                        });
+
+
+
+                    }else {
+                        /*Dockerfile, Makefile 他のファイルを参照する場合*****************************************************************/
+
+                        /*
+                        Dockerfileの参照
+                        */
+                        dockerfilePaths.forEach((dockerfilePath) => {
+                             
+                                    
+                            if(importedModules){
+
+                            }
+                        });
+
+
+                        /*
+                        Makefileの参照
+                        */
+                        makefilePaths.forEach((makefilePath) => {
+
+                        });
+
+                    }
+                    //関数利用の確認
+                    // if (checkProtoFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath)) {
+                    //     break; // protoPathMapのループを抜ける
+                    // }
+                }
+
+                break;
+
+            default:
+                console.log(`Not Supported lang: ${progPath}`);
+              break;
+        }
+    }
+
+
+    /*programToProgramsの取得*/
+    for (const progPath of programPaths) {
+        const importedModules = await getImportedPrograms(progPath, "imports");
+        if (importedModules === null) continue;
+
+        const extension = await path.extname(progPath);
+
+        switch (extension) {
+            case '.go':
+
+                /*共通項目取得*/
+                //おそらく取得済みである
 
                 // プログラムがimportしている関数の取得
                 const goProgFunctions = await analyzeGoAst(progPath, "functions");
@@ -176,20 +339,17 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                 */
                 for (const importingProgPath of programPaths) {
                     //同じプログラムの場合スキップ
-                    if (importingProgPath === progPath) continue;
+                    if(importingProgPath === progPath) continue;
 
                     // プログラムからimportの取得
                     const importedProgModules = await getImportedPrograms(importingProgPath, "imports");
-                    const ext = await path.extname(importingProgPath);
+                    const ext = await path.extname(importedProgModules);
 
                     switch (ext) {
                         case '.go':
 
                             // プログラムがimportしている関数の取得
                             const goImportingProgFunctions = await analyzeGoAst(importingProgPath, "functions");
-                            // プログラムのpackage pathの取得
-                            const packagePath = getPackagePath(importingProgPath);
-
 
 
 
@@ -211,19 +371,6 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
                                 あいまい条件
                                 厳格な一致ではない
                                 */
-                                importedModules.forEach((importedModule) => {
-                                    goModModuleList.forEach((module) => {
-                                        if (importedModule.includes(module) && importedModule.includes(packagePath)) {
-                                            //関数利用の確認
-                                            if (checkFunctionUsage(goImportingProgFunctions, goProgFunctions, programToPrograms, importingProgPath, progPath)) {
-                                                return;
-                                            }
-                                           
-                                        }
-                                    });
-                                });
-
-
 
 
 
@@ -252,11 +399,11 @@ async function pre_Analyzedependencies(protoPathMap, programPaths) {
 
 
                             break;
-
+                    
                         default:
                             console.log(`Not Supported lang: ${importingProgPath}`);
                             break;
-                    }
+                    }        
                 }
                 /*
                 ↑ここまで関数化
@@ -285,8 +432,7 @@ async function getImportedPrograms(filePath, mode) {
             try {
                 imports = await analyzeGoAst(filePath, mode);
             } catch (err) {
-                console.error("Error generating Go AST:", err);
-                throw err;
+                imports = null;
             }
 
             break;
@@ -299,7 +445,7 @@ async function getImportedPrograms(filePath, mode) {
 }
 
 //bool GOPATHモードであるかを確認
-function checkGoPathMode(progPath) {
+function checkGoPathMode(progPath: string): boolean {
     let currentPath = path.resolve(progPath);
 
     while (true) {
@@ -333,7 +479,7 @@ function checkGoPathMode(progPath) {
 }
 
 //Array go.modファイルパスの取得
-function findGoModFiles(progPath) {
+function findGoModFiles(progPath: string): string[] {
     const goModFiles = [];
     let currentPath = path.resolve(progPath);
 
@@ -368,7 +514,11 @@ function findGoModFiles(progPath) {
 }
 
 //proto optionからpackage名の取得
-function getPackageNameOption(filePath, protoMeta, importedModules) {
+function getPackageNameOption(
+  filePath: string,
+  protoMeta: any,
+  importedModules: string[]
+): { isOptionImported: boolean; packageNamePath: string | null } {
     const extension = path.extname(filePath);
     let isOptionImported = false;
     let packageName;
@@ -395,12 +545,18 @@ function getPackageNameOption(filePath, protoMeta, importedModules) {
 }
 
 //protoファイルの関数利用の確認を行う関数
-function checkProtoFunctionUsage(protoServices, goProgFunctions, protoToPrograms, protoPath, progPath) {
+function checkProtoFunctionUsage(
+  protoServices: any[],
+  goProgFunctions: any,
+  protoToPrograms: Record<string, any>,
+  protoPath: string,
+  progPath: string
+): boolean {
     for (const service of protoServices) {
         // サービスのRPCをすべて確認
         for (const rpc of service.rpcs) {
 
-
+            
             if (goProgFunctions.functions && goProgFunctions.functions.includes(rpc)) {
                 //関数で解決
                 if (!protoToPrograms[protoPath]) {
@@ -409,7 +565,7 @@ function checkProtoFunctionUsage(protoServices, goProgFunctions, protoToPrograms
                 protoToPrograms[protoPath].push(progPath);
                 return true; // RPCが見つかった場合、早期リターン
 
-            } else {
+            }else {
                 //メソッドで解決
                 for (const funcCalls of Object.values(goProgFunctions.functionCalls)) {
                     if (funcCalls?.some(funcCall => funcCall.includes(rpc))) {
@@ -422,26 +578,26 @@ function checkProtoFunctionUsage(protoServices, goProgFunctions, protoToPrograms
                 }
             }
 
-
+            
         }
     }
     return false;
 }
 
 //パッケージパスの取得
-function getPackagePath(filePath) {
-    const filePathSegments = filePath.split('/');
-    const filePathIndex = filePathSegments.findIndex(segment => segment.includes('premerge_') || segment.includes('merge_'));
-    const filePathSubDir = filePathSegments.slice(filePathIndex + 1).slice(0, -1).join('/');
-    const repositoryName = getrepositoryName(filePath);
-    const fullPath = path.join(repositoryName, filePathSubDir);
+function getPackagePath(protoPath: string): string {
+    const protoPathSegments = protoPath.split('/');
+    const protoPathIndex = protoPathSegments.findIndex(segment => segment.includes('premerge_') || segment.includes('merge_'));
+    const protoPathSubDir = protoPathSegments.slice(protoPathIndex + 1).slice(0, -1).join('/');
+    const repositoryName = getrepositoryName(protoPath);
+    const fullPath = path.join(repositoryName, protoPathSubDir);
 
     //変更
-    return filePathSubDir;
+    return protoPathSubDir;
 }
 
 //string プロジェクト名の取得
-function getrepositoryName(progPath) {
+function getrepositoryName(progPath: string): string | undefined {
     const pathSegments = progPath.split('/');
 
     for (let i = 0; i < pathSegments.length; i++) {
@@ -455,7 +611,7 @@ function getrepositoryName(progPath) {
 }
 
 //Makefile Dockerfileリストの取得
-function findMakeAndDockerFiles(progPath) {
+function findMakeAndDockerFiles(progPath: string): { makefilePaths: string[]; dockerfilePaths: string[] } {
     const makefilePaths = [];
     const dockerfilePaths = [];
 
@@ -494,7 +650,7 @@ function findMakeAndDockerFiles(progPath) {
 }
 
 //dockerfileの解析
-function getDockerfileCommands(dockerfilePath) {
+function getDockerfileCommands(dockerfilePath: string): string[] {
     const dockerfileContent = fs.readFileSync(dockerfilePath, 'utf8');
     const lines = dockerfileContent.split('\n');
     const commands = [];
@@ -526,7 +682,7 @@ function getDockerfileCommands(dockerfilePath) {
 }
 
 //makefileの解析
-function getMakefileCommands(makefilePath) {
+function getMakefileCommands(makefilePath: string): string[] {
     const makefileContent = fs.readFileSync(makefilePath, 'utf8');
     const lines = makefileContent.split('\n');
     const commands = [];
@@ -551,23 +707,4 @@ function getMakefileCommands(makefilePath) {
     return commands;
 }
 
-//goファイルにおいて関数利用の確認を行う関数
-function checkFunctionUsage(importedProgModules, importingProgFunctions, programToPrograms, importingProgPath, progPath) {
-    // importedProgModulesの中の関数がimportingProgFunctionsで使われているかを調べる
- 
-    for (const funcCalls of Object.values(importingProgFunctions.functionCalls)) {
-        if (funcCalls?.some(funcCall => funcCall.includes(importedProgModules.functions))) {
-            if (!programToPrograms[progPath]) {
-                programToPrograms[progPath] = [];
-            }
-            programToPrograms[progPath].push(importingProgPath);
-            return true; // 関数が見つかった場合、早期リターン
-        }
-    }
-        
-    
-    return false;
-}
-
-
-module.exports = { checkFileImportModule };
+export { checkFileImportModule };

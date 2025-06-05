@@ -2,8 +2,8 @@
 protoファイル or プログラム言語ファイルを探索して，リストで返す
 */
 /*import module*/
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 /*__MAIN__*/
 if (require.main === module) {
@@ -17,7 +17,7 @@ if (require.main === module) {
 }
 
 /*functions*/
-function getProgramFilePaths(dirPath) {
+export function getProgramFilePaths(dirPath: string): { protoPathMap: Map<string, any>, programFileList: string[] } {
     let protoPathMap = new Map();
     let programFileList = [];
     const list = fs.readdirSync(dirPath);
@@ -74,7 +74,7 @@ function getProgramFilePaths(dirPath) {
 }
 
 /* Parses a .proto file to extract package and option details */
-function parseProtoFile(filePath) {
+function parseProtoFile(filePath: string): { package: string | null, imports: string[], options: { key: string, value: string }[] } | null {
     try {
         const fileContent = fs.readFileSync(filePath, 'utf-8');
         const packageMatch = fileContent.match(/package\s+([\w.]+);/);
@@ -95,4 +95,3 @@ function parseProtoFile(filePath) {
     }
 }
 
-module.exports = { getProgramFilePaths };
