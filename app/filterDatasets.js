@@ -31,7 +31,7 @@ Diff
 const fs = require('fs');
 const path = require('path');
 
-const { getChangedFiles } = require('./experimentLLM_nonTreeWithdiff/module/generateFileChanged');
+const { getChangedFiles } = require('./module/generateFileChanged');
 
 
 /*config*/

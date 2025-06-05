@@ -3,12 +3,12 @@ const fs = require('fs');
 const Handlebars = require('handlebars');
 const dotenv = require('dotenv');
 const path = require('path');
-const logInteraction = require("/app/app/experimentLLM_nonTreeWithdiff/module/logger.js");
-const RestoreDiff = require('/app/app/experimentLLM_nonTreeWithdiff/module/restoreDiff.js');
+const logInteraction = require("/app/app/module/logger.js");
+const RestoreDiff = require('/app/app/module/restoreDiff.js');
 
 
 //実行ファイルが置かれているパス
-const appDirRoot = "/app/app/experimentLLM_nonTreeWithdiff";
+const appDirRoot = "/app/app/";
 
 
 dotenv.config();
