@@ -4,6 +4,7 @@
     // 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Docker Debug Python",
             "type": "debugpy",
@@ -49,6 +50,6 @@
             "env": {},
             "showLog": false,
             "args": ["imports", "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api_test.go"]
-        },
+        }
     ]
 }

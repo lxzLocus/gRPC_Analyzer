@@ -1,8 +1,17 @@
+/*
+    入力データセットの中から，issue pullrequest からコミット単位で状態取得する
+    トリガー：
+    protoファイルが変更されたコミット
+
+    比較対象は，premergeと最初のprotoが変更されたコミット
+    ※すべてのprotoの変更されたコミットを取得する必要はない
+*/
 const fs = require('fs-extra');
 const path = require('path');
 const simpleGit = require('simple-git');
 const fse = require('fs-extra');
 const tar = require('tar');
+const tar_stream = require('tar-stream');
 
 // `.git_disabled` → `.git` 復元
 function restoreGit(dir) {
@@ -70,53 +79,66 @@ if (require.main === module) {
                 const restoredPre = restoreGit(premergePath);
                 const restoredMerge = restoreGit(mergePath);
 
-            const preGit = simpleGit(premergePath);
-            const mergeGit = simpleGit(mergePath);
+                const preGit = simpleGit(premergePath);
+                const mergeGit = simpleGit(mergePath);
 
-            try {
-                const preCommit = (await preGit.revparse(['HEAD'])).trim();
+                try {
+                    const preCommit = (await preGit.revparse(['HEAD'])).trim();
 
-                // preCommit から HEAD までのコミットログ（新しい順）
-                const log = await mergeGit.log({ from: preCommit, to: 'HEAD' });
+                    // preCommit から HEAD までのコミットログ（新しい順）
+                    const log = await mergeGit.log({ from: preCommit, to: 'HEAD' });
 
-                for (const commit of log.all.reverse()) {
-                    const commitHash = commit.hash;
-                    const tempCheckoutDir = path.join(subDirOutputPath, `temp_commit_${commitHash.slice(0, 7)}`);
+                    const seenHashes = new Set();
 
-                    // 一時作業ディレクトリに中間コミットの内容を抽出
-                    await fse.ensureDir(tempCheckoutDir);
-                    await mergeGit.cwd(mergePath);
-                        const archiveBuffer = await mergeGit.raw(['archive', commitHash]);
+                    for (const commit of log.all.reverse()) {
+                        const commitHash = commit.hash;
+                        if (seenHashes.has(commitHash)) continue; // 重複防止
+                        seenHashes.add(commitHash);
 
-                        // アーカイブ解凍（バッファをファイルとして一時保存する必要あり）
-                        const tempTarPath = path.join(tempCheckoutDir, 'temp.tar');
-                        fs.writeFileSync(tempTarPath, archiveBuffer);
-                        await tar.x({ file: tempTarPath, cwd: tempCheckoutDir });
-                        await fse.remove(tempTarPath);
+                        const tempCheckoutDir = path.join(subDirOutputPath, `temp_commit_${commitHash.slice(0, 7)}`);
+                        const archivePath = path.join(subDirOutputPath, `temp_${commitHash.slice(0, 7)}.tar`);
 
-                    const files = fse.readdirSync(tempCheckoutDir, { recursive: true });
-                    const protoFiles = files.filter(f => f.endsWith('.proto'));
+                        try {
+                            await fse.ensureDir(tempCheckoutDir);
 
-                    if (protoFiles.length > 0) {
-                            const saveDir = path.join(subDirOutputPath, `commit_snapshot_${commitHash.slice(0, 7)}`);
-                        await fse.move(tempCheckoutDir, saveDir, { overwrite: true });
-                            console.log(`✔️ Saved commit: ${commitHash}`);
-                            break;
-                    } else {
+                            // 一時 tar ファイルとして書き出す
+                            await mergeGit.cwd(mergePath);
+                            await mergeGit.raw(['archive', '-o', archivePath, commitHash]);
+
+                            // 展開
+                            await tar.extract({ file: archivePath, cwd: tempCheckoutDir });
+
+                            const allFiles = await fse.readdir(tempCheckoutDir, { recursive: true });
+                            const protoFiles = allFiles.filter(f => f.endsWith('.proto'));
+
+                            if (protoFiles.length > 0) {
+                                const saveDir = path.join(subDirOutputPath, `commit_snapshot_${commitHash.slice(0, 7)}`);
+                                await fse.move(tempCheckoutDir, saveDir, { overwrite: true });
+                                console.log(`✔️ Saved commit with proto: ${commitHash}`);
+                            } else {
+                                await fse.remove(tempCheckoutDir); // .proto 無ければ削除
+                            }
+
+                        } catch (err) {
+                            console.warn(`⚠️ Failed to process commit ${commitHash}:`, err.message);
                             await fse.remove(tempCheckoutDir);
+                        } finally {
+                            await fse.remove(archivePath); // tarファイルを削除
+                        }
                     }
-                }
-            } catch (err) {
+                    
+                    
+                } catch (err) {
                     console.error(`❌ Error in ${projectName}/${category}/${title}:`, err);
                 } finally {
                     // 復元した場合のみ戻す
                     if (restoredPre) disableGit(premergePath);
                     if (restoredMerge) disableGit(mergePath);
-            }
+                }
 
                 // premerge, merge ディレクトリをコピー
-            await fse.copy(premergePath, premergeOutputPath);
-            await fse.copy(mergePath, mergeOutputPath);
+                await fse.copy(premergePath, premergeOutputPath);
+                await fse.copy(mergePath, mergeOutputPath);
                 console.log(`✔️ Copied premerge and merge to: ${subDirOutputPath}`);
             });
         });
