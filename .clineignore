@@ -1,6 +1,6 @@
-node_modules/
-**/node_modules/
-**/dataset/
+node_modules/*
+**/node_modules/*
+**/dataset/*
 
 /output/
 /build/
