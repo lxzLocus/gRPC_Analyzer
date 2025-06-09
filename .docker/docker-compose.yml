@@ -1,9 +1,9 @@
 services:
-  any:
+  dev:
     build:
       context: ./
-      dockerfile: Dockerfile_any
-    container_name: any
+      dockerfile: Dockerfile_dev
+    container_name: dev
     # restart: always
     tty: true
     volumes:
