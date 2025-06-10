@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "target": "es2020",
-    "module": "es2015",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext", 
     "sourceMap": true,
     "outDir": "./build/js/",
     "esModuleInterop": true,
@@ -10,7 +11,6 @@
     "skipLibCheck": true,
     //すべてのファイルをモジュールと見なしてくれるため，別のファイルに同じ変数名があっても問題ないと判定される
     //"moduleDetection": "force"
-    "moduleResolution": "bundler" //or "node16"
   },
   "exclude": ["**/dataset/*", "**/node_modules/*", "/app/build/*"]
 }

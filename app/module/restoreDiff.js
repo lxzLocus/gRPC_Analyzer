@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 class RestoreDiff {
     constructor(sourceCodePath) {
@@ -71,4 +71,4 @@ class RestoreDiff {
     }
 }
 
-module.exports = RestoreDiff;
+export default RestoreDiff;

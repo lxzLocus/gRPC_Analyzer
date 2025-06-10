@@ -14,8 +14,8 @@ import path from 'path';
 /*
 modules
 */
-import logInteraction from "./module/logger.js";
-import RestoreDiff from './module/restoreDiff.js';
+import logInteraction from "/app/app/module/logger.js";
+import RestoreDiff from '/app/app/module/restoreDiff.js';
 
 //実行ファイルが置かれているパス
 const appDirRoot = "/app/app/";
@@ -98,7 +98,7 @@ class MessageHandler {
 
     analyzeMessages(messages: string): { requiredFilepaths: string[], modifiedDiff: string, commentText: string } {
         const sections = {
-            requiredFilepaths: [],
+            requiredFilepaths: [] as string[],
             modifiedDiff: '',
             commentText: ''
         };
@@ -185,14 +185,11 @@ class OpenAIClient {
             });
             return completion;
         } catch (error) {
-            console.error(error.message);
+            console.error((error as any).message);
         }
     }
 }
 
-if (require.main === module) {
-    main();
-}
 
 async function main() {
     const config = new Config();
@@ -286,6 +283,7 @@ async function fetchAndProcessMessages(
             const promptReply = config.readPromptReplyFile(
                 requiredFileContents.join('\n\n'),
                 splitContents.modifiedDiff,
+splitContents.commentText
             );
 
             await fetchAndProcessMessages(
@@ -341,3 +339,5 @@ async function fetchAndProcessMessages(
     }
 }
 
+
+main();

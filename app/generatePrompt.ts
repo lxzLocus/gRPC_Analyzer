@@ -31,23 +31,23 @@ Diff
 import fs from 'fs';
 import path from 'path';
 
-import  getPullRequestPaths  from './module/getPullRequestPaths';
-import  findFiles from './module/generateFilePathContent';
-import  getFilesDiff from './module/generateContentDiff';
-import  getChangedFiles from './module/generateFileChanged';
-import  getPathTree from './module/generateDirPathLists';
+import  getPullRequestPaths  from './module/getPullRequestPaths.js';
+import  findFiles from './module/generateFilePathContent.js';
+import  getFilesDiff from './module/generateContentDiff.js';
+import  getChangedFiles from './module/generateFileChanged.js';
+import  getPathTree from './module/generateDirPathLists.js';
 
 /*config*/
 const datasetDir: string = '/app/dataset/confirmed';
 
 /* __MAIN__ */
-if (require.main === module) {
+if (require.main === module as any) {
     
-    const projectDirs: string[] = fs.readdirSync(datasetDir).filter(dir => fs.statSync(path.join(datasetDir, dir)).isDirectory());
+    const projectDirs: string[] = fs.readdirSync(datasetDir).filter((dir: string) => fs.statSync(path.join(datasetDir, dir)).isDirectory());
 
     projectDirs.forEach((projectName: string) => {
         const projectPath: string = path.join(datasetDir, projectName);
-        const pullRequestDirs: string[] = fs.readdirSync(projectPath).filter(dir => fs.statSync(path.join(projectPath, dir)).isDirectory());
+        const pullRequestDirs: string[] = fs.readdirSync(projectPath).filter((dir: string) => fs.statSync(path.join(projectPath, dir)).isDirectory());
 
         pullRequestDirs.forEach((pullRequestTitle: string) => {
             const pullRequestPath: string = path.join(projectPath, pullRequestTitle);
@@ -56,15 +56,15 @@ if (require.main === module) {
 
             //"premerge_"と"merge_"で始まるサブディレクトリを取得
             const premergePath: string | undefined = fs.readdirSync(pullRequestPath)
-                .map(dir => path.join(pullRequestPath, dir))  // フルパスに変換
-                .find(filePath => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('premerge_'));
+                .map((dir: string) => path.join(pullRequestPath, dir))  // フルパスに変換
+                .find((filePath: string) => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('premerge_'));
 
             const commitSnapshotPath: string | undefined = fs.readdirSync(pullRequestPath)
-                .map(dir => path.join(pullRequestPath, dir))  // フルパスに変換
-                .find(filePath => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('merge_'));
+                .map((dir: string) => path.join(pullRequestPath, dir))  // フルパスに変換
+                .find((filePath: string) => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('merge_'));
 
             // 01_proto
-            const protoContentList: any[] = findFiles(premergePath, '.proto');
+            const protoContentList: any[] = premergePath ? findFiles(premergePath, '.proto') : [];
             const protoFilePath: string = path.join(pullRequestPath, '01_proto.txt');
 
             // 既存のファイルがあれば削除
@@ -75,7 +75,7 @@ if (require.main === module) {
 
             // 02_protoFileChanges
             (async () => {
-                const diffResults: any[] = await getFilesDiff(premergePath, commitSnapshotPath, 'proto');
+                const diffResults: any[] = premergePath && commitSnapshotPath ? await getFilesDiff(premergePath, commitSnapshotPath, 'proto') : [];
                 const protoFileChangesPath: string = path.join(pullRequestPath, '02_protoFileChanges.txt');
                 if (diffResults.length > 0) {
                     // 既存のファイルがあれば削除
@@ -111,7 +111,7 @@ if (require.main === module) {
 
             // 03_fileChanges
             (async () => {
-                const changedFiles: string[] = await getChangedFiles(premergePath, commitSnapshotPath, '');
+                const changedFiles: string[] = premergePath && commitSnapshotPath ? await getChangedFiles(premergePath, commitSnapshotPath, '') : [];
                 console.log('Changed Files:', changedFiles); // デバッグ用
                 const fileChangesPath: string = path.join(pullRequestPath, '03_fileChanges.txt');
 
@@ -123,7 +123,7 @@ if (require.main === module) {
             })();
 
             // 04_allFilePaths
-            const allFilePaths: any[] = getPathTree(premergePath);
+            const allFilePaths: any[] = premergePath ? getPathTree(premergePath) : [];
             const allFilePathsPath: string = path.join(pullRequestPath, '04_allFilePaths.txt');
 
             // 既存のファイルがあれば削除

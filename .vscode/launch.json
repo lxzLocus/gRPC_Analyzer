@@ -32,16 +32,6 @@
             "outFiles": ["${workspaceFolder}/build/js/**/*.js"]
         },
         {
-            "name": "Bun Debug",
-            "type": "pwa-node",
-            "request": "launch",
-            "runtimeExecutable": "bun",
-            "runtimeArgs": ["run"],
-            "program": "${file}",
-            "cwd": "${workspaceFolder}",
-            "console": "integratedTerminal"
-        },
-        {
             "name": "Docker Debug go",
             "type": "go",
             "request": "launch",

@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 /**
  * 入力プロンプトとレスポンスをログファイルに出力します。
@@ -25,4 +25,4 @@ function logInteraction(prompt, response, logFilePath) {
   }
 }
 
-module.exports = logInteraction;
+export default logInteraction;
