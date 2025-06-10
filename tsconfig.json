@@ -8,7 +8,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": true,
+    "skipLibCheck": true
     //すべてのファイルをモジュールと見なしてくれるため，別のファイルに同じ変数名があっても問題ないと判定される
     //"moduleDetection": "force"
   },

@@ -21,21 +21,19 @@ services:
     tty: true
     volumes:
       - /app/node_modules # ←追加
+    
       - type: bind
         source: ../
         target: /app
       - type: bind
         source: E:/Workspace/gRPC_Analyzer/dataset/raw_cloned
         target: /app/dataset/raw_cloned
-
       - type: bind
-        source: E:/Workspace/gRPC_Analyzer/dataset/F
-        target: /app/dataset/filtered
-        
+        source: E:/Workspace/gRPC_Analyzer/dataset/filtered_protoChanged
+        target: /app/dataset/filtered_protoChanged
       - type: bind
-        source: E:/Workspace/gRPC_Analyzer/dataset/modified_proto_reps
-        target: /app/dataset/import
-
+        source: E:/Workspace/gRPC_Analyzer/dataset/filtered_confirmed
+        target: /app/dataset/filtered_confirmed
       - type: bind
         source: E:/Workspace/gRPC_Analyzer/dataset/filtered_commit
         target: /app/dataset/filtered_commit
