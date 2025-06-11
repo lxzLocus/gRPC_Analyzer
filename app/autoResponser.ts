@@ -14,13 +14,104 @@ import path from 'path';
 /*
 modules
 */
-import logInteraction from "/app/app/module/logger.js";
+import Logger from "/app/app/module/logger.js";
 import RestoreDiff from '/app/app/module/restoreDiff.js';
 
 //実行ファイルが置かれているパス
 const appDirRoot = "/app/app/";
 
 dotenv.config();
+
+
+class MessageHandler {
+    messagesTemplate: Array<{ role: string, content: string }>;
+
+    constructor() {
+        this.messagesTemplate = [
+            {
+                role: 'system',
+                content: "Fix or improve program code related to gRPC. It may contain potential bugs. Refer to the proto to make code corrections."
+            }
+        ];
+    }
+
+    attachMessages(role: string, messages: string): Array<{ role: string, content: string }> {
+        // 新しいメッセージをテンプレートに追加
+        this.messagesTemplate.push({
+            role: role,
+            content: messages
+        });
+        return this.messagesTemplate;
+    }
+
+
+    analyzeMessages(messages: string): {
+        thought: string | null,
+        plan: string | null,
+        requiredFilepaths: string[],
+        modifiedDiff: string,
+        commentText: string,
+        has_fin_tag: boolean
+    } {
+        const sections = {
+            thought: null as string | null,
+            plan: null as string | null,
+            requiredFilepaths: [] as string[],
+            modifiedDiff: '',
+            commentText: '',
+            has_fin_tag: false
+        };
+
+        const lines = messages.split('\n');
+        let currentTag: string | null = null;
+        const buffers: { [key: string]: string[] } = {
+            thought: [],
+            plan: [],
+            modified: [],
+            comment: []
+        };
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            const tagMatch = trimmed.match(/^%_(.+?)_%$/);
+
+            if (tagMatch) {
+                currentTag = tagMatch[1].toLowerCase().replace(/ /g, '_'); // e.g., "Reply Required" -> "reply_required"
+                if (currentTag === 'modified' || currentTag === 'comment' || currentTag === 'thought' || currentTag === 'plan') {
+                    // バッファを使用するタグ
+                } else {
+                    currentTag = 'required' // 'Reply Required'
+                }
+                continue;
+            } else if (trimmed === '%%_Fin_%%') {
+                sections.has_fin_tag = true;
+                break;
+            }
+
+            if (currentTag) {
+                if (currentTag === 'required') {
+                    const match = trimmed.match(/"(.+?)"/);
+                    if (match) {
+                        sections.requiredFilepaths.push(match[1]);
+                    } else if (trimmed && !trimmed.startsWith('[') && !trimmed.startsWith(']')) {
+                        sections.requiredFilepaths.push(trimmed);
+                    }
+                } else if (buffers[currentTag]) {
+                    buffers[currentTag].push(line);
+                }
+            }
+        }
+
+        sections.thought = buffers.thought.join('\n').trim() || null;
+        sections.plan = buffers.plan.join('\n').trim() || null;
+        sections.modifiedDiff = buffers.modified.join('\n').trim();
+        sections.commentText = buffers.comment.join('\n').trim();
+
+        return sections;
+    }
+
+
+}
 
 class Config {
     inputProjectDir: string;
@@ -45,56 +136,7 @@ class Config {
 
         // 一時ファイルを削除
         if (fs.existsSync(this.tmpDiffRestorePath)) fs.unlinkSync(this.tmpDiffRestorePath);
-    analyzeMessages(messages: string): { requiredFilepaths: string[], modifiedDiff: string, commentText: string, has_fin_tag: boolean } {
-        const sections = {
-            requiredFilepaths: [] as string[],
-            modifiedDiff: '',
-            commentText: '',
-            has_fin_tag: false
-        };
-
-        const lines = messages.split('\n');
-        let currentTag: string | null = null;
-        let modifiedBuffer: string[] = [];
-        let commentBuffer: string[] = [];
-
-        for (const line of lines) {
-            const trimmed = line.trim();
-
-            if (trimmed === '%_Reply Required_%') {
-                currentTag = 'required';
-                continue;
-            } else if (trimmed === '%_Modified_%') {
-                currentTag = 'modified';
-                continue;
-            } else if (trimmed === '%_Comment_%') {
-                currentTag = 'comment';
-                continue;
-            } else if (trimmed === '%%_Fin_%%') {
-                sections.has_fin_tag = true;
-                break;
-            }
-
-            if (currentTag === 'required' && trimmed !== '') {
-                const match = trimmed.match(/"(.+?)"/);
-                if (match) {
-                    sections.requiredFilepaths.push(match[1]);
-                } else if (!trimmed.startsWith('[') && !trimmed.startsWith(']')) {
-                    sections.requiredFilepaths.push(trimmed);
-                }
-            } else if (currentTag === 'modified') {
-                modifiedBuffer.push(line);
-            } else if (currentTag === 'comment') {
-                commentBuffer.push(line);
-            }
-        }
-
-        sections.modifiedDiff = modifiedBuffer.join('\n').trim();
-        sections.commentText = commentBuffer.join('\n').trim();
-
-        return sections;
     }
-}
 
     readPromptReplyFile(filesRequested: string, modifiedDiff: string, commentText: string): string {
         const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptReply.txt'), 'utf-8');
@@ -116,35 +158,6 @@ class Config {
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
     }
-}
-
-class MessageHandler {
-    messagesTemplate: Array<{ role: string, content: string }>;
-
-    constructor() {
-        this.messagesTemplate = [
-            {
-                role: 'system',
-                content: "Fix or improve program code related to gRPC. It may contain potential bugs. Refer to the proto to make code corrections."
-            }
-    ];
-    }
-
-    attachMessages(role: string, messages: string): Array<{ role: string, content: string }> {
-        // 新しいテンプレートのみをセットし、過去のメッセージをリセット
-        this.messagesTemplate = [
-            {
-                role: 'system',
-                content: "Fix or improve program code related to gRPC. It may contain potential bugs. Refer to the proto to make code corrections."
-            },
-            {
-                role: role,
-                content: messages
-            }
-        ];
-        return this.messagesTemplate;
-    }
-
 }
 
 class FileManager {
@@ -195,252 +208,169 @@ class OpenAIClient {
 }
 
 
+
 async function main() {
+    // --- 1. 初期設定 ---
     const config = new Config();
     const fileManager = new FileManager(config);
     const messageHandler = new MessageHandler();
     const openAIClient = new OpenAIClient(process.env.OPENAI_TOKEN || '');
+    const logger = new Logger();
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const logFilePath = path.join(`${config.outputDir}/log`, `${timestamp}_log.txt`);
+    const startTime = new Date().toISOString();
+    // experiment_idを "pravega/Issue_3758-..." の形式で取得
+    const pathParts = config.inputProjectDir.split(path.sep);
+    const experimentId = path.join(pathParts[pathParts.length - 2], pathParts[pathParts.length - 1]);
 
-    // LLM 分析・思考・計画
-    const initPrompt = fileManager.readFirstPromptFile();
-    let initMessages = messageHandler.attachMessages("user", initPrompt);
+    const logFileTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const logFilePath = path.join(config.outputDir, 'log', `${logFileTimestamp}_log.json`);
+    if (!fs.existsSync(path.dirname(logFilePath))) {
+        fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
+    }
 
-    // 対話ループの開始
-    let conversation_active = true
-    const max_turns = 10 // 無限ループを防ぐためのカウンター
-    let turn_count = 0
+    // --- 2. 対話ループの準備 ---
+    let conversation_active = true;
+    const max_turns = 15;
+    let turn_count = 0;
+    let status = "Max turns reached"; // デフォルトの終了ステータス
 
+    let totalPromptTokens = 0;
+    let totalCompletionTokens = 0;
+
+    let next_prompt_content: string | null = fileManager.readFirstPromptFile();
+    let prompt_template_name: string = config.promptTextfile;
+    let currentMessages = messageHandler.attachMessages("user", next_prompt_content);
+
+    // --- 3. 対話ループ開始 ---
     while (conversation_active && turn_count < max_turns) {
         turn_count += 1;
         console.log(`--- Turn ${turn_count} ---`);
 
-        // 4. LLMへリクエスト送信
-        const llm_response = await openAIClient.fetchOpenAPI(initMessages);
+        const turnTimestamp = new Date().toISOString();
+        const llm_request_log = {
+            prompt_template: prompt_template_name,
+            full_prompt_content: next_prompt_content!,
+        };
+
+        // 3-1. LLMへリクエスト送信
+        const llm_response = await openAIClient.fetchOpenAPI(currentMessages);
+        if (!llm_response || !llm_response.choices || llm_response.choices.length === 0) {
+            console.error("Invalid response from LLM. Aborting.");
+            status = "Error: Invalid LLM response";
+            break;
+        }
         const llm_content = llm_response.choices[0].message.content;
+        const usage = {
+            prompt_tokens: llm_response.usage?.prompt_tokens || 0,
+            completion_tokens: llm_response.usage?.completion_tokens || 0,
+            total: llm_response.usage?.total_tokens || 0,
+        };
+        totalPromptTokens += usage.prompt_tokens;
+        totalCompletionTokens += usage.completion_tokens;
 
-        // 5. 対話のログを記録
-        logInteraction(initMessages, llm_content, logFilePath);
-
-        // 6. LLMの応答を解析
-        // MessageHandler.analyzeMessages() に相当
-        // ここで `%_Thought_%`, `%_Plan_%` なども解析してログに残すと良い
+        // 3-2. LLM応答を解析
         const parsed_response = messageHandler.analyzeMessages(llm_content);
-        // -> parsed_response = { has_fin_tag: bool, required_info: [], modified_diff: string, ... }
-        
-        // ==================================================
-        // ここからがフロー図の分岐ロジック
-        // ==================================================
-        let next_prompt_content = null;
+        const llm_response_log = {
+            raw_content: llm_content,
+            parsed_content: {
+                thought: parsed_response.thought,
+                plan: parsed_response.plan, // TODO: 必要であればplanをJSONにパース
+                reply_required: parsed_response.requiredFilepaths,
+                modified_diff: parsed_response.modifiedDiff || null,
+                commentText: parsed_response.commentText || null,
+                has_fin_tag: parsed_response.has_fin_tag
+            },
+            usage: usage,
+        };
 
-        // 分岐①: 終了タグ (%%_Fin_%%) があるか？
+        // 3-3. システムアクションを決定し、次のプロンプトを準備
+        let system_action_log = { type: "UNKNOWN", details: "No specific action was determined." };
+        next_prompt_content = null; // 次のプロンプトを初期化
+
         if (parsed_response.has_fin_tag) {
-            console.log("終了タグを検出。処理を完了します。");
-            conversation_active = false
-            // ループを抜ける
+            console.log("Found '%%_Fin_%%' tag. Finalizing process.");
+            system_action_log = { type: "TERMINATING", details: "%%_Fin_%% tag detected." };
+            status = "Completed (%%_Fin_%%)";
+            conversation_active = false;
 
-        // 分岐②: 追加情報要求タグ (%_Reply Required_%) があるか？ (フロー図: J)
-        else if (parsed_response.requiredFilepaths.length > 0) {
-            console.log("情報要求タグを検出。追加情報を準備します。");
-            
-            // 要求されたファイルの内容を取得
-            // (`fetchAndProcessMessages`内のファイル読み込みロジックに相当)
-            // requested_data_content = getRequestedFileContents(parsed_response.required_info, config.inputProjectDir)
-            
-            // 次のプロンプトを準備 (Template 2: 追加情報提供プロンプト)
-            // next_prompt_content = prepareAdditionalInfoPrompt(
-            //     template_path = "01_prompt_reply.txt", 
-            //     requested_data = requested_data_content,
-            //     previous_thought = parsed_response.thought, // 思考や計画も渡すと文脈が保たれる
-            //     previous_plan = parsed_response.plan
-            // )
-
-        // 分岐③: 修正提案タグ (%_Modified_%) があるか？ (フロー図: O or Q)
-        else if (parsed_response.modifiedDiff) {
-            console.log("修正提案タグを検出。修正を適用・検証します。");
-
-            // 修正diffを仮想的に適用
-            // (`RestoreDiff`クラスの処理に相当)
-            try {
-                // applyDiffResult = applyDiff(parsed_response.modified_diff, config.inputProjectDir)
-                
-                // 成功した場合 (フロー図: O)
-                console.log("修正の適用に成功しました。");
-                
-                // 次のプロンプトを準備 (Template 3: 修正後再チェックプロンプト)
-                // next_prompt_content = preparePostModificationPrompt(
-                //     template_path = "02_prompt_modified.txt",
-                //     applied_diff = parsed_response.modified_diff,
-                //     content_after_modification = applyDiffResult.content
-                // )
-            } catch (error: any) {
-                // 失敗した場合 (フロー図: Q)
-                console.log(`修正の適用に失敗しました: ${error.message}`);
-            }
-
-                // 次のプロンプトを準備 (Template 4: エラーフィードバックプロンプト)
-                // next_prompt_content = prepareErrorFeedbackPrompt(
-                //     template_path = "03_prompt_error.txt",
-                //     failed_diff = parsed_response.modified_diff,
-                //     error_message = error.message
-                // )
-
-        // 分岐④: どのタグにも当てはまらない、または処理を続行できない場合
-        } else {
-            console.log("明確な次のアクションが検出されませんでした。処理を終了します。");
-            conversation_active = false
-
-        // 次のターンのメッセージを準備
-        if (conversation_active && next_prompt_content !== null) {
-            initMessages = messageHandler.attachMessages("user", next_prompt_content);
-        }
-}
-    }
-
-    // 4. ループ終了後の後処理
-    // cleanupTemporaryFiles(config.outputDir);
-    console.log("すべての処理が完了しました。");
-
-
-
-    try {
-        await fetchAndProcessMessages(initMessages, logFilePath, openAIClient, messageHandler, config);
-
-        // 一時ファイルを削除
-        const diffFilePath = path.join(config.outputDir, 'tmp_restoredDiff.txt');
-        if (fs.existsSync(diffFilePath)) fs.unlinkSync(diffFilePath);
-
-        console.log('処理が完了しました');
-    } catch (error) {
-        console.error('処理中にエラーが発生しました:', error);
-    }
-}
-
-/**
- * OpenAI APIを使用してメッセージを処理し、必要に応じて再帰的に処理を続行します。
- * また、`modified`タグのdiff結果を一時スペースに保存します。
- *
- * @param {Array<Object>} messages - OpenAI APIに送信するメッセージの配列。
- * @param {string} logFilePath - ログファイルのパス。
- * @param {OpenAIClient} openAIClient - OpenAI APIクライアントのインスタンス。
- * @param {MessageHandler} messageHandler - メッセージを解析および操作するためのハンドラー。
- * @param {Config} config - 設定情報を格納したオブジェクト。
- * @param {boolean} [continueFetching=true] - 処理を続行するかどうかを示すフラグ。
- * @returns {Promise<void>} - 非同期処理の完了を示すPromise。
- *
- * @throws {Error} - OpenAI APIリクエスト中のエラーやファイル操作エラーが発生した場合。
- *
- * @example
- * const messages = [
- *     { role: 'user', content: 'What is the weather today?' }
- * ];
- * const logFilePath = '/path/to/log.txt';
- * const openAIClient = new OpenAIClient('your-api-key');
- * const messageHandler = new MessageHandler();
- * const config = new Config();
- *
- * await fetchAndProcessMessages(messages, logFilePath, openAIClient, messageHandler, config);
- */
-async function fetchAndProcessMessages(
-    messages: Array<{ role: string, content: string }>,
-    logFilePath: string,
-    openAIClient: OpenAIClient,
-    messageHandler: MessageHandler,
-    config: Config,
-    continueFetching: boolean = true
-): Promise<void> {
-    if (!continueFetching) return;
-
-    try {
-        const response = await openAIClient.fetchOpenAPI(messages);
-
-        logInteraction(messages[1].content, response.choices[0].message.content, logFilePath);
-
-        const splitContents = messageHandler.analyzeMessages(response.choices[0].message.content);
-        const availableTokens = config.maxTokens - (response.usage?.total_tokens || 0);
-
-        // `modified`タグのdiff結果を保存
-        if (splitContents.modifiedDiff) {
-            const restoreDiff = new RestoreDiff(config.inputProjectDir);
-            const restoredContent = restoreDiff.applyDiff(splitContents.modifiedDiff);
-            fs.writeFileSync(path.join(config.outputDir, 'tmp_restoredDiff.txt'), restoredContent, 'utf-8');
-        }
-
-        // reply required部分を使って再帰的に問い合わせ
-        if (splitContents.requiredFilepaths.length > 0) {
+        } else if (parsed_response.requiredFilepaths.length > 0) {
+            console.log("Found '%_Reply Required_%' tag. Preparing additional information.");
             const requiredFileContents: string[] = [];
-
-            for (const filePath of splitContents.requiredFilepaths) {
+            for (const filePath of parsed_response.requiredFilepaths) {
                 const fullPath = path.join(config.inputProjectDir, filePath);
-
                 if (fs.existsSync(fullPath)) {
-                    const content = fs.readFileSync(fullPath, 'utf-8');
-                    requiredFileContents.push(`--- ${filePath}\n${content}`);
+                    requiredFileContents.push(`--- ${filePath}\n${fs.readFileSync(fullPath, 'utf-8')}`);
                 } else {
-                    console.warn(`ファイルが見つかりません: ${filePath}`);
+                    console.warn(`File not found: ${filePath}`);
+                    requiredFileContents.push(`--- ${filePath}\nFile not found.`);
                 }
             }
+            prompt_template_name = '00_promptReply.txt';
+            next_prompt_content = config.readPromptReplyFile(requiredFileContents.join('\n\n'), parsed_response.modifiedDiff, parsed_response.commentText);
+            system_action_log = { type: "FETCHING_FILES", details: `Replying with content of: ${parsed_response.requiredFilepaths.join(', ')}` };
 
-            const promptReply = config.readPromptReplyFile(
-                requiredFileContents.join('\n\n'),
-                splitContents.modifiedDiff,
-splitContents.commentText
-            );
-
-            await fetchAndProcessMessages(
-                messageHandler.attachMessages("user", promptReply),
-                logFilePath,
-                openAIClient,
-                messageHandler,
-                config,
-                continueFetching
-            );
-        }
-
-        // diff部分が存在すれば、それを適用し次の問い合わせ
-        if (splitContents.modifiedDiff) {
-
-            const tmpDiffRestorePath = path.join(config.outputDir, 'tmp_restoredDiff.txt');
-
-            //すでにdiffを適用したファイルが存在するかどうか
-            if (fs.existsSync(tmpDiffRestorePath)) {
-                const restoredDiffContent = fs.readFileSync(tmpDiffRestorePath, 'utf-8');
-                splitContents.modifiedDiff = restoredDiffContent;
-            } else {
-                const restoreDiff = new RestoreDiff(config.inputProjectDir);
-                const restoredContent = restoreDiff.applyDiff(splitContents.modifiedDiff);
-                fs.writeFileSync(tmpDiffRestorePath, restoredContent, 'utf-8');
+        } else if (parsed_response.modifiedDiff) {
+            console.log("Found '%_Modified_%' tag. Applying and verifying diff.");
+            const restoreDiff = new RestoreDiff(config.inputProjectDir);
+            try {
+                const restoredContent = restoreDiff.applyDiff(parsed_response.modifiedDiff);
+                fs.writeFileSync(config.tmpDiffRestorePath, restoredContent, 'utf-8');
+                prompt_template_name = '00_promptModified.txt';
+                next_prompt_content = config.readPromptModifiedFile(restoredContent);
+                system_action_log = { type: "APPLYING_DIFF_AND_RECHECKING", details: "Diff applied successfully. Preparing for re-check." };
+            } catch (error: any) {
+                console.error(`Failed to apply diff: ${error.message}`);
+                // エラー時の処理 (例: エラーをフィードバックするプロンプトを作成)
+                // next_prompt_content = createErrorPrompt(error.message);
+                system_action_log = { type: "APPLYING_DIFF_FAILED", details: error.message };
+                status = `Error: Diff application failed on turn ${turn_count}`;
+                conversation_active = false;
             }
 
-            const promptModified = config.readPromptModifiedFile(splitContents.modifiedDiff);
-
-            await fetchAndProcessMessages(
-                messageHandler.attachMessages("user", promptModified),
-                logFilePath,
-                openAIClient,
-                messageHandler,
-                config,
-                continueFetching
-            );
+        } else {
+            console.log("No clear next action detected. Terminating process.");
+            system_action_log = { type: "TERMINATING", details: "No actionable tags detected in LLM response." };
+            status = "Completed (No Action)";
+            conversation_active = false;
         }
 
-        // 処理を終了する
-        const isFinTag =
-            response.choices[0].message.content.trim() === '%%_Fin_%%' ||
-            response.choices[0].message.content.split('\n').pop().trim() === '%%_Fin_%%';
+        // 3-4. このターンのログを追加
+        logger.addInteractionLog(turn_count, turnTimestamp, llm_request_log, llm_response_log, system_action_log);
 
-        if (isFinTag) {
-            console.log('終了タグ(%%_Fin_%%)が返されたため処理を終了します。');
-            return;
+        // 3-5. 次のターンのメッセージを準備
+        if (conversation_active && next_prompt_content) {
+            currentMessages = messageHandler.attachMessages("user", next_prompt_content);
+        } else {
+            conversation_active = false; // 次のプロンプトがない場合も終了
         }
-
-    } catch (error: any) {
-        console.error('Error in fetchAndProcessMessages:', error);
-        throw error; // エラーを再スローして呼び出し元で処理できるようにする
     }
+
+    // --- 4. 最終処理 ---
+    const endTime = new Date().toISOString();
+
+    logger.setExperimentMetadata(
+        experimentId,
+        startTime,
+        endTime,
+        status,
+        turn_count,
+        totalPromptTokens,
+        totalCompletionTokens
+    );
+
+    const finalLog = logger.getFinalJSON();
+    if (finalLog) {
+        fs.writeFileSync(logFilePath, JSON.stringify(finalLog, null, 2), 'utf-8');
+        console.log(`Log saved to ${logFilePath}`);
+    }
+
+    if (fs.existsSync(config.tmpDiffRestorePath)) {
+        fs.unlinkSync(config.tmpDiffRestorePath);
+    }
+
+    console.log("All processes have been completed.");
 }
+
 
 
 main();

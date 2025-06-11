@@ -10,14 +10,13 @@
  * const filePaths = getPathTree(targetDir, ignore);
  */
 
-const { create } = require('domain');
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 const ignore = ['.git', 'node_modules', 'output', '.git_disabled'];
 
 // メイン処理
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     const targetDir = '/app/dataset/confirmed/WAII/Protobuf_compression';
     const outputPath = '/app/app/experimentLLM_nonTreeWithdiff/output';
     const outputFilePath = path.join(outputPath, 'filePaths.json');
@@ -37,7 +36,7 @@ if (require.main === module) {
  * @param {string} dir - 探索フォルダ
  * @returns {string[]} - ファイルパスリスト
  */
-function getPathTree(dir) {
+export default function getPathTree(dir) {
     const fileList = createPathList(dir);
     const tree = buildPathTree(fileList, dir);
 
@@ -99,4 +98,3 @@ function writePathsToJson(outputFilePath, data) {
     console.log(`ファイルパスが ${outputFilePath} にJSON形式で保存されました。`);
 }
 
-module.exports = { getPathTree };

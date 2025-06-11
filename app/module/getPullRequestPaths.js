@@ -1,12 +1,12 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 /**
  * 指定されたディレクトリから再帰的にプロジェクトとプルリクエストのフォルダパスを取得する
  * @param {string} baseDir - 検索を開始するディレクトリのパス
  * @returns {Array} - プロジェクトとプルリクエストのフォルダパスを含む配列
  */
-function getPullRequestPaths(baseDir) {
+export default function getPullRequestPaths(baseDir) {
     const projectDirs = fs.readdirSync(baseDir);
     const pullRequestPaths = [];
 
@@ -26,4 +26,4 @@ function getPullRequestPaths(baseDir) {
     return pullRequestPaths;
 }
 
-module.exports = { getPullRequestPaths };
+

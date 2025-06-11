@@ -21,7 +21,6 @@ services:
     tty: true
     volumes:
       - /app/node_modules # ←追加
-    
       - type: bind
         source: ../
         target: /app

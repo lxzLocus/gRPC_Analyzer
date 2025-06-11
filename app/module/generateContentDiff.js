@@ -9,13 +9,12 @@
  * // 使用例
  * const diffResults = await getFilesDiff(inputDir, 'proto');
  */
-
-const { exec } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { exec } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
 /* __MAIN__ */
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     const premergePath = '/app/dataset/confirmed/pravega/Issue_2460-_When_sending_no_credentials-_exception_returned_has_UNKNOWN_status/premerge_2475';
     const mergePath = '/app/dataset/confirmed/pravega/Issue_2460-_When_sending_no_credentials-_exception_returned_has_UNKNOWN_status/merge_2475';
     const fileExtension = 'proto'; // 必要に応じて変更可能
@@ -31,7 +30,7 @@ if (require.main === module) {
 }
 
 // メインの比較関数
-async function getFilesDiff(premergePath, mergePath, extension) {
+export default async function getFilesDiff(premergePath, mergePath, extension) {
     try {
 
         if (!premergePath || !mergePath) {
@@ -122,5 +121,3 @@ function diffFiles(file1, file2) {
         });
     });
 }
-
-module.exports = { getFilesDiff };

@@ -19,7 +19,7 @@ Docs
 Diff
 - 02_protoFileChanges.txt
 
-変更されたファイルのリストと，その内容（premerge）
+変更されたファイルのリストのみ　　[と，その内容（premerge）]
 - 03_fileChanges.txt
 
 ファイルパスのリスト
@@ -28,16 +28,15 @@ Diff
 */
 
 /*modules*/
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 
-const  { getPullRequestPaths } = require('./module/getPullRequestPaths');
-
-const { findFiles } = require('./module/generateFilePathContent');
-const { getFilesDiff } = require('./module/generateContentDiff');
-const { getChangedFiles } = require('./module/generateFileChanged');
-const { getPathTree } = require('./module/generateDirPathLists');
+import getPullRequestPaths from './module/getPullRequestPaths.js';
+import findFiles from './module/generateFilePathContent.js';
+import getFilesDiff from './module/generateContentDiff.js';
+import getChangedFiles from './module/generateFileChanged.js';
+import getPathTree from './module/generateDirPathLists.js';
 
 
 /*config*/
@@ -61,14 +60,21 @@ if (require.main === module) {
 
             console.log(`Processing: ${projectName}/${pullRequestTitle}`);
 
-            //"premerge_"と"merge_"で始まるサブディレクトリを取得
+            //"premerge_"で始まるサブディレクトリを取得
             const premergePath = fs.readdirSync(pullRequestPath)
                 .map(dir => path.join(pullRequestPath, dir))  // フルパスに変換
                 .find(filePath => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('premerge_'));
 
-            const mergePath = fs.readdirSync(pullRequestPath)
-                .map(dir => path.join(pullRequestPath, dir))  // フルパスに変換
+            // "merge_"で始まるサブディレクトリを取得
+            let mergePath = fs.readdirSync(pullRequestPath)
+                .map(dir => path.join(pullRequestPath, dir))
                 .find(filePath => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('merge_'));
+            // "merge_"がなければ"commit_snapshot_"を探す
+            if (!mergePath) {
+                mergePath = fs.readdirSync(pullRequestPath)
+                    .map(dir => path.join(pullRequestPath, dir))
+                    .find(filePath => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('commit_snapshot_'));
+            }
 
             // 01_proto
             const protoContentList = findFiles(premergePath, '.proto');

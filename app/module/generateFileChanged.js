@@ -12,9 +12,9 @@
  */
 
 
-const { exec } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { exec } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
 
 // 無視するフォルダや拡張子を定義
@@ -24,19 +24,23 @@ const ignore = {
 };
 
 /* __MAIN__ */
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     const outputDir = '/app/app/experimentLLM_nonTreeWithdiff/output';
     const outputFilePath = path.join(outputDir, 'changed_files.json');
-    const premergePath = '/app/dataset/confirmed/pravega/Issue_850-_Fix_for_intermittent_end_to_end_test_failures/premerge_853';
-    const mergePath = '/app/dataset/confirmed/pravega/Issue_850-_Fix_for_intermittent_end_to_end_test_failures/merge_853';
+    const premergePath = '/app/dataset/test/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112';
+    const mergePath = '/app/dataset/test/servantes/pullrequest/fix_up_protobufs_and_improve_ci/merge_112';
     const fileExtension = ''; // 必要に応じて変更可能
 
     // 出力ファイルを初期化
-    fs.writeFileSync(outputFilePath, '', 'utf8');
+    try{
+        fs.writeFileSync(outputFilePath, '', 'utf8');
+    } catch (err) {
+        console.error(`Error initializing output file: ${err.message}`);
+    }
 
     (async () => {
         try {
-            const results = await getChangedFiles(premergePath, mergePath,fileExtension);
+            const results = await getChangedFiles(premergePath, mergePath, fileExtension);
             fs.writeFileSync(outputFilePath, JSON.stringify(results, null, 2), 'utf8');
             console.log(`変更のあったファイルが ${outputFilePath} に保存されました。`);
         } catch (error) {
@@ -46,7 +50,7 @@ if (require.main === module) {
 }
 
 // メインの比較関数
-async function getChangedFiles(premergePath, mergePath, extension) {
+export default async function getChangedFiles(premergePath, mergePath, extension) {
     try {
         // 2つのディレクトリから対象ファイルリストを取得（無視リストを考慮）
         const premergeFiles = getFilesRecursive(premergePath, extension, ignore);
@@ -139,4 +143,3 @@ function diffFiles(file1, file2) {
     });
 }
 
-module.exports = { getChangedFiles };

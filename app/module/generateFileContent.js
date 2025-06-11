@@ -10,11 +10,11 @@
  * const results = await copyFiles(filePaths);
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 /* __MAIN__ */
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     const outputDir = '/app/app/experimentLLM/output';
     const outputFilePath = path.join(outputDir, 'copied_files.txt');
     const filePaths = [
@@ -37,7 +37,7 @@ if (require.main === module) {
 }
 
 // メインのコピー関数
-async function copyFiles(filePaths) {
+export default async function copyFiles(filePaths) {
     try {
         const copiedResults = [];
 

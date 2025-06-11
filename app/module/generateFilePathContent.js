@@ -10,8 +10,8 @@ JSON ファイルとして保存する
 */
 
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 
 if(require.main === module) {
@@ -30,7 +30,7 @@ if(require.main === module) {
  * @param {string} originalDirPath - 初期ディレクトリのパス（再帰呼び出しで使用）
  * @returns {Object} - ファイルのパスと内容を含むJSONオブジェクト
  */
-function findFiles(folderDirPath, fileExtension, originalDirPath = folderDirPath) {
+export default function findFiles(folderDirPath, fileExtension, originalDirPath = folderDirPath) {
     const results = [];
     const list = fs.readdirSync(folderDirPath);
 
@@ -52,4 +52,3 @@ function findFiles(folderDirPath, fileExtension, originalDirPath = folderDirPath
     return { [key]: results };
 }
 
-module.exports = { findFiles };
