@@ -6,7 +6,6 @@ node_modules/*
 /build/
 /tmp/
 
-.vscode/
 .env
 .env.local
 .env.development.local

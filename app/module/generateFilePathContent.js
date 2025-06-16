@@ -14,7 +14,7 @@ import fs from 'fs';
 import path from 'path';
 
 
-if(require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     const premergePath = '/app/dataset/confirmed/pravega/Issue_4334-_Fix_auth_and_related_exception_handling/premerge_4336';
     const protoContentList = findFiles(premergePath, '.proto');
 
