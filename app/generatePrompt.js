@@ -43,7 +43,7 @@ import {mergeStructures, findAllAndMergeProjectRoots} from './module/editFilePat
 
 
 /*config*/
-const datasetDir = '/app/dataset/test';
+const datasetDir = '/app/dataset/filtered_commit';
 
 
 
@@ -80,12 +80,12 @@ async function main() {
                 //"premerge_"で始まるサブディレクトリを取得
                 const premergePath = fs.readdirSync(pullRequestPath)
                     .map(dir => path.join(pullRequestPath, dir))  // フルパスに変換
-                    .find(filePath => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('premerge_'));
+                    .find(filePath => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('premerge'));
 
                 // "merge_"で始まるサブディレクトリを取得
                 let mergePath = fs.readdirSync(pullRequestPath)
                     .map(dir => path.join(pullRequestPath, dir))
-                    .find(filePath => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('merge_'));
+                    .find(filePath => fs.statSync(filePath).isDirectory() && path.basename(filePath).startsWith('merge'));
                 // "merge_"がなければ"commit_snapshot_"を探す
                 if (!mergePath) {
                     mergePath = fs.readdirSync(pullRequestPath)
