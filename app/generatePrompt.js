@@ -34,7 +34,8 @@ import path from 'path';
 
 import getPullRequestPaths from './module/getPullRequestPaths.js';
 import findFiles from './module/generateFilePathContent.js';
-import getFilesDiff from './module/generateContentDiff.js';
+import copyFiles from './module/generateFileContent.js';
+import {getFilesDiff, getDiffsForSpecificFiles} from './module/generateContentDiff.js';
 import getChangedFiles from './module/generateFileChanged.js';
 import getPathTree from './module/generateDirPathLists.js';
 import getSurroundingDirectoryStructure from './module/generatePeripheralStructure.js';
@@ -167,47 +168,14 @@ async function main() {
                 // 04_surroundedFilePaths.txt の処理
                 // ========================================================================
 
-
-                /*fileChangesの中からproto関連なファイルを抽出*/
-                const GRPC_GEN_PATTERNS = [
-                    '.pb.', '_pb2.', '.pb2.', '.pb.go', '.pb.cc', '.pb.h',
-                    '.pb.rb', '.pb.swift', '.pb.m', '.pb-c.', '.pb-c.h', '.pb-c.c'
-                ];
+                // ステップA: changedFilesを3つのカテゴリに分類
                 const GRPC_KEYWORDS = ['service', 'client', 'server', 'handler', 'rpc', 'impl'];
-
-                const EXCLUDED_PATTERNS = [
-                    // 拡張子
-                    '.md', '.markdown', '.log', '.lock',
-                    // 画像
-                    '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico',
-                    // 完全一致するファイル名
-                    'Dockerfile', 'docker-compose.yml', '.dockerignore', 'LICENSE',
-                    // 特定のディレクトリ
-                    '.github/', '.circleci/', '.vscode/', 'docs/',
-                ];
-
+                const GRPC_GEN_PATTERNS = ['.pb.', '_pb2.', '.pb2.', '.pb.go', '.pb.cc', '.pb.h', '.pb.rb', '.pb.swift', '.pb.m', '.pb-c.', '.pb-c.h', '.pb-c.c'];
+                const EXCLUDED_PATTERNS = ['.md', '.markdown', '.log', '.lock', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', 'Dockerfile', 'docker-compose.yml', '.dockerignore', 'LICENSE', '.github/', '.circleci/', '.vscode/', 'docs/'];
                 const isGeneratedFile = (filePath) => GRPC_GEN_PATTERNS.some(pat => filePath.includes(pat));
                 const isTestFile = (filePath) => filePath.toLowerCase().includes('test');
+                const isExcludedFile = (filePath) => EXCLUDED_PATTERNS.some(pat => filePath.includes(pat));
 
-                const isExcludedFile = (filePath) => {
-                    // filePathの末尾や一部に除外パターンが含まれているかチェック
-                    return EXCLUDED_PATTERNS.some(pat => filePath.includes(pat));
-                };
-
-                // 正規表現を使った、より厳密な判定の例
-                const isExcludedFileWithRegex = (filePath) => {
-                    const patterns = [
-                        /\.md$/, /\.markdown$/,            // Markdown
-                        /LICENSE$/, /\.gitignore$/,        // ドキュメント・Git設定
-                        /package-lock\.json$/, /yarn\.lock$/, // Lockファイル
-                        /^Dockerfile$/,                    // Dockerfile
-                        /\.(png|jpe?g|gif|svg|ico)$/,      // 画像ファイル
-                        /^\.github\//, /^\.circleci\//,      // CI/CD設定ディレクトリ
-                    ];
-                    return patterns.some(regex => regex.test(filePath));
-                };
-
-                /*changedFilesを3つのカテゴリに分類 */
                 const protoFiles = [];
                 const generatedFiles = [];
                 const handwrittenFiles = [];
@@ -217,10 +185,9 @@ async function main() {
                         protoFiles.push(file);
                     } else if (isGeneratedFile(file)) {
                         generatedFiles.push(file);
-                    } else if (!isExcludedFile(file) && !isTestFile(file)) { 
+                    } else if (!isExcludedFile(file) && !isTestFile(file)) {
                         handwrittenFiles.push(file);
                     }
-                // 除外ファイルとテストファイルはどのカテゴリにも属さず、ここで除外される
                 });
 
                 console.log('Categorized Proto Files:', protoFiles);
@@ -228,128 +195,175 @@ async function main() {
                 console.log('Categorized Handwritten Files:', handwrittenFiles);
 
 
-                /*周辺ディレクトリ構造の生成*/
-                
-                // 探索の起点となるパス。PRディレクトリ自体を指定すると premerge/merge両方を取得できる
-                const structureSourcePath = pullRequestPath; 
-                // depthは必要に応じて調整。2程度あれば premerge/merge を捉えられる
-                const rawStructure = getSurroundingDirectoryStructure(structureSourcePath, 3);
+                // ステップB: トップダウンでプロジェクト全体の詳細な構造を一度に取得
+                const structureSourcePath = pullRequestPath;
+                // ❗❗【最重要ポイント】❗❗
+                // depthを十分に大きく設定 (5〜6程度あれば殆どのプロジェクトで詳細まで取得可能)
+                // これにより、骨格と詳細の情報を一度で正確に取得します。
+                const rawStructure = getSurroundingDirectoryStructure(structureSourcePath, 5);
 
-                // 1. rawStructureからpremerge_やmerge_等の中身をすべて探し、1つにマージする
-                const mergedProjectRoot = findAllAndMergeProjectRoots(rawStructure);
+                // rawStructureからpremerge_やmerge_等の中身をすべて探し、1つにマージする
+                const finalProjectStructure = findAllAndMergeProjectRoots(rawStructure);
 
 
-                /**
-                 * 与えられた構造オブジェクトがリポジトリのルートディレクトリらしいかを判定する。
-                 * @param {object} structure - ファイル構造オブジェクト。
-                 * @returns {boolean} - ルートディレクトリらしい場合はtrue。
-                 */
+                // ステップC: 取得した構造がルートディレクトリか判定し、形式を整える
                 function isLikelyRepoRoot(structure) {
-                    // ルートディレクトリによく存在するファイルやディレクトリのリスト
-                    const rootIndicators = [
-                        '.gitignore',
-                        'LICENSE',
-                        'README.md',
-                        'Makefile',
-                        'Tiltfile',
-                        'go.mod',       // Goプロジェクト
-                        'package.json', // Node.jsプロジェクト
-                        'pyproject.toml', // Pythonプロジェクト
-                        '.github',
-                        '.circleci'
-                    ];
-
-                    // structureの直下のキーに、上記のいずれかが含まれているかチェック
+                    const rootIndicators = ['.gitignore', 'LICENSE', 'README.md', 'Makefile', 'Tiltfile', 'go.mod', 'package.json', 'pyproject.toml', '.github', '.circleci'];
                     return rootIndicators.some(indicator => Object.prototype.hasOwnProperty.call(structure, indicator));
                 }
 
-                const structureFilePath = path.join(pullRequestPath, '04_surroundedFilePath.txt');
-
-                // 2. 既存のファイルを読み込み、追記の準備をする
-                let masterStructure = {};
-                if (fs.existsSync(structureFilePath)) {
-                    try {
-                        const existingContent = fs.readFileSync(structureFilePath, 'utf8');
-                        if (existingContent) {
-                            masterStructure = JSON.parse(existingContent);
-                        }
-                    } catch (e) {
-                        console.error(`Could not parse existing structure file: ${structureFilePath}`, e);
-                        masterStructure = {};
-                    }
-                }
-
-                // 3. マージされたルートの内容に応じて処理を分岐
-                if (Object.keys(mergedProjectRoot).length > 0) {
-                    if (isLikelyRepoRoot(mergedProjectRoot)) {
-                        // --- ケースA: ルートディレクトリと判定された場合 ---
-                        console.log("Structure is likely a repository root. Wrapping with 'root' key.");
-                        const newContribution = { "root": mergedProjectRoot };
-                        masterStructure = mergeStructures(masterStructure, newContribution);
-
+                let directoryStructure = {};
+                if (Object.keys(finalProjectStructure).length > 0) {
+                    if (isLikelyRepoRoot(finalProjectStructure)) {
+                        console.log("Final structure is likely a repository root. Wrapping with 'root' key.");
+                        directoryStructure = { "root": finalProjectStructure };
                     } else {
-                        // --- ケースB: サブディレクトリと判定された場合 ---
-                        console.log("Structure is likely a subdirectory. Merging directly.");
-                        masterStructure = mergeStructures(masterStructure, mergedProjectRoot);
+                        console.log("Final structure is likely a subdirectory. Using as is.");
+                        directoryStructure = finalProjectStructure;
                     }
                 }
 
-                // 4. 最終的な構造をファイルに書き戻す
-                fs.writeFileSync(structureFilePath, JSON.stringify(masterStructure, null, 2), 'utf8');
-                console.log(`Updated directory structure at: ${structureFilePath}`);
+
+                // ステップD: 最終的な出力オブジェクトを構築
+                const masterOutput = {
+                    "directory_structure": directoryStructure,
+                    "categorized_changed_files": {
+                        "proto_files": protoFiles,
+                        "generated_files": generatedFiles,
+                        "handwritten_files": handwrittenFiles
+                    }
+                };
 
 
+                // ステップE: 最終的な構造をファイルに書き込む
+                const structureFilePath = path.join(pullRequestPath, '04_surroundedFilePath.txt');
+                if (fs.existsSync(structureFilePath)) {
+                    fs.unlinkSync(structureFilePath);
+                }
+                fs.writeFileSync(structureFilePath, JSON.stringify(masterOutput, null, 2), 'utf8');
+                console.log(`Generated final data at: ${structureFilePath}`);
 
                 // ========================================================================
                 // 05_suspectedFiles.txt の処理
                 // ========================================================================
 
-                // --- ステップ3: 手書きコードのスコアリング ---
-                // Hunk/変更行数を取得する機能がまだないため、ここではキーワードのみでスコアリングします。
-                // 将来的に getChangedFiles が { file: string, additions: number, deletions: number } 
-                // のようなオブジェクトを返すようになれば、スコア計算に組み込めます。
-                const calculateScore = 
-                (filePath) => {
-                    let score = 0;
-                    // const changeCount = file.additions + file.deletions; // 将来的な拡張
-                    // score += changeCount;
+                // --- ステップ1: handwrittenFilesの差分を取得 ---
+                const diffsOfHandwrittenFiles = await getDiffsForSpecificFiles(handwrittenFiles, premergePath, mergePath);
 
-                    // gRPC関連キーワードが含まれていればスコアを加算
-                    const keywordScore = GRPC_KEYWORDS.reduce((currentScore, keyword) => {
-                        if (filePath.toLowerCase().includes(keyword)) {
-                            return currentScore + 1;
+                // --- ステップ2: 新スコアリングロジックの実装 ---
+
+                /**
+                 * .protoファイルの差分から、変更（追加/削除）されたメッセージ、サービス、RPC名などを抽出する
+                 * @param {string} protoDiffContent - 02_protoFileChanges.txt の内容
+                 * @returns {string[]} - 抽出された名前のリスト (e.g., ["Secrets", "GetSecrets"])
+                 */
+                function extractNamesFromProtoDiff(protoDiffContent) {
+                    const names = new Set();
+                    const regex = /^\s*(?:message|service|rpc)\s+([A-Za-z_][A-Za-z0-9_]*)/gm;
+
+                    // 差分（+または-で始まる行）のみを対象
+                    const changedLines = protoDiffContent.split('\n').filter(line => line.startsWith('+') || line.startsWith('-'));
+
+                    for (const line of changedLines) {
+                        let match;
+                        while ((match = regex.exec(line)) !== null) {
+                            names.add(match[1]);
                         }
-                        return currentScore;
-                    }, 0);
-                    score += keywordScore;
+                    }
+                    return Array.from(names);
+                }
+
+                // 02_protoFileChanges.txtを読み込み、変更された名前を抽出
+                const protoDiffContent = fs.readFileSync(path.join(pullRequestPath, '02_protoFileChanges.txt'), 'utf8');
+                const changedProtoNames = extractNamesFromProtoDiff(protoDiffContent);
+                console.log('Extracted names from proto diff:', changedProtoNames);
+
+
+                const calculateSuspicionScore = (fileInfo, protoFileNames, changedProtoNames) => {
+                    let score = 0;
+                    const { relativePath, diff } = fileInfo;
+                    const fileName = path.basename(relativePath);
+
+                    // ルール1: ファイル役割ボーナス
+                    if (fileName.endsWith('main.go') || fileName.endsWith('server.go') || fileName.endsWith('client.go') || fileName.endsWith('app.py') || fileName.endsWith('index.js')) {
+                        score += 20; // コアロジック
+                    } else if (relativePath.includes('deployment') || relativePath.endsWith('.yaml')) {
+                        score += 10; // K8sなどデプロイ関連
+                    } else if (fileName === 'Tiltfile' || fileName === 'Dockerfile') {
+                        score += 5;  // 開発環境・ビルド関連
+                    }
+
+                    // ルール2: Proto関連度ボーナス
+                    // (A) ファイル名の一致
+                    const fileNameWithoutExt = path.parse(fileName).name;
+                    if (protoFileNames.some(protoFile => path.parse(protoFile).name === fileNameWithoutExt)) {
+                        score += 15;
+                    }
+                    // (B) 内容の一致
+                    for (const protoName of changedProtoNames) {
+                        if (diff.includes(protoName)) {
+                            score += 30; // 内容に直接的な関連語があれば、非常に高いスコア
+                        }
+                    }
+
+                    // ルール3: 変更インパクトボーナス
+                    if (diff) {
+                        score += 5; // 差分が少しでもあれば、基礎点を与える
+                    }
 
                     return score;
                 };
 
-                const scoredHandwrittenFiles = handwrittenFiles.map(file => ({
-                    file: file,
-                    score: calculateScore(file)
+                // --- ステップ3: 各ファイルのスコアを計算し、ソート ---
+                const scoredFiles = diffsOfHandwrittenFiles.map(fileInfo => ({
+                    filePath: fileInfo.relativePath,
+                    score: calculateSuspicionScore(fileInfo, protoFiles, changedProtoNames),
+                    diff: fileInfo.diff
                 }));
 
                 // スコアの高い順にソート
-                scoredHandwrittenFiles.sort((a, b) => b.score - a.score);
+                scoredFiles.sort((a, b) => b.score - a.score);
 
+                const outputLines = [];
+                scoredFiles.forEach((file, index) => {
+                    const rank = index + 1;
 
-                // --- ステップ4: 「疑わしいファイルリスト」を作成 ---
-                // スコアが1以上のもの（キーワードに合致したもの）を抽出
-                const suspectedFiles = scoredHandwrittenFiles
-                    .filter(item => item.score > 0)
-                    .map(item => item.file);
+                    // --- ヘッダー部分 ---
+                    // 全てのファイルに共通で出力
+                    //outputLines.push(`Rank: ${rank}`);
+                    //outputLines.push(`Score: ${file.score}`);
+                    //outputLines.push(`File: ${file.filePath}`);
 
-                console.log('Suspected Files (High-Impact):', suspectedFiles);
+                    // --- 内容部分 ---
+                    // 上位3位までのファイルのみ、変更前の内容を出力
+                    if (rank <= 3) {
+                        const premergeFilePath = path.join(premergePath, file.filePath);
+                        if (fs.existsSync(premergeFilePath)) {
+                            try {
+                                const content = fs.readFileSync(premergeFilePath, 'utf8');
+                                // unix diff ライクなヘッダー
+                                outputLines.push(`--- /${file.filePath}`);
+                                outputLines.push(content);
+                            } catch (e) {
+                                console.error(`Error reading file content for ${premergeFilePath}:`, e.message);
+                                outputLines.push(`<< Error reading file content >>`);
+                            }
+                        } else {
+                            outputLines.push(`<< File content not found in premerge directory >>`);
+                        }
+                    }
 
-                // 05_suspectedFiles.txt として保存
+                    // 各エントリ間にセパレータを挿入
+                    //outputLines.push('---');
+                });
+
+                // 全ての行を結合して最終的なテキストを作成
+                const finalOutputText = outputLines.join('\n');
+
+                // ファイルに書き込み
                 const suspectedFilesPath = path.join(pullRequestPath, '05_suspectedFiles.txt');
-                if (fs.existsSync(suspectedFilesPath)) {
-                    fs.unlinkSync(suspectedFilesPath);
-                }
-                fs.writeFileSync(suspectedFilesPath, JSON.stringify(suspectedFiles, null, 2), 'utf8');
-
+                fs.writeFileSync(suspectedFilesPath, finalOutputText, 'utf8');
+                console.log(`Generated final suspected files list at: ${suspectedFilesPath}`);
 
             }
         }

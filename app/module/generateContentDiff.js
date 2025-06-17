@@ -30,7 +30,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 // メインの比較関数
-export default async function getFilesDiff(premergePath, mergePath, extension) {
+async function getFilesDiff(premergePath, mergePath, extension) {
     try {
 
         if (!premergePath || !mergePath) {
@@ -121,3 +121,37 @@ function diffFiles(file1, file2) {
         });
     });
 }
+
+/**
+ * 指定されたファイルパスのリストに基づいて、premergeとmerge間の差分を取得します。
+ * @param {string[]} fileList - 差分を取得したいファイルの相対パスのリスト。
+ * @param {string} premergePath - 変更前のファイルが存在するベースディレクトリ。
+ * @param {string} mergePath - 変更後のファイルが存在するベースディレクトリ。
+ * @returns {Promise<Array<{relativePath: string, diff: string}>>} - 差分結果の配列。
+ */
+async function getDiffsForSpecificFiles(fileList, premergePath, mergePath) {
+    if (!premergePath || !mergePath) {
+        throw new Error('premerge または merge ディレクトリが見つかりません');
+    }
+
+    const diffResults = [];
+    for (const relativePath of fileList) {
+        const file1 = path.join(premergePath, relativePath);
+        const file2 = path.join(mergePath, relativePath);
+
+        if (fs.existsSync(file1) && fs.existsSync(file2)) {
+            try {
+                const diffResult = await diffFiles(file1, file2);
+                if (diffResult) {
+                    // diffFilesは相対パスを返すので、入力の相対パスで上書きして一貫性を保つ
+                    diffResults.push({ relativePath: relativePath, diff: diffResult.diff });
+                }
+            } catch (err) {
+                console.error(`Error comparing files: ${err.message}`);
+            }
+        }
+    }
+    return diffResults;
+}
+
+export { getFilesDiff, getDiffsForSpecificFiles };

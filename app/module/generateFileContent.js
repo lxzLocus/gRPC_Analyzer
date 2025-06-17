@@ -18,13 +18,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const outputDir = '/app/app/experimentLLM/output';
     const outputFilePath = path.join(outputDir, 'copied_files.txt');
     const filePaths = [
-        '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/src/bio/smd.pb-c.c',
-        '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/src/control/server/harness.go',
-        '/app/dataset/modified_proto_reps/daos/pullrequest/DAOS-14214_control-_Fix_potential_missed_call_to_drpc_failure_handlers/premerge_12944/src/mgmt/smd.pb-c.c'
+        '/app/dataset/test/servantes/pullrequest/add_Secrets_service-_global_yaml/merge_54/Dockerfile.js.base'
     ]; // ここにファイルパスを配列で指定
 
     // 出力ファイルを初期化
-    fs.writeFileSync(outputFilePath, '', 'utf8');  // 初期化して空にする
+    //fs.writeFileSync(outputFilePath, '', 'utf8');  // 初期化して空にする
 
     (async () => {
         try {
@@ -37,14 +35,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 // メインのコピー関数
-export default async function copyFiles(filePaths) {
+export default async function copyFiles(filePaths, outputFilePath) {
     try {
         const copiedResults = [];
 
         for (const filePath of filePaths) {
             if (fs.existsSync(filePath)) {
                 try {
-                    const copyResult = await copyFile(filePath);
+                    const copyResult = await copyFile(filePath, outputFilePath);
                     if (copyResult) {
                         copiedResults.push(copyResult);
                     }
@@ -69,7 +67,7 @@ export default async function copyFiles(filePaths) {
  * @param {string} filePath - コピーするファイルのパス
  * @returns {Object} - コピー結果
  */
-function copyFile(filePath) {
+function copyFile(filePath, outputFilePath) {
     return new Promise((resolve, reject) => {
         console.log(`Copying file: ${filePath}`); // デバッグ用
 
