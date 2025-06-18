@@ -168,14 +168,24 @@ async function main() {
                 // 04_surroundedFilePaths.txt の処理
                 // ========================================================================
 
-                // ステップA: changedFilesを3つのカテゴリに分類
-                const GRPC_KEYWORDS = ['service', 'client', 'server', 'handler', 'rpc', 'impl'];
+                // ステップA: changedFilesの分類 (フィルタリングロジックを刷新)
                 const GRPC_GEN_PATTERNS = ['.pb.', '_pb2.', '.pb2.', '.pb.go', '.pb.cc', '.pb.h', '.pb.rb', '.pb.swift', '.pb.m', '.pb-c.', '.pb-c.h', '.pb-c.c'];
-                const EXCLUDED_PATTERNS = ['.md', '.markdown', '.log', '.lock', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', 'Dockerfile', 'docker-compose.yml', '.dockerignore', 'LICENSE', '.github/', '.circleci/', '.vscode/', 'docs/'];
                 const isGeneratedFile = (filePath) => GRPC_GEN_PATTERNS.some(pat => filePath.includes(pat));
                 const isTestFile = (filePath) => filePath.toLowerCase().includes('test');
-                const isExcludedFile = (filePath) => EXCLUDED_PATTERNS.some(pat => filePath.includes(pat));
 
+                // --- ▼▼▼【重要修正点１：厳密なフィルタリング】▼▼▼ ---
+                const EXCLUDED_EXTENSIONS = ['.md', '.markdown', '.log', '.lock', '.json', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.pyc'];
+                const EXCLUDED_FILENAMES = ['Dockerfile', 'docker-compose.yml', '.dockerignore', 'LICENSE', '.gitignore', '.golangci.yml', 'go.sum', 'go.mod'];
+                const EXCLUDED_DIRS = ['.github/', '.circleci/', '.vscode/', 'docs/', 'vendor/', 'test/'];
+
+                function isExcludedFile(filePath) {
+                    const fileName = path.basename(filePath);
+                    if (EXCLUDED_EXTENSIONS.some(ext => filePath.endsWith(ext))) return true;
+                    if (EXCLUDED_FILENAMES.includes(fileName)) return true;
+                    if (EXCLUDED_DIRS.some(dir => filePath.startsWith(dir))) return true;
+                    return false;
+                }
+                
                 const protoFiles = [];
                 const generatedFiles = [];
                 const handwrittenFiles = [];
