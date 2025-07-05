@@ -17,20 +17,20 @@ if (import.meta.url === `file://${process.argv[1]}`) {
  * @param datasetDir 例: /app/dataset/filtered_commit や /app/dataset/test
  */
 export async function runForAllDatasets(datasetDir: string) {
-    const projectDirs = fs.readdirSync(datasetDir).filter(dir => fs.statSync(path.join(datasetDir, dir)).isDirectory());
+    const datasetDirs = fs.readdirSync(datasetDir).filter(dir => fs.statSync(path.join(datasetDir, dir)).isDirectory());
 
-    for (const projectName of projectDirs) {
-        const projectPath = path.join(datasetDir, projectName);
+    for (const repositoryName of datasetDirs) {
+        const savedRepositoryPath = path.join(datasetDir, repositoryName);
         let categoryDirs: string[] = [];
         try {
-            categoryDirs = fs.readdirSync(projectPath).filter(dir => fs.statSync(path.join(projectPath, dir)).isDirectory());
+            categoryDirs = fs.readdirSync(savedRepositoryPath).filter(dir => fs.statSync(path.join(savedRepositoryPath, dir)).isDirectory());
         } catch (err) {
-            console.error(`❌ Error reading category directories in ${projectPath}:`, (err as Error).message);
+            console.error(`❌ Error reading category directories in ${savedRepositoryPath}:`, (err as Error).message);
             continue;
         }
 
         for (const category of categoryDirs) {
-            const categoryPath = path.join(projectPath, category);
+            const categoryPath = path.join(savedRepositoryPath, category);
             const titleDirs = fs.readdirSync(categoryPath).filter(dir => fs.statSync(path.join(categoryPath, dir)).isDirectory());
 
             for (const pullRequestTitle of titleDirs) {

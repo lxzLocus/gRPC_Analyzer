@@ -2,30 +2,35 @@
 
 ---
 
+## メモ
+
+ほぼLLM生成.
+まだ正確に決まってない
+
 ## 1. プロジェクト目的
 
-gRPCベースのマイクロサービスにおいて、`.proto`ファイルの変更に起因するバグを  
-LLMエージェントが自動で検出・修正するシステムを構築する。
+gRPCベースのマイクロサービスにおいて，`.proto`ファイルの変更に起因するバグを  
+LLMエージェントが自動で検出・修正するシステムを構築する．
 
 ---
 
 ## 2. コア課題と基本方針
 
-- gRPCは多言語対応のため、従来の静的解析による依存関係追跡はコスト・保守性の面で非現実的。
-- LLMを「自律的なエージェント」として活用し、
+- gRPCは多言語対応のため，従来の静的解析による依存関係追跡はコスト・保守性の面で非現実的．
+- LLMを「自律的なエージェント」として活用し，
   - 高品質なコンテキストを戦略的に与える
   - 「Think→Plan→Act」サイクルを強制
   - 必要に応じて追加情報を動的に取得できる
-  という設計思想を採用。
+  という設計思想を採用．
 
 ---
 
 ## 3. システム構成
 
 - **コンテキスト生成パイプライン**  
-  コミット前後のスナップショットから、LLMが初期分析に使う構造化JSON（master_context.json）を生成。
+  コミット前後のスナップショットから，LLMが初期分析に使う構造化JSON（master_context.json）を生成．
 - **LLM対話ループ**  
-  LLMのリクエストに応じて情報提供・修正適用を繰り返すステートフルな制御プログラム。
+  LLMのリクエストに応じて情報提供・修正適用を繰り返すステートフルな制御プログラム．
 
 ---
 
@@ -75,31 +80,86 @@ graph TD
 
 ### 4.1 コンテキスト生成
 
-- **入力**: premerge/mergeディレクトリ
-- **出力**: master_context.json（directory_structure, categorized_changed_files）
-- **主な処理**
-  - .proto差分抽出
-  - 変更ファイルリストのノイズ除去
-  - 「疑わしいファイル」選定（ファイル名・proto関連語・変更有無によるスコアリング）
-  - 上位N件のpre-change内容を抽出
-  - 重要ファイル周辺のディレクトリ構造をBFSでスニペット化し、最終的に統合
+LLMエージェントの分析精度は，入力されるコンテキストの質に大きく左右される．本パイプラインでは，コミット前後のスナップショットから，以下の戦略に基づいて高品質なコンテキストを生成し，`master_context.json`として出力する．
+
+- **入力**: `premerge/` および `merge/` ディレクトリ
+- **出力**: `master_context.json` (`directory_structure`, `categorized_changed_files`を含む)
+
+#### 4.1.1 変更ファイルリストのフィルタリング（ノイズ除去）
+
+LLMの分析を，本当に意味のあるソースコードに集中させるための最も重要な前処理．`.proto`と自動生成ファイルを除いた後，残りのファイル群（`changedFiles`）に対して厳密なフィルタリングを適用し，「純粋な手書きコード」のみを抽出する．
+
+##### 目的
+- `handwrittenFiles`リストから，コードのロジックとは直接関係ないファイル（ドキュメント，ロックファイル，画像など）を除去し，分析の**S/N比（信号対雑音比）**を最大化する．
+- 後続の**スコアリング処理の信頼性**を向上させる．
+- LLMの**分析負荷とコストを軽減**する．
+
+##### 実装
+判定ルールを「拡張子」「完全一致ファイル名」「ディレクトリパス」の3種類に分け，それぞれに除外パターンリストを定義．これにより，単純な文字列検索では防ぎきれない意図しないマッチングを回避し，正確なフィルタリングを実現する．
+
+```javascript
+// 判定ロジックの例
+const EXCLUDED_EXTENSIONS = ['.md', '.log', '.lock', '.json', '.svg'];
+const EXCLUDED_FILENAMES = ['Dockerfile', 'LICENSE', '.gitignore'];
+const EXCLUDED_DIRS = ['.github/', 'docs/', 'vendor/'];
+
+function isExcludedFile(filePath) {
+    const fileName = path.basename(filePath);
+    if (EXCLUDED_EXTENSIONS.some(ext => filePath.endsWith(ext))) return true;
+    if (EXCLUDED_FILENAMES.includes(fileName)) return true;
+    if (EXCLUDED_DIRS.some(dir => filePath.startsWith(dir))) return true;
+    return false;
+}
+```
+
+主な除外対象
+- ドキュメント: .md, LICENSE 等
+- 依存関係: yarn.lock, go.sum 等
+- 設定ファイル: .gitignore, .golangci.yml 等
+- CI/CD: .github/, .circleci/ 等
+- テストコード: *_test.go 等（isTestFile関数で別途判定）
+
+#### 4.1.2 ディレクトリ構造の生成
+「トップダウン方式」を採用し，プロジェクト全体の文脈を失うことなく，詳細なファイルツリーを生成する．
+
+1. 全体の構造取得: pullRequestPath（premergeやmergeを含むディレクトリ）を起点に，十分なdepth（例: 5）でgetSurroundingDirectoryStructureを実行し，プロジェクト全体の詳細なファイル構造を取得する．
+
+2. プロジェクトルート抽出: findAllAndMergeProjectRootsを使い，premerge等のスナップショットディレクトリの中身だけを正確に抽出・統合する．
+
+3. セマンティックな整形: isLikelyRepoRootでルートディレクトリらしさを判定し，必要に応じて"root": {}でラップする．これにより，構造情報自体が持つ意味を豊かにする．
+
+#### 4.1.3 「疑わしいファイル」のスコアリングと選定
+フィルタリング済みのhandwrittenFilesを対象に，.proto変更との関連度を測るためのセマンティックなスコアリングを行う．
+
+- スコアリング哲学: 「変更の量」ではなく，「変更の質と関連性」を評価する．
+
+- 評価基準:
+
+  1. ファイル役割ボーナス: main.goのようなコアロジックか，.yamlのような設定ファイルかといった役割の重要度．
+
+  2. Proto関連度ボーナス: .proto差分から抽出したメッセージ/サービス名が，ファイルの差分内に登場するかという，最も強力な関連性の指標．
+
+  3. 変更インパクトボーナス: 変更があったという事実自体を評価する基礎点．
+
+- 出力: スコア上位3件については，LLMにバイアスを与えないよう変更前のファイル内容を付与し，05_suspectedFiles.txtとして出力する．
+
 
 ### 4.2 LLM対話ループ
 
 - **プロンプト設計**
-  - 初期プロンプト、追加情報、修正成功/失敗時のテンプレートを使い分け
+  - 初期プロンプト，追加情報，修正成功/失敗時のテンプレートを使い分け
 - **タグベース制御**
-  - `%_Thought_%`（分析）、`%_Plan_%`（計画）、`%_Reply Required_%`（追加情報要求）、`%_Modified_%`（修正案）、`%%_Fin_%%`（完了）で分岐
+  - `%_Thought_%`（分析），`%_Plan_%`（計画），`%_Reply Required_%`（追加情報要求），`%_Modified_%`（修正案），`%%_Fin_%%`（完了）で分岐
 - **ループ処理**
-  - LLMのタグに応じて情報提供・修正適用・エラー対応を繰り返し、`%%_Fin_%%`で終了
+  - LLMのタグに応じて情報提供・修正適用・エラー対応を繰り返し，`%%_Fin_%%`で終了
 
 ---
 
 ## 5. 技術的特徴
 
-- 静的解析に頼らず、LLMの動的探索力＋高品質コンテキストで多言語gRPCの修正を実現
-- 「疑わしいファイル」選定のスコアリングは、proto差分の語彙を活用し、静的解析不要で関連性を高めている
-- LLMの出力をタグで制御し、状態遷移を明確化した堅牢な対話ループ設計
+- 静的解析に頼らず，LLMの動的探索力＋高品質コンテキストで多言語gRPCの修正を実現
+- 「疑わしいファイル」選定のスコアリングは，proto差分の語彙を活用し，静的解析不要で関連性を高めている
+- LLMの出力をタグで制御し，状態遷移を明確化した堅牢な対話ループ設計
 - master_context.jsonの設計がLLMパフォーマンスの鍵
 
 ---
@@ -108,20 +168,20 @@ graph TD
 
 ```
 dataset/
-└── PROJECT_NAME/
+└── REPOSITORY_NAME/
     └── pullrequest/ または issue/
         └── PULLREQUEST_NAME/
             ├── premerge_xxx/         # コミット前のスナップショット（LLM修正フローの入力）
             ├── merge_xxx/            # コミット後のスナップショット（diff計算や評価用）
             ├── commit_snapshot_xxx/  # その他のスナップショット（必要に応じて利用）
-            ├── 01_proto.txt
-            ├── 02_protoFileChanges.txt
-            ├── 03_fileChanges.txt
-            ├── 04_surroundedFilePaths.txt
-            └── 05_suspectedFiles.txt
+            ├── 01_proto.txt          # .protoファイルのリストおよび内容  (generatePrompt.jsで生成)
+            ├── 02_protoFileChanges.txt          # premergeから特定のコミットまでの間で変更のあったprotoファイルのリストおよびdiff (generatePrompt.jsで生成)
+            ├── 03_fileChanges.txt            # premergeから特定のコミットまでの間で変更のあったファイルのリスト (generatePrompt.jsで生成)
+            ├── 04_surroundedFilePaths.txt          # 03_fileChangesの中から，自動生成されたファイルの周辺パス構造（generatePeripheralStructure.jsで生成）
+            └── 05_suspectedFiles.txt          # 03_fileChangesの中から，特にメインファイルとなりうる手でコーディングされたファイル
 ```
 
-- **PROJECT_NAME**: 対象プロジェクト名
+- **REPOSITORY_NAME**: 対象プロジェクト名
 - **pullrequest/issue**: PRかIssueかの区分
 - **PULLREQUEST_NAME**: PRやIssueのタイトルやID
 - **premerge_xxx/**: LLMエージェントが修正対象とする入力ディレクトリ
@@ -134,6 +194,6 @@ dataset/
 ## 7. 実装状況
 
 - TypeScript/ESMでllmFlowController, llmFlowBatchRunner等の主要モジュールを実装
-- バッチ処理・ログ出力・プロンプト管理・タグ解析・diff適用など、autoResponser.jsの機能を全て移行・拡張済み
+- バッチ処理・ログ出力・プロンプト管理・タグ解析・diff適用など，autoResponser.jsの機能を全て移行・拡張済み
 
 ---
