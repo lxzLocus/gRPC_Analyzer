@@ -16,6 +16,7 @@ modules
 */
 import Logger from "/app/app/module/logger.js";
 import RestoreDiff from '/app/app/module/restoreDiff.js';
+import { LLMFlowController } from '/app/app/module/llmFlowController.js';
 
 //実行ファイルが置かれているパス
 const appDirRoot = "/app/app/";
@@ -123,9 +124,9 @@ class Config {
     tmpDiffRestorePath: string;
     maxTokens: number;
 
-    constructor() {
+    constructor(datasetDir: string) {
         //premergeまで指定
-        this.inputProjectDir = "/app/dataset/confirmed/pravega/Issue_3758-_Fix_typo_in_controller_API_call_name/premerge_3759";
+        this.inputProjectDir = datasetDir;
         this.outputDir = path.join(appDirRoot, 'output');
         this.inputDir = path.join(appDirRoot, 'input');
         this.promptDir = path.join(appDirRoot, 'prompt');
@@ -211,6 +212,8 @@ class OpenAIClient {
 
 async function main() {
     // --- 1. 初期設定 ---
+    const datasetDir = "/app/dataset/test"; // データセットのディレクトリ
+
     const config = new Config();
     const fileManager = new FileManager(config);
     const messageHandler = new MessageHandler();
@@ -374,3 +377,6 @@ async function main() {
 
 
 main();
+
+// LLMFlowController等から利用できるようクラスをエクスポート
+export { Config, FileManager, MessageHandler, OpenAIClient };
