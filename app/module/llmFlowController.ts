@@ -14,6 +14,10 @@ import Logger from './logger.js';
 //実行ファイルが置かれているパス
 const APP_DIR: string = "/app/app/";
 
+/**
+ * Configuration class for managing file paths and prompt templates.
+ * @pullRequestPath: プルリクエストのパス "/PATH/premerge_xxx"
+ */
 class Config {
     inputProjectDir: string;
     outputDir: string;
@@ -24,9 +28,10 @@ class Config {
     tmpDiffRestorePath: string;
     maxTokens: number;
 
-    constructor() {
-        //premergeまで指定
-        this.inputProjectDir = "/app/dataset/confirmed/pravega/Issue_3758-_Fix_typo_in_controller_API_call_name/premerge_3759";
+
+
+    constructor(pullRequestPath: string) {
+        this.inputProjectDir = pullRequestPath;
         this.outputDir = path.join(APP_DIR, 'output');
         this.inputDir = path.join(APP_DIR, 'input');
         this.promptDir = path.join(APP_DIR, 'prompt');
