@@ -214,7 +214,7 @@ async function main() {
     // --- 1. 初期設定 ---
     const datasetDir = "/app/dataset/test"; // データセットのディレクトリ
 
-    const config = new Config();
+    const config = new Config(datasetDir);
     const fileManager = new FileManager(config);
     const messageHandler = new MessageHandler();
     const openAIClient = new OpenAIClient(process.env.OPENAI_TOKEN || '');
@@ -277,8 +277,8 @@ async function main() {
             raw_content: llm_content,
             parsed_content: {
                 thought: parsed_response.thought,
-                plan: parsed_response.plan, // TODO: 必要であればplanをJSONにパース
-                reply_required: parsed_response.requiredFilepaths,
+                plan: parsed_response.plan ? [{ step: 1, description: parsed_response.plan }] : null,
+                reply_required: parsed_response.requiredFilepaths.map(path => ({ type: "FILE_CONTENT", path })),
                 modified_diff: parsed_response.modifiedDiff || null,
                 commentText: parsed_response.commentText || null,
                 has_fin_tag: parsed_response.has_fin_tag

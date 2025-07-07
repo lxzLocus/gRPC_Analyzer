@@ -9,8 +9,8 @@ type LLMRequestLog = {
 
 type ParsedContentLog = {
   thought: string | null;
-  plan: any | null; // planの具体的な構造に応じて適宜修正
-  reply_required: string[];
+  plan: any[] | null;
+  reply_required: Array<{ type: string; path: string }>;
   modified_diff: string | null;
   commentText: string | null;
   has_fin_tag: boolean;

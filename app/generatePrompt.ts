@@ -34,6 +34,7 @@ import path from 'path';
 import  getPullRequestPaths  from './module/getPullRequestPaths.js';
 import  findFiles from './module/generateFilePathContent.js';
 import  getFilesDiff from './module/generateContentDiff.js';
+// @ts-ignore: 動的インポートのため型チェックを無視
 import  getChangedFiles from './module/generateFileChanged.js';
 import  getPathTree from './module/generateDirPathLists.js';
 

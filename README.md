@@ -7,6 +7,117 @@
 ほぼLLM生成.
 まだ正確に決まってない
 
+### ログの形式
+
+```json
+{
+  "experiment_metadata": {
+    "experiment_id": "pravega/Issue_3758-_Fix_typo_in_controller_API_call_name",
+    "start_time": "2025-06-11T04:45:00.123Z",
+    "end_time": "2025-06-11T04:45:15.456Z",
+    "status": "Completed (%%_Fin_%%)",
+    "total_turns": 3,
+    "total_tokens": {
+      "prompt_tokens": 12500,
+      "completion_tokens": 1800,
+      "total": 14300
+    }
+  },
+  "interaction_log": [
+    {
+      "turn": 1,
+      "timestamp": "2025-06-11T04:45:05.123Z",
+      "llm_request": {
+        "prompt_template": "00_prompt_initial.txt",
+        "full_prompt_content": "## Instruction ##\nYou are an AI assistant...\n\n## Context ##\n..."
+      },
+      "llm_response": {
+        "raw_content": "%_Thought_%\nThe proto change removes 'optional'...\n%_Plan_%\n[...]\n%_Reply Required_%\n[...]",
+        "parsed_content": {
+          "thought": "The proto change removes 'optional'...",
+          "plan": [
+            {"step": 1, "action": "REVIEW_FILE_CONTENT", "filePath": "..."},
+            {"step": 2, "action": "REQUEST_FILE_CONTENT", "filePath": "..."}
+          ],
+          "reply_required": [
+            {"type": "FILE_CONTENT", "path": "wfe/wfe.go"}
+          ],
+          "modified_diff": null,
+          "has_fin_tag": false
+        },
+        "usage": {
+          "prompt_tokens": 8000,
+          "completion_tokens": 350,
+          "total": 8350
+        }
+      },
+      "system_action": {
+        "type": "FETCHING_FILES",
+        "details": "Replying with the content of 'wfe/wfe.go'."
+      }
+    },
+    {
+      "turn": 2,
+      "timestamp": "2025-06-11T04:45:10.234Z",
+      "llm_request": {
+        "prompt_template": "01_prompt_reply.txt",
+        "full_prompt_content": "## 状況 ##\nあなたの要求に基づき、以下の追加情報を提供します...\n"
+      },
+      "llm_response": {
+        "raw_content": "%_Thought_%\nAfter reviewing wfe/wfe.go, I can confirm...\n%_Modified_%\n--- a/ra/ra.go\n+++ b/ra/ra.go\n...",
+        "parsed_content": {
+          "thought": "After reviewing wfe/wfe.go, I can confirm...",
+          "plan": null, // 計画の更新がない場合はnull
+          "reply_required": [],
+          "modified_diff": "--- a/ra/ra.go\n+++ b/ra/ra.go\n...",
+          "has_fin_tag": false
+        },
+        "usage": {
+          "prompt_tokens": 3000,
+          "completion_tokens": 900,
+          "total": 3900
+        }
+      },
+      "system_action": {
+        "type": "APPLYING_DIFF_AND_RECHECKING",
+        "details": "Diff applied successfully. Preparing for re-check."
+      }
+    },
+    {
+      "turn": 3,
+      "timestamp": "2025-06-11T04:45:15.456Z",
+      "llm_request": {
+        "prompt_template": "02_prompt_modified.txt",
+        "full_prompt_content": "## 状況 ##\nあなたが提案した以下の修正を適用しました...\n"
+      },
+      "llm_response": {
+        "raw_content": "%%_Fin_%%",
+        "parsed_content": {
+          "thought": null,
+          "plan": null,
+          "reply_required": [],
+          "modified_diff": null,
+          "has_fin_tag": true
+        },
+        "usage": {
+          "prompt_tokens": 1500,
+          "completion_tokens": 5,
+          "total": 1505
+        }
+      },
+      "system_action": {
+        "type": "TERMINATING",
+        "details": "%%_Fin_%% tag detected."
+      }
+    }
+  ]
+}
+```
+- 生の対話：`llm_request.full_prompt_content`と`llm_response.raw_content`
+- LLMの思考や計画を個別に表示：`llm_response.parsed_content.thought`や`llm_response.parsed_content.plan`
+
+
+
 ## 1. プロジェクト目的
 
 gRPCベースのマイクロサービスにおいて，`.proto`ファイルの変更に起因するバグを  

@@ -46,24 +46,11 @@ export async function runForAllDatasets(datasetDir: string) {
                     continue;
                 }
 
-                // LLMFlowControllerのConfig.inputProjectDirをpremergeDirにセットして実行
-                const controller = new LLMFlowController();
-                // ConfigのinputProjectDirを動的にセット
-                (controller as any).config = undefined; // 強制再初期化
-                (controller as any).fileManager = undefined;
-                (controller as any).messageHandler = undefined;
-                (controller as any).openAIClient = undefined;
-                (controller as any).logger = undefined;
-                (controller as any).currentMessages = [];
-                (controller as any).prompt_template_name = '';
-                (controller as any).next_prompt_content = null;
-
-                // run()内でprepareInitialContext()が呼ばれるので、そこでConfigが初期化される
-                // ただしConfigのinputProjectDirをpremergeDirに差し替える必要があるため、Configの設計を修正するのが理想
-                // ここでは暫定的にグローバル変数で渡すか、prepareInitialContextを修正する必要あり
-                // コメントで仮対応
-                (controller as any).__overrideInputProjectDir = premergeDir;
-
+                // 各プルリクエストの premerge ディレクトリを引数に渡して
+                // LLMFlowControllerのインスタンスを生成する
+                console.log(`🔄 Processing ${pullRequestPath}...`);
+                const controller = new LLMFlowController(premergeDir);
+                
                 // run()を実行
                 await controller.run();
 
