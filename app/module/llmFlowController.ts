@@ -227,9 +227,12 @@ class LLMFlowController {
     private async prepareInitialContext() {
         // autoResponser.tsのConfig, FileManager, MessageHandler, OpenAIClientを初期化
         this.config = new Config(this.inputPremergeDir);
-        this.fileManager = new FileManager(this.config);
+        this.fileManager = new FileManager(this.config, this.logger);
         this.messageHandler = new MessageHandler();
         this.openAIClient = new OpenAIClient(process.env.OPENAI_TOKEN || '');
+
+        // OpenAIClientの初期化完了を待機
+        await (this.openAIClient as any).initPromise;
 
         // 初期プロンプト生成
         this.next_prompt_content = this.fileManager.readFirstPromptFile();
@@ -320,7 +323,24 @@ class LLMFlowController {
             throw new Error("LLM応答が不正です");
         }
         const llm_content = this.context.llmResponse.choices[0].message.content;
-        this.context.llmParsed = this.messageHandler.analyzeMessages(llm_content);
+        
+        // Phase 3-3: LLM応答解析のパフォーマンス監視と詳細ログ
+        try {
+            this.context.llmParsed = await this.executeWithPerformanceMonitoring(
+                'LLM_Response_Analysis',
+                async () => this.messageHandler.analyzeMessages(llm_content)
+            );
+        } catch (error) {
+            // 解析エラーの詳細ログ
+            this.logger.logLLMParsingError(
+                llm_content,
+                'initial_analysis',
+                'Valid LLM response with proper tags',
+                'Invalid or malformed response',
+                error instanceof Error ? error : undefined
+            );
+            throw error;
+        }
     }
 
     private async llmReanalyze() {
@@ -330,7 +350,24 @@ class LLMFlowController {
             return;
         }
         const content = this.context.llmResponse.choices[0].message.content;
-        this.context.llmParsed = this.messageHandler.analyzeMessages(content);
+        
+        // Phase 3-3: 再解析時の詳細ログとパフォーマンス監視
+        try {
+            this.context.llmParsed = await this.executeWithPerformanceMonitoring(
+                'LLM_Response_Reanalysis',
+                async () => this.messageHandler.analyzeMessages(content)
+            );
+        } catch (error) {
+            this.logger.logLLMParsingError(
+                content,
+                'reanalysis',
+                'Valid LLM response with updated information',
+                'Failed to parse updated response',
+                error instanceof Error ? error : undefined
+            );
+            this.state = State.End;
+            return;
+        }
     }
 
     private async llmDecision() {
@@ -439,7 +476,11 @@ class LLMFlowController {
             if (parsed.requiredFileInfos && parsed.requiredFileInfos.length > 0) {
                 const fileContentInfos = parsed.requiredFileInfos.filter(info => info.type === 'FILE_CONTENT');
                 if (fileContentInfos.length > 0) {
-                    const result = await this.fileManager.getFileContents(fileContentInfos);
+                    // Phase 3-3: ファイル操作のパフォーマンス監視
+                    const result = await this.executeWithPerformanceMonitoring(
+                        'File_Content_Retrieval',
+                        async () => this.fileManager.getFileContents(fileContentInfos)
+                    );
                     this.context.fileContent = result;
                     return;
                 }
@@ -592,14 +633,25 @@ class LLMFlowController {
 
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : String(e);
-            this.logger.logError("Error applying diff", e instanceof Error ? e : new Error(errorMessage));
+            const diffError = e instanceof Error ? e : new Error(errorMessage);
             
             // Phase 3-2 新機能: エラー時の詳細情報収集
-            const errorContext = await this.collectErrorContext(parsed.modifiedDiff, errorMessage);
+            const detailedErrorContext = await this.collectErrorContext(parsed.modifiedDiff, errorMessage);
+            
+            // Phase 3-3 新機能: 詳細なdiff適用エラーログ
+            const affectedFiles = this.extractAffectedFilesFromDiff(parsed.modifiedDiff);
+            this.logger.logDiffApplicationError(
+                diffError,
+                parsed.modifiedDiff,
+                affectedFiles,
+                detailedErrorContext
+            );
+            
+            this.logger.logError("Error applying diff", diffError);
             
             this.context.error = {
                 message: errorMessage,
-                errorContext: errorContext,
+                errorContext: detailedErrorContext,
                 timestamp: new Date().toISOString(),
                 phase: 'DIFF_APPLICATION'
             } as any;
@@ -1364,6 +1416,51 @@ class LLMFlowController {
     }
 
     return context;
+    }
+
+    // =============================================================================
+    // Phase 3-3: 詳細エラーログ用ヘルパーメソッド
+    // =============================================================================
+
+    /**
+     * diffから影響を受けるファイルのリストを抽出
+     */
+    private extractAffectedFilesFromDiff(diffContent: string): string[] {
+        const files: string[] = [];
+        if (!diffContent) return files;
+
+        const lines = diffContent.split('\n');
+        for (const line of lines) {
+            if (line.startsWith('---') || line.startsWith('+++')) {
+                // "--- a/path/to/file" または "+++ b/path/to/file" の形式から抽出
+                const match = line.match(/^[+-]{3}\s+[ab]\/(.+)$/);
+                if (match && match[1] !== '/dev/null') {
+                    const filePath = match[1];
+                    if (!files.includes(filePath)) {
+                        files.push(filePath);
+                    }
+                }
+            }
+        }
+        return files;
+    }
+
+    /**
+     * パフォーマンス監視付きの処理実行
+     */
+    private async executeWithPerformanceMonitoring<T>(
+        operationName: string,
+        operation: () => Promise<T>
+    ): Promise<T> {
+        const timerId = this.logger.startPerformanceTimer(operationName);
+        try {
+            const result = await operation();
+            this.logger.endPerformanceTimer(timerId);
+            return result;
+        } catch (error) {
+            this.logger.endPerformanceTimer(timerId);
+            throw error;
+        }
     }
 }
 

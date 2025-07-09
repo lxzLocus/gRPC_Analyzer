@@ -16,7 +16,7 @@ modules
 */
 import Logger from "/app/app/module/logger.js";
 import RestoreDiff from '/app/app/module/restoreDiff.js';
-import { LLMFlowController } from '/app/app/module/llmFlowController.js';
+import LLMFlowController from '/app/app/module/llmFlowController.js';
 
 //実行ファイルが置かれているパス
 const appDirRoot = "/app/app/";

@@ -10,6 +10,9 @@ dataset/*
 !dataset/gRPC_reps_list.csv
 
 build/
+logs/
+output/
 
 tmp_doc.md
 DEVELOPMENT_TASKS.md
+

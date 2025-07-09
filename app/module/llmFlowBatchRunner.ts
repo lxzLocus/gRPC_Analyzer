@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { LLMFlowController } from './llmFlowController.js';
+import LLMFlowController from './llmFlowController.js';
 
 
 if (import.meta.url === `file://${process.argv[1]}`) {

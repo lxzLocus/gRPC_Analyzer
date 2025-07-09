@@ -8,6 +8,7 @@ import path from 'path';
 import { promisify } from 'util';
 import Handlebars from 'handlebars';
 import Config from './config.js';
+import Logger from './logger.js';
 import type { 
     RequiredFileInfo, 
     PromptTemplateContext, 
@@ -25,6 +26,7 @@ const statAsync = promisify(fs.stat);
 
 class FileManager {
     config: Config;
+    logger: Logger;
     
     // デフォルトのプロンプトファイル設定
     private readonly defaultPromptFiles: PromptFileConfig = {
@@ -45,8 +47,9 @@ class FileManager {
         enableTimeoutCheck: true
     };
 
-    constructor(config: Config) {
+    constructor(config: Config, logger: Logger) {
         this.config = config;
+        this.logger = logger;
     }
 
     /**
@@ -255,6 +258,19 @@ class FileManager {
                 summary.errors.push({ path: relativePath, error: errorMsg });
                 summary.errorCount++;
                 console.error(`  ❌ ${relativePath}: ${errorMsg}`);
+                
+                // 詳細なファイル操作エラーログを記録
+                this.logger.logFileOperationError(
+                    'READ_FILE',
+                    filePath,
+                    error as Error,
+                    {
+                        relativePath,
+                        attemptedEncoding: this.fileOperationConfig.encoding,
+                        maxFileSize: this.fileOperationConfig.maxFileSize,
+                        timeout: this.fileOperationConfig.timeoutMs
+                    }
+                );
             }
 
             result.processingTime = Date.now() - fileStartTime;
@@ -336,6 +352,18 @@ class FileManager {
                 results[relativePath] = { error: errorMsg };
                 errorCount++;
                 console.error(`  ❌ ${relativePath}: ${errorMsg}`);
+                
+                // 詳細なファイル操作エラーログを記録
+                this.logger.logFileOperationError(
+                    'READ_DIRECTORY',
+                    dirPath,
+                    error as Error,
+                    {
+                        relativePath,
+                        requestedDepth: 2,
+                        operation: 'getSurroundingDirectoryStructure'
+                    }
+                );
             }
         }
 
