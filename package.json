@@ -1,5 +1,11 @@
 {
   "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/js/modules/llmFlowController.js",
+    "clean": "rm -rf dist"
+  },
   "dependencies": {
     "@llamaindex/openai": "^0.1.61",
     "@octokit/rest": "^21.0.0",

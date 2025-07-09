@@ -9,10 +9,11 @@ dataset/*
 !dataset/P.U_merged_filtered - Final_merged_only_not_excluded_yes_ms_unarchived_commit_hash v2.0.csv
 !dataset/gRPC_reps_list.csv
 
-build/
+dist/
 logs/
 output/
+docs/
+backups/
 
 tmp_doc.md
-DEVELOPMENT_TASKS.md
 
