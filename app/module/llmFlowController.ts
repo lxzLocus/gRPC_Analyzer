@@ -12,13 +12,45 @@ import Config from './config.js';
 import MessageHandler from './messageHandler.js';
 import FileManager from './fileManager.js';
 import OpenAIClient from './openAIClient.js';
-import { LLMParsed, ParsedContentLog, Context, State } from './types.js';
+import { 
+    LLMParsed, 
+    ParsedContentLog, 
+    Context, 
+    State, 
+    InternalProgressState, 
+    ProcessingPhase,
+    RequiredFileInfo,
+    FileContentSubType,
+    DirectoryListingSubType,
+    RequiredFileAnalysisResult,
+    ProcessingPlan
+} from './types.js';
 
 class LLMFlowController {
     // 状態管理
     private state: State = State.Start;
     private context: Context = {};
     private inputPremergeDir: string = ''; // プルリクエストのパス "/PATH/premerge_xxx"
+    
+    // 内部進行状況管理
+    private internalProgress: InternalProgressState = {
+        currentPhase: 'INITIAL_ANALYSIS',
+        stepsCompleted: [],
+        stepsRemaining: [],
+        contextAccumulated: {
+            sourceFiles: [],
+            configFiles: [],
+            protoFiles: [],
+            testFiles: [],
+            directories: [],
+            dependencies: []
+        },
+        analysisDepth: 1,
+        iterationCount: 0,
+        maxIterations: 10,
+        errorCount: 0,
+        warningCount: 0
+    };
 
     // 依存関係
     private config!: Config;
@@ -345,40 +377,49 @@ class LLMFlowController {
     // =============================================================================
 
     private async systemAnalyzeRequest() {
-        // requiredFileInfosの内容に応じてファイル or ディレクトリ取得に分岐
+        // Phase 3-1: 状態遷移最適化 - 詳細な分析と循環参照防止
+        this.logProgressState();
+        
         const parsed = this.context.llmParsed;
         if (!parsed) {
+            this.logger.logWarning("No parsed LLM response found, ending");
             this.state = State.End;
             return;
         }
 
-        if (!parsed.requiredFileInfos || parsed.requiredFileInfos.length === 0) {
-            // 後方互換性のために古いrequiredFilepathsもチェック
-            if (!parsed.requiredFilepaths || parsed.requiredFilepaths.length === 0) {
-                this.state = State.End;
-                return;
+        // 循環参照防止: 既に処理済みのファイルを追跡
+        const processedPaths = this.getProcessedFilePaths();
+        
+        // requiredFileInfosの詳細分析
+        const analysisResult = this.analyzeRequiredFileInfos(parsed, processedPaths);
+        
+        if (analysisResult.isEmpty) {
+            this.logger.logInfo("No files or directories to process, ending");
+            this.state = State.End;
+            return;
+        }
+
+        // パフォーマンス最適化: 優先度ベースの処理順序決定
+        const optimizedPlan = this.optimizeProcessingPlan(analysisResult);
+        
+        // 進行状況を内部状態に記録
+        this.updateInternalProgress({
+            analysisDepth: this.internalProgress.analysisDepth + 1,
+            stepsRemaining: optimizedPlan.steps,
+            contextAccumulated: {
+                ...this.internalProgress.contextAccumulated,
+                sourceFiles: [...this.internalProgress.contextAccumulated.sourceFiles, ...optimizedPlan.sourceFiles],
+                configFiles: [...this.internalProgress.contextAccumulated.configFiles, ...optimizedPlan.configFiles],
+                protoFiles: [...this.internalProgress.contextAccumulated.protoFiles, ...optimizedPlan.protoFiles],
+                testFiles: [...this.internalProgress.contextAccumulated.testFiles, ...optimizedPlan.testFiles],
+                directories: [...this.internalProgress.contextAccumulated.directories, ...optimizedPlan.directories]
             }
-            // 古い形式の場合は全てFILE_CONTENTとして扱う
-            this.state = State.GetFileContent;
-            return;
-        }
+        });
 
-        // 新しい形式：requiredFileInfosに基づいて処理
-        const hasFileContent = parsed.requiredFileInfos.some(info => info.type === 'FILE_CONTENT');
-        const hasDirectoryListing = parsed.requiredFileInfos.some(info => info.type === 'DIRECTORY_LISTING');
-
-        if (hasFileContent && hasDirectoryListing) {
-            // 両方ある場合は統合処理
-            this.state = State.ProcessRequiredInfos;
-        } else if (hasFileContent) {
-            // ファイル内容のみ
-            this.state = State.GetFileContent;
-        } else if (hasDirectoryListing) {
-            // ディレクトリ構造のみ
-            this.state = State.GetDirectoryListing;
-        } else {
-            this.state = State.End;
-        }
+        // 状態遷移決定
+        this.state = this.determineNextState(analysisResult, optimizedPlan);
+        
+        this.logger.logInfo(`Next state: ${this.state}, Processing ${analysisResult.totalFiles} files, ${analysisResult.totalDirectories} directories`);
     }
 
     private async getFileContent() {
@@ -665,6 +706,353 @@ class LLMFlowController {
         const pullRequestName = parts[parts.length - 2] || 'unknown_pr';
         return `${projectName}/Issue_${pullRequestName}`;
     }
-}
 
-export { LLMFlowController, State, Context };
+    // =============================================================================
+    // 内部進行状況管理メソッド
+    // =============================================================================
+
+    private updateProgress(phase: ProcessingPhase, stepCompleted?: string, stepRemaining?: string[]) {
+        this.internalProgress.currentPhase = phase;
+        
+        if (stepCompleted) {
+            this.internalProgress.stepsCompleted.push(stepCompleted);
+        }
+        
+        if (stepRemaining) {
+            this.internalProgress.stepsRemaining = stepRemaining;
+        }
+        
+        this.logger.logInfo(`Phase: ${phase}, Step: ${stepCompleted || 'N/A'}, Remaining: ${stepRemaining?.length || 0}`);
+    }
+
+    private categorizeRequiredFiles(requiredFileInfos: RequiredFileInfo[]): {
+        highPriority: RequiredFileInfo[];
+        mediumPriority: RequiredFileInfo[];
+        lowPriority: RequiredFileInfo[];
+        byCategory: {
+            sourceFiles: RequiredFileInfo[];
+            configFiles: RequiredFileInfo[];
+            protoFiles: RequiredFileInfo[];
+            testFiles: RequiredFileInfo[];
+            directories: RequiredFileInfo[];
+            other: RequiredFileInfo[];
+        }
+    } {
+        const result = {
+            highPriority: [] as RequiredFileInfo[],
+            mediumPriority: [] as RequiredFileInfo[],
+            lowPriority: [] as RequiredFileInfo[],
+            byCategory: {
+                sourceFiles: [] as RequiredFileInfo[],
+                configFiles: [] as RequiredFileInfo[],
+                protoFiles: [] as RequiredFileInfo[],
+                testFiles: [] as RequiredFileInfo[],
+                directories: [] as RequiredFileInfo[],
+                other: [] as RequiredFileInfo[]
+            }
+        };
+
+        for (const info of requiredFileInfos) {
+            // 優先度別分類
+            switch (info.priority) {
+                case 'HIGH':
+                    result.highPriority.push(info);
+                    break;
+                case 'MEDIUM':
+                    result.mediumPriority.push(info);
+                    break;
+                case 'LOW':
+                    result.lowPriority.push(info);
+                    break;
+                default:
+                    result.mediumPriority.push(info); // デフォルトはMEDIUM
+            }
+
+            // カテゴリ別分類
+            if (info.type === 'DIRECTORY_LISTING') {
+                result.byCategory.directories.push(info);
+            } else if (info.type === 'FILE_CONTENT') {
+                switch (info.subType as FileContentSubType) {
+                    case 'SOURCE_CODE':
+                        result.byCategory.sourceFiles.push(info);
+                        break;
+                    case 'CONFIG_FILE':
+                    case 'BUILD_FILE':
+                        result.byCategory.configFiles.push(info);
+                        break;
+                    case 'PROTO_FILE':
+                        result.byCategory.protoFiles.push(info);
+                        break;
+                    case 'TEST_FILE':
+                        result.byCategory.testFiles.push(info);
+                        break;
+                    default:
+                        result.byCategory.other.push(info);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private determineNextPhase(parsed: LLMParsed): ProcessingPhase {
+        const currentPhase = this.internalProgress.currentPhase;
+        const iterationCount = this.internalProgress.iterationCount;
+        
+        // LLMからの提案があれば考慮
+        if (parsed.suggestedPhase) {
+            return parsed.suggestedPhase;
+        }
+
+        // ファイル要求の内容に基づいて判断
+        if (parsed.requiredFileInfos && parsed.requiredFileInfos.length > 0) {
+            const categorized = this.categorizeRequiredFiles(parsed.requiredFileInfos);
+            
+            // プロトファイルが要求されている = 詳細分析フェーズ
+            if (categorized.byCategory.protoFiles.length > 0) {
+                return 'DETAILED_ANALYSIS';
+            }
+            
+            // テストファイルが要求されている = 検証フェーズ
+            if (categorized.byCategory.testFiles.length > 0) {
+                return 'VERIFICATION';
+            }
+            
+            // ソースファイルとconfigが混在 = 解決策立案フェーズ
+            if (categorized.byCategory.sourceFiles.length > 0 && categorized.byCategory.configFiles.length > 0) {
+                return 'SOLUTION_PLANNING';
+            }
+            
+            // 最初の反復でソースファイル = コンテキスト収集
+            if (iterationCount <= 2 && categorized.byCategory.sourceFiles.length > 0) {
+                return 'CONTEXT_GATHERING';
+            }
+        }
+
+        // diffが生成されている = 実装フェーズ
+        if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
+            return 'IMPLEMENTATION';
+        }
+
+        // 完了フラグがある = 最終化フェーズ
+        if (parsed.has_fin_tag) {
+            return 'FINALIZATION';
+        }
+
+        // デフォルトの進行
+        switch (currentPhase) {
+            case 'INITIAL_ANALYSIS':
+                return 'CONTEXT_GATHERING';
+            case 'CONTEXT_GATHERING':
+                return 'DETAILED_ANALYSIS';
+            case 'DETAILED_ANALYSIS':
+                return 'SOLUTION_PLANNING';
+            case 'SOLUTION_PLANNING':
+                return 'IMPLEMENTATION';
+            case 'IMPLEMENTATION':
+                return 'VERIFICATION';
+            case 'VERIFICATION':
+                return 'FINALIZATION';
+            default:
+                return currentPhase;
+        }
+    }
+
+    // =============================================================================
+    // Phase 3-1: 状態遷移最適化のためのヘルパーメソッド
+    // =============================================================================
+
+    /**
+     * 既に処理済みのファイルパスを取得（循環参照防止）
+     */
+    private getProcessedFilePaths(): Set<string> {
+        const processed = new Set<string>();
+        
+        // 内部進行状況から既に処理済みのファイルを取得
+        this.internalProgress.contextAccumulated.sourceFiles.forEach(f => processed.add(f));
+        this.internalProgress.contextAccumulated.configFiles.forEach(f => processed.add(f));
+        this.internalProgress.contextAccumulated.protoFiles.forEach(f => processed.add(f));
+        this.internalProgress.contextAccumulated.testFiles.forEach(f => processed.add(f));
+        
+        return processed;
+    }
+
+    /**
+     * RequiredFileInfosの詳細分析
+     */
+    private analyzeRequiredFileInfos(parsed: any, processedPaths: Set<string>): RequiredFileAnalysisResult {
+        const result: RequiredFileAnalysisResult = {
+            isEmpty: true,
+            totalFiles: 0,
+            totalDirectories: 0,
+            hasFileContent: false,
+            hasDirectoryListing: false,
+            newFiles: [],
+            duplicateFiles: [],
+            priorityGroups: {
+                high: [],
+                medium: [],
+                low: []
+            }
+        };
+
+        // 新しい形式をチェック
+        if (parsed.requiredFileInfos && parsed.requiredFileInfos.length > 0) {
+            result.isEmpty = false;
+            
+            for (const info of parsed.requiredFileInfos) {
+                const isDuplicate = processedPaths.has(info.path);
+                
+                if (info.type === 'FILE_CONTENT') {
+                    result.hasFileContent = true;
+                    result.totalFiles++;
+                    
+                    if (isDuplicate) {
+                        result.duplicateFiles.push(info);
+                    } else {
+                        result.newFiles.push(info);
+                        // 優先度ベースの分類
+                        const priority = info.priority || 'medium';
+                        result.priorityGroups[priority as keyof typeof result.priorityGroups].push(info);
+                    }
+                } else if (info.type === 'DIRECTORY_LISTING') {
+                    result.hasDirectoryListing = true;
+                    result.totalDirectories++;
+                    
+                    if (!isDuplicate) {
+                        result.newFiles.push(info);
+                        const priority = info.priority || 'medium';
+                        result.priorityGroups[priority as keyof typeof result.priorityGroups].push(info);
+                    }
+                }
+            }
+        }
+
+        // 後方互換性：古い形式もチェック
+        if (result.isEmpty && parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
+            result.isEmpty = false;
+            result.hasFileContent = true;
+            result.totalFiles = parsed.requiredFilepaths.length;
+            
+            // 古い形式は中優先度として扱う
+            for (const filePath of parsed.requiredFilepaths) {
+                if (!processedPaths.has(filePath)) {
+                    const info: RequiredFileInfo = { 
+                        type: 'FILE_CONTENT' as const, 
+                        path: filePath, 
+                        priority: 'MEDIUM' as const 
+                    };
+                    result.newFiles.push(info);
+                    result.priorityGroups.medium.push(info);
+                } else {
+                    result.duplicateFiles.push({ 
+                        type: 'FILE_CONTENT' as const, 
+                        path: filePath 
+                    });
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 処理プランの最適化（優先度とパフォーマンスを考慮）
+     */
+    private optimizeProcessingPlan(analysisResult: RequiredFileAnalysisResult): ProcessingPlan {
+        const plan: ProcessingPlan = {
+            steps: [],
+            sourceFiles: [],
+            configFiles: [],
+            protoFiles: [],
+            testFiles: [],
+            directories: []
+        };
+
+        // 優先度順に処理ステップを構築
+        const allFiles = [
+            ...analysisResult.priorityGroups.high,
+            ...analysisResult.priorityGroups.medium,
+            ...analysisResult.priorityGroups.low
+        ];
+
+        for (const fileInfo of allFiles) {
+            plan.steps.push(`Process ${fileInfo.type}: ${fileInfo.path}`);
+            
+            // ファイル種別による分類
+            const ext = path.extname(fileInfo.path).toLowerCase();
+            if (fileInfo.type === 'DIRECTORY_LISTING') {
+                plan.directories.push(fileInfo.path);
+            } else if (ext === '.proto') {
+                plan.protoFiles.push(fileInfo.path);
+            } else if (ext === '.json' || ext === '.yaml' || ext === '.yml' || ext === '.toml') {
+                plan.configFiles.push(fileInfo.path);
+            } else if (fileInfo.path.includes('test') || fileInfo.path.includes('spec')) {
+                plan.testFiles.push(fileInfo.path);
+            } else {
+                plan.sourceFiles.push(fileInfo.path);
+            }
+        }
+
+        return plan;
+    }
+
+    /**
+     * 内部進行状況の更新
+     */
+    private updateInternalProgress(updates: Partial<InternalProgressState>): void {
+        this.internalProgress = {
+            ...this.internalProgress,
+            ...updates,
+            lastUpdated: new Date().toISOString()
+        };
+    }
+
+    /**
+     * 分析結果に基づく次の状態決定
+     */
+    private determineNextState(analysisResult: RequiredFileAnalysisResult, plan: ProcessingPlan): State {
+        if (analysisResult.isEmpty) {
+            return State.End;
+        }
+
+        // 重複ファイルのみの場合は警告してスキップ
+        if (analysisResult.newFiles.length === 0 && analysisResult.duplicateFiles.length > 0) {
+            this.logger.logWarning(`All ${analysisResult.duplicateFiles.length} files already processed, skipping to avoid circular references`);
+            return State.End;
+        }
+
+        // 効率的な処理ルート決定
+        if (analysisResult.hasFileContent && analysisResult.hasDirectoryListing) {
+            return State.ProcessRequiredInfos; // 統合処理
+        } else if (analysisResult.hasFileContent) {
+            return State.GetFileContent;
+        } else if (analysisResult.hasDirectoryListing) {
+            return State.GetDirectoryListing;
+        } else {
+            return State.End;
+        }
+    }
+
+    /**
+     * 現在のログ状況と進行状況を表示
+     */
+    private logProgressState() {
+        const progress = this.internalProgress;
+        this.logger.logInfo(`=== Progress State ===`);
+        this.logger.logInfo(`Phase: ${progress.currentPhase}`);
+        this.logger.logInfo(`Iteration: ${progress.iterationCount}/${progress.maxIterations}`);
+        this.logger.logInfo(`Analysis Depth: ${progress.analysisDepth}`);
+        this.logger.logInfo(`Steps Completed: ${progress.stepsCompleted.length}`);
+        this.logger.logInfo(`Steps Remaining: ${progress.stepsRemaining.length}`);
+        this.logger.logInfo(`Context Accumulated:`);
+        this.logger.logInfo(`  - Source Files: ${progress.contextAccumulated.sourceFiles.length}`);
+        this.logger.logInfo(`  - Config Files: ${progress.contextAccumulated.configFiles.length}`);
+        this.logger.logInfo(`  - Proto Files: ${progress.contextAccumulated.protoFiles.length}`);
+        this.logger.logInfo(`  - Test Files: ${progress.contextAccumulated.testFiles.length}`);
+        this.logger.logInfo(`  - Directories: ${progress.contextAccumulated.directories.length}`);
+        this.logger.logInfo(`Errors: ${progress.errorCount}, Warnings: ${progress.warningCount}`);
+        this.logger.logInfo(`=====================`);
+    }
+
+}

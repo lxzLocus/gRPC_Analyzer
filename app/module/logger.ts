@@ -60,6 +60,44 @@ export default class Logger {
   // public logInteractionToFile(...) { ... }
 
   /**
+   * 情報ログを出力（コンソール + ファイル出力対応）
+   */
+  public logInfo(message: string): void {
+    const timestamp = new Date().toISOString();
+    const logMessage = `[INFO ${timestamp}] ${message}`;
+    console.log(logMessage);
+    
+    // TODO: ファイル出力機能を後で実装
+    // this.writeLogToFile(logMessage);
+  }
+
+  /**
+   * エラーログを出力
+   */
+  public logError(message: string, error?: Error): void {
+    const timestamp = new Date().toISOString();
+    const logMessage = `[ERROR ${timestamp}] ${message}`;
+    if (error) {
+      console.error(logMessage, error);
+    } else {
+      console.error(logMessage);
+    }
+    
+    // TODO: ファイル出力機能を後で実装
+  }
+
+  /**
+   * 警告ログを出力
+   */
+  public logWarning(message: string): void {
+    const timestamp = new Date().toISOString();
+    const logMessage = `[WARN ${timestamp}] ${message}`;
+    console.warn(logMessage);
+    
+    // TODO: ファイル出力機能を後で実装
+  }
+
+  /**
    * インタラクションログを追加
    */
   public addInteractionLog(

@@ -3,9 +3,61 @@
  * プロジェクト全体で使用する共通の型定義
  */
 
+// 詳細なファイル情報リクエストタイプ
+export type FileContentSubType = 
+    | 'SOURCE_CODE'      // ソースコード内容
+    | 'CONFIG_FILE'      // 設定ファイル
+    | 'PROTO_FILE'       // .protoファイル
+    | 'TEST_FILE'        // テストファイル
+    | 'DOCUMENTATION'    // ドキュメントファイル
+    | 'BUILD_FILE'       // ビルド設定ファイル
+    | 'GENERAL';         // その他
+
+export type DirectoryListingSubType = 
+    | 'PROJECT_STRUCTURE'  // プロジェクト全体の構造
+    | 'SOURCE_DIRECTORY'   // ソースディレクトリ
+    | 'TEST_DIRECTORY'     // テストディレクトリ
+    | 'CONFIG_DIRECTORY'   // 設定ディレクトリ
+    | 'BUILD_DIRECTORY'    // ビルド出力ディレクトリ
+    | 'DEPENDENCY_CHECK'   // 依存関係確認
+    | 'GENERAL';           // その他
+
 export type RequiredFileInfo = {
     type: 'FILE_CONTENT' | 'DIRECTORY_LISTING';
     path: string;
+    subType?: FileContentSubType | DirectoryListingSubType; // サブタイプ
+    priority?: 'HIGH' | 'MEDIUM' | 'LOW'; // 優先度
+    reason?: string; // リクエスト理由
+};
+
+// 内部状態管理用の型
+export type ProcessingPhase = 
+    | 'INITIAL_ANALYSIS'     // 初期分析フェーズ
+    | 'CONTEXT_GATHERING'    // コンテキスト収集フェーズ
+    | 'DETAILED_ANALYSIS'    // 詳細分析フェーズ
+    | 'SOLUTION_PLANNING'    // 解決策立案フェーズ
+    | 'IMPLEMENTATION'       // 実装フェーズ
+    | 'VERIFICATION'         // 検証フェーズ
+    | 'FINALIZATION';        // 最終化フェーズ
+
+export type InternalProgressState = {
+    currentPhase: ProcessingPhase;
+    stepsCompleted: string[];
+    stepsRemaining: string[];
+    contextAccumulated: {
+        sourceFiles: string[];
+        configFiles: string[];
+        protoFiles: string[];
+        testFiles: string[];
+        directories: string[];
+        dependencies: string[];
+    };
+    analysisDepth: number; // 分析の深度レベル
+    iterationCount: number; // 現在の反復回数
+    maxIterations: number;  // 最大反復回数
+    errorCount: number;     // エラー発生回数
+    warningCount: number;   // 警告回数
+    lastUpdated?: string;   // 最終更新時刻（オプショナル）
 };
 
 export type LLMParsed = {
@@ -16,6 +68,10 @@ export type LLMParsed = {
     modifiedDiff: string;
     commentText: string;
     has_fin_tag: boolean;
+    // 新しいフィールド：LLMからの進行状況指示
+    suggestedPhase?: ProcessingPhase;
+    confidenceLevel?: 'HIGH' | 'MEDIUM' | 'LOW';
+    expectedIterations?: number;
 };
 
 // Logger用の型変換ヘルパー
@@ -115,5 +171,30 @@ export type FileOperationConfig = {
     encoding: BufferEncoding;
     enableSizeCheck: boolean;
     enableTimeoutCheck: boolean;
+};
+
+// Phase 3-1: 状態遷移最適化のための追加型定義
+export type RequiredFileAnalysisResult = {
+    isEmpty: boolean;
+    totalFiles: number;
+    totalDirectories: number;
+    hasFileContent: boolean;
+    hasDirectoryListing: boolean;
+    newFiles: RequiredFileInfo[];
+    duplicateFiles: RequiredFileInfo[];
+    priorityGroups: {
+        high: RequiredFileInfo[];
+        medium: RequiredFileInfo[];
+        low: RequiredFileInfo[];
+    };
+};
+
+export type ProcessingPlan = {
+    steps: string[];
+    sourceFiles: string[];
+    configFiles: string[];
+    protoFiles: string[];
+    testFiles: string[];
+    directories: string[];
 };
 
