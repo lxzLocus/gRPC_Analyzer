@@ -2,6 +2,190 @@
 
 ---
 
+## アーキテクチャ
+
+### システム構成図（クラス図）
+
+```mermaid
+classDiagram
+    class LLMFlowController {
+        -config: Config
+        -messageHandler: MessageHandler
+        -fileManager: FileManager
+        -openAIClient: OpenAIClient
+        -logger: Logger
+        -context: Context
+        -state: State
+        -currentTurn: number
+        -internalProgress: InternalProgressState
+        +execute(): Promise~void~
+        +systemAnalyzeRequest(): Promise~void~
+        +systemApplyDiff(): Promise~void~
+        +sendInfoToLLM(): Promise~void~
+        +llmReanalyze(): Promise~void~
+        +createPreApplyBackup(): Promise~BackupInfo~
+        +validateDiffApplication(): Promise~DiffValidationResult~
+        +collectDiffApplicationStats(): Promise~DiffApplicationStats~
+    }
+    
+    class Config {
+        +inputProjectDir: string
+        +outputDir: string
+        +promptDir: string
+        +promptTextfile: string
+        +readPromptFile(): string
+        +readPromptReplyFile(): string
+        +readPromptModifiedFile(): string
+    }
+    
+    class MessageHandler {
+        -messagesTemplate: Message[]
+        +attachMessages(role: string, content: string): Message[]
+        +analyzeMessages(content: string): LLMParsed
+        +extractRequiredFileInfos(content: string): RequiredFileInfo[]
+    }
+    
+    class FileManager {
+        -config: Config
+        -fileOperationConfig: FileOperationConfig
+        +getFileContents(fileInfos: RequiredFileInfo[]): Promise~string~
+        +getDirectoryListings(dirInfos: RequiredFileInfo[]): Promise~string~
+        +processRequiredFileInfos(fileInfos: RequiredFileInfo[]): Promise~string~
+        +readFirstPromptFile(): string
+        +checkFileExistence(paths: string[]): FileCheckResult[]
+    }
+    
+    class OpenAIClient {
+        -apiKey: string
+        -baseURL: string
+        +fetchOpenAPI(messages: Message[]): Promise~LLMResponse~
+    }
+    
+    class Logger {
+        -logs: InteractionLog[]
+        +addInteractionLog(turn: number, timestamp: string, request: LLMRequest, response: LLMResponse, action: SystemAction): void
+        +logInfo(message: string): void
+        +logWarning(message: string): void
+        +logError(message: string): void
+        +generateReport(): string
+    }
+    
+    class RestoreDiff {
+        +execute(diffContent: string, projectDir: string): Promise~string~
+    }
+    
+    LLMFlowController --> Config
+    LLMFlowController --> MessageHandler
+    LLMFlowController --> FileManager
+    LLMFlowController --> OpenAIClient
+    LLMFlowController --> Logger
+    LLMFlowController ..> RestoreDiff : uses
+    FileManager --> Config
+    
+    class Context {
+        +llmResponse: LLMResponse
+        +llmParsed: LLMParsed
+        +fileContent: string
+        +dirListing: any
+        +diff: string
+        +error: string
+    }
+    
+    class LLMParsed {
+        +thought: string
+        +plan: string[]
+        +requiredFilepaths: string[]
+        +requiredFileInfos: RequiredFileInfo[]
+        +modifiedDiff: string
+        +commentText: string
+        +has_fin_tag: boolean
+    }
+    
+    class RequiredFileInfo {
+        +type: 'FILE_CONTENT' | 'DIRECTORY_LISTING'
+        +path: string
+        +subType?: FileContentSubType
+    }
+    
+    LLMFlowController --> Context
+    Context --> LLMParsed
+    LLMParsed --> RequiredFileInfo
+```
+
+### 実行フロー（シーケンス図）
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Controller as LLMFlowController
+    participant Config
+    participant FileManager
+    participant MessageHandler
+    participant OpenAI as OpenAIClient
+    participant Logger
+    participant RestoreDiff
+    
+    User->>Controller: execute()
+    Controller->>Config: 初期化設定読み込み
+    Controller->>Logger: ログシステム開始
+    
+    Note over Controller: Phase 1: 初期分析
+    Controller->>FileManager: readFirstPromptFile()
+    FileManager-->>Controller: プロンプトテンプレート
+    Controller->>MessageHandler: attachMessages("user", prompt)
+    Controller->>OpenAI: fetchOpenAPI(messages)
+    OpenAI-->>Controller: LLM応答
+    Controller->>Logger: addInteractionLog(turn1)
+    
+    Controller->>MessageHandler: analyzeMessages(response)
+    MessageHandler-->>Controller: LLMParsed (with requiredFileInfos)
+    
+    Note over Controller: Phase 2: ファイル情報取得
+    alt ファイル内容が必要な場合
+        Controller->>FileManager: getFileContents(fileInfos)
+        FileManager->>FileManager: checkFileExistence(paths)
+        FileManager-->>Controller: ファイル内容 (相対パス形式)
+        
+        Controller->>MessageHandler: attachMessages("user", fileContent)
+        Controller->>OpenAI: fetchOpenAPI(messages)
+        OpenAI-->>Controller: LLM応答 (diff提案)
+        Controller->>Logger: addInteractionLog(turn2)
+    end
+    
+    Note over Controller: Phase 3: Diff適用と検証
+    Controller->>MessageHandler: analyzeMessages(response)
+    MessageHandler-->>Controller: LLMParsed (with modifiedDiff)
+    
+    Controller->>Controller: createPreApplyBackup()
+    Note right of Controller: バックアップ作成
+    
+    Controller->>RestoreDiff: execute(diffContent, projectDir)
+    RestoreDiff-->>Controller: 適用結果
+    
+    Controller->>Controller: validateDiffApplication(result, diff)
+    Controller->>Controller: collectDiffApplicationStats(result, diff)
+    
+    alt 適用成功
+        Controller->>MessageHandler: attachMessages("user", successResult)
+        Controller->>OpenAI: fetchOpenAPI(messages)
+        OpenAI-->>Controller: LLM応答 (完了確認)
+        Controller->>Logger: addInteractionLog(turn3)
+    else 適用失敗
+        Controller->>Controller: collectErrorContext(diff, error)
+        Controller->>MessageHandler: attachMessages("user", errorInfo)
+        Controller->>OpenAI: fetchOpenAPI(messages)
+        OpenAI-->>Controller: LLM応答 (修正案)
+        Controller->>Logger: addInteractionLog(error_turn)
+    end
+    
+    Note over Controller: Phase 4: 完了処理
+    Controller->>Logger: generateReport()
+    Logger-->>Controller: 実行レポート
+    Controller-->>User: 処理完了
+```
+
+---
+
 ## メモ
 
 ほぼLLM生成.
@@ -147,46 +331,57 @@ LLMエージェントが自動で検出・修正するシステムを構築す�
 
 ## 4. 詳細ワークフロー
 
-### mermaid
+### 詳細実行フロー（状態遷移図）
 
 ```mermaid
-graph TD
-    A[開始] --> B{初期コンテキスト準備};
-    B --> C[システム: LLMへ初期情報送信<br>&#40;proto変更差分, 疑わしいファイル情報など&#41;];
-    C --> D[LLM: 分析・思考・計画<br>&#40;%_Thought_%, %_Plan_%&#41;];
-    D --> E{LLMの判断};
-
-    E -- "%_Reply Required_%" (追加情報が必要) --> F[システム: 要求された情報を解析];
-    F --> G{要求タイプは？};
-    G -- "FILE_CONTENT" --> H[システム: ファイル内容を取得];
-    G -- "DIRECTORY_LISTING" --> I[システム: ディレクトリ構造を取得];
-    H --> J[システム: 取得情報をLLMへ送信];
-    I --> J;
-    J --> K[LLM: 新情報を元に再分析・計画更新];
-    K --> E;
-
-    E -- "%_Modified_%" (コード修正案を生成) --> L[システム: 修正差分&#40;diff&#41;を解析];
-    L --> M[システム: 修正を&#40;仮想的に&#41;適用];
-    M --> N{適用結果/状態は？};
-    N -- "成功 / 次のステップへ" --> O[システム: 適用結果と次の指示をLLMへ送信];
-    O --> P[LLM: 計画の次のステップ実行 or 再評価];
-    P --> E;
-    N -- "エラー / 問題あり" --> Q[システム: エラー情報をLLMへ送信];
-    Q --> R[LLM: エラーに基づき再分析・計画修正];
-    R --> E;
-
-    E -- "%%_Fin_%%" (タスク完了) --> S[終了];
-
-    classDef default fill:#f9f,stroke:#333,stroke-width:2px,color:black;
-    classDef process fill:#bbf,stroke:#333,stroke-width:2px,color:black;
-    classDef decision fill:#ff9,stroke:#333,stroke-width:2px,color:black;
-    classDef io fill:#9f9,stroke:#333,stroke-width:2px,color:black;
-    classDef startend fill:#fcc,stroke:#333,stroke-width:2px,color:black;
-
-    class A,S startend;
-    class B,C,F,H,I,J,L,M,O,Q process;
-    class D,K,P,R io;
-    class E,G,N decision;
+stateDiagram-v2
+    [*] --> Start
+    Start --> SendFirstPromptToLLM : 初期プロンプト送信
+    
+    SendFirstPromptToLLM --> LLMReanalyze : LLM応答受信
+    LLMReanalyze --> SystemAnalyzeRequest : 解析完了
+    
+    SystemAnalyzeRequest --> SystemAnalyzeRequest : FILE_CONTENT処理
+    SystemAnalyzeRequest --> SystemAnalyzeRequest : DIRECTORY_LISTING処理
+    SystemAnalyzeRequest --> SendInfoToLLM : 情報収集完了
+    
+    SendInfoToLLM --> LLMReanalyze : 追加情報送信
+    LLMReanalyze --> SystemParseDiff : diffが提案された
+    
+    SystemParseDiff --> SystemApplyDiff : diff解析完了
+    
+    state SystemApplyDiff {
+        [*] --> CreateBackup
+        CreateBackup --> ApplyDiff
+        ApplyDiff --> ValidateResult
+        ValidateResult --> CollectStats
+        CollectStats --> [*]
+    }
+    
+    SystemApplyDiff --> CheckApplyResult : 適用処理完了
+    
+    CheckApplyResult --> SendResultToLLM : 成功
+    CheckApplyResult --> SendErrorToLLM : エラー
+    
+    SendResultToLLM --> LLMNextStep : 結果送信
+    SendErrorToLLM --> LLMErrorReanalyze : エラー送信
+    
+    LLMNextStep --> SystemAnalyzeRequest : 次ステップ要求
+    LLMNextStep --> End : 完了(%%_Fin_%%)
+    
+    LLMErrorReanalyze --> SystemAnalyzeRequest : 再試行
+    LLMErrorReanalyze --> End : 修復不可
+    
+    End --> [*]
+    
+    note right of SystemApplyDiff
+        Phase 3-2で実装:
+        - バックアップ作成
+        - diff適用
+        - 結果検証
+        - 統計収集
+        - エラーコンテキスト
+    end note
 ```
 
 ### 4.1 コンテキスト生成
@@ -304,7 +499,30 @@ dataset/
 
 ## 7. 実装状況
 
-- TypeScript/ESMでllmFlowController, llmFlowBatchRunner等の主要モジュールを実装
-- バッチ処理・ログ出力・プロンプト管理・タグ解析・diff適用など，autoResponser.jsの機能を全て移行・拡張済み
+### Phase 3-2 完了（2025年7月）
+
+- **基盤アーキテクチャ**: TypeScript/ESMによるモジュラー設計完了
+- **主要クラス**: LLMFlowController, Config, MessageHandler, FileManager, OpenAIClient, Logger
+- **コア機能**: 
+  - LLM対話制御（状態遷移管理）
+  - ファイル操作（相対パス処理、バッチ存在確認）
+  - プロンプト管理（Handlebarsテンプレート）
+  - タグ解析（`<thought>`, `<code>`, `<file_request>`対応）
+- **Phase 3 高度機能**:
+  - 状態遷移最適化（循環参照防止、進行状況管理）
+  - diff適用システム（バックアップ、検証、統計、エラーコンテキスト）
+  - 型安全性の完全確保（1400行のメインコントローラー）
+
+### 技術的特徴
+
+- **型安全性**: TypeScript完全対応、重複排除済み
+- **保守性**: クラス分離による責任分担、単体テスト対応
+- **拡張性**: 設定外部化、プラグイン対応準備
+- **ログ品質**: README準拠形式、詳細統計、パフォーマンス監視
+
+### 次期開発予定
+
+- **Phase 3-3**: ログシステム完成（エラーログ詳細化、レポート生成）
+- **Phase 4**: 統合テスト実装、パフォーマンス最適化、設定管理改善
 
 ---

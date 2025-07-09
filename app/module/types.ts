@@ -198,3 +198,35 @@ export type ProcessingPlan = {
     directories: string[];
 };
 
+// Phase 3-2: diff適用システム改善のための追加型定義
+export type BackupInfo = {
+    backupPath: string;
+    timestamp: string;
+    originalFiles: string[];
+    backupSize: number;
+};
+
+export type DiffValidationResult = {
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+    appliedChanges: number;
+    skippedChanges: number;
+};
+
+export type DiffApplicationStats = {
+    totalLines: number;
+    addedLines: number;
+    deletedLines: number;
+    modifiedFiles: number;
+    processingTime: number;
+    backupCreated: boolean;
+};
+
+export type ErrorContext = {
+    diffPreview: string;
+    affectedFiles: string[];
+    systemState: string;
+    possibleCauses: string[];
+};
+

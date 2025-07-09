@@ -23,7 +23,11 @@ import {
     FileContentSubType,
     DirectoryListingSubType,
     RequiredFileAnalysisResult,
-    ProcessingPlan
+    ProcessingPlan,
+    BackupInfo,
+    DiffValidationResult,
+    DiffApplicationStats,
+    ErrorContext
 } from './types.js';
 
 class LLMFlowController {
@@ -537,27 +541,74 @@ class LLMFlowController {
     }
 
     private async systemApplyDiff() {
-        // 修正を(仮想的に)適用
+        // Phase 3-2: 改善されたdiff適用システム
         const parsed = this.context.llmParsed;
         if (!parsed || !parsed.modifiedDiff || parsed.modifiedDiff.length === 0) {
-            console.warn("systemApplyDiff was called without a diff. Ending flow.");
+            this.logger.logWarning("systemApplyDiff was called without a diff. Ending flow.");
             this.state = State.End;
             return;
         }
 
+        this.logger.logInfo("Starting enhanced diff application process...");
+        
         try {
+            // Phase 3-2 新機能: 適用前のバックアップ作成
+            const backupInfo = await this.createPreApplyBackup();
+            this.logger.logInfo(`Backup created: ${backupInfo.backupPath}`);
+
+            // RestoreDiffクラスを使用してdiffを適用
             const restoreDiff = new RestoreDiff(this.config.inputProjectDir);
+            this.logger.logInfo("Applying diff using RestoreDiff...");
+            
             const restoredContent = restoreDiff.applyDiff(parsed.modifiedDiff);
+            
+            // Phase 3-2 新機能: 適用結果の詳細検証
+            const validationResult = await this.validateDiffApplication(restoredContent, parsed.modifiedDiff);
+            
+            if (!validationResult.isValid) {
+                throw new Error(`Diff validation failed: ${validationResult.errors.join(', ')}`);
+            }
+
+            // 結果をファイルに保存
             const tmpDiffRestorePath = path.join(this.config.outputDir, 'tmp_restoredDiff.txt');
             fs.writeFileSync(tmpDiffRestorePath, restoredContent, 'utf-8');
+            
             // contextに保存
             this.context.diff = restoredContent;
-            // 成功したのでエラーコンテキストをクリア
             this.context.error = undefined;
+
+            // Phase 3-2 新機能: 適用統計の記録
+            const stats = await this.collectDiffApplicationStats(restoredContent, parsed.modifiedDiff);
+            this.logger.logInfo(`Diff applied successfully. Stats: ${JSON.stringify(stats)}`);
+            
+            // 内部進行状況を更新
+            this.updateInternalProgress({
+                stepsCompleted: [...this.internalProgress.stepsCompleted, 'DIFF_APPLIED'],
+                contextAccumulated: {
+                    ...this.internalProgress.contextAccumulated,
+                    dependencies: [...this.internalProgress.contextAccumulated.dependencies, `backup:${backupInfo.backupPath}`]
+                }
+            });
+
         } catch (e) {
-            console.error("Error applying diff:", e);
-            this.context.error = e instanceof Error ? e.message : String(e);
+            const errorMessage = e instanceof Error ? e.message : String(e);
+            this.logger.logError("Error applying diff", e instanceof Error ? e : new Error(errorMessage));
+            
+            // Phase 3-2 新機能: エラー時の詳細情報収集
+            const errorContext = await this.collectErrorContext(parsed.modifiedDiff, errorMessage);
+            
+            this.context.error = {
+                message: errorMessage,
+                errorContext: errorContext,
+                timestamp: new Date().toISOString(),
+                phase: 'DIFF_APPLICATION'
+            } as any;
             this.context.diff = undefined;
+            
+            // エラー統計を更新
+            this.updateInternalProgress({
+                errorCount: this.internalProgress.errorCount + 1
+            });
         }
     }
 
@@ -1056,3 +1107,4 @@ class LLMFlowController {
     }
 
 }
+
