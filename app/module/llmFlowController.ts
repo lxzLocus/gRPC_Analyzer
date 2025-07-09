@@ -1106,5 +1106,265 @@ class LLMFlowController {
         this.logger.logInfo(`=====================`);
     }
 
+    // =============================================================================
+    // Phase 3-2: diff適用システム改善のためのヘルパーメソッド
+    // =============================================================================
+
+    /**
+     * 適用前のバックアップを作成
+     */
+    private async createPreApplyBackup(): Promise<BackupInfo> {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupDir = path.join(this.config.outputDir, 'backups', timestamp);
+        
+        if (!fs.existsSync(backupDir)) {
+            fs.mkdirSync(backupDir, { recursive: true });
+        }
+
+        const originalFiles: string[] = [];
+        let totalSize = 0;
+
+        // プロジェクトディレクトリ内の重要ファイルをバックアップ
+        const filesToBackup = this.findFilesToBackup();
+        
+        for (const filePath of filesToBackup) {
+            try {
+                const relativePath = path.relative(this.config.inputProjectDir, filePath);
+                const backupFilePath = path.join(backupDir, relativePath);
+                const backupFileDir = path.dirname(backupFilePath);
+                
+                if (!fs.existsSync(backupFileDir)) {
+                    fs.mkdirSync(backupFileDir, { recursive: true });
+                }
+                
+                fs.copyFileSync(filePath, backupFilePath);
+                originalFiles.push(relativePath);
+                
+                const stats = fs.statSync(filePath);
+                totalSize += stats.size;
+                
+            } catch (error) {
+                this.logger.logWarning(`Failed to backup file ${filePath}: ${error}`);
+            }
+        }
+
+        const backupInfo: BackupInfo = {
+            backupPath: backupDir,
+            timestamp: timestamp,
+            originalFiles: originalFiles,
+            backupSize: totalSize
+        };
+
+        // バックアップ情報をJSONで保存
+        const backupInfoPath = path.join(backupDir, 'backup_info.json');
+        fs.writeFileSync(backupInfoPath, JSON.stringify(backupInfo, null, 2));
+
+        return backupInfo;
+    }
+
+    /**
+     * バックアップ対象ファイルを特定
+     */
+    private findFilesToBackup(): string[] {
+        const files: string[] = [];
+        const projectDir = this.config.inputProjectDir;
+
+        // 重要ファイル拡張子
+        const importantExtensions = ['.js', '.ts', '.proto', '.json', '.yaml', '.yml', '.md', '.txt'];
+        
+        const scanDirectory = (dir: string) => {
+            try {
+                const entries = fs.readdirSync(dir);
+                for (const entry of entries) {
+                    const fullPath = path.join(dir, entry);
+                    const stat = fs.statSync(fullPath);
+                    
+                    if (stat.isDirectory()) {
+                        // node_modules や .git は除外
+                        if (!['node_modules', '.git', '.vscode'].includes(entry)) {
+                            scanDirectory(fullPath);
+                        }
+                    } else if (stat.isFile()) {
+                        const ext = path.extname(entry).toLowerCase();
+                        if (importantExtensions.includes(ext)) {
+                            files.push(fullPath);
+                        }
+                    }
+                }
+            } catch (error) {
+                this.logger.logWarning(`Failed to scan directory ${dir}: ${error}`);
+            }
+        };
+
+        scanDirectory(projectDir);
+        return files;
+    }
+
+    /**
+     * diff適用結果の検証
+     */
+    private async validateDiffApplication(restoredContent: string, originalDiff: string): Promise<DiffValidationResult> {
+        const result: DiffValidationResult = {
+            isValid: true,
+            errors: [],
+            warnings: [],
+            appliedChanges: 0,
+            skippedChanges: 0
+        };
+
+        try {
+            // 基本的な形式チェック
+            if (!restoredContent || restoredContent.length === 0) {
+                result.errors.push("Restored content is empty");
+                result.isValid = false;
+            }
+
+            // diffの形式チェック
+            const diffLines = originalDiff.split('\n');
+            let addedLines = 0;
+            let deletedLines = 0;
+            let contextLines = 0;
+
+            for (const line of diffLines) {
+                if (line.startsWith('+') && !line.startsWith('+++')) {
+                    addedLines++;
+                } else if (line.startsWith('-') && !line.startsWith('---')) {
+                    deletedLines++;
+                } else if (line.startsWith(' ')) {
+                    contextLines++;
+                }
+            }
+
+            result.appliedChanges = addedLines + deletedLines;
+
+            // 警告チェック
+            if (addedLines === 0 && deletedLines === 0) {
+                result.warnings.push("No actual changes detected in diff");
+            }
+
+            if (contextLines < 3) {
+                result.warnings.push("Insufficient context lines in diff");
+            }
+
+            // 復元内容の基本チェック
+            if (restoredContent.includes('<<<<<<< HEAD') || restoredContent.includes('>>>>>>> ')) {
+                result.errors.push("Merge conflict markers detected in restored content");
+                result.isValid = false;
+            }
+
+            // 文字エンコーディングチェック
+            try {
+                Buffer.from(restoredContent, 'utf-8');
+            } catch (e) {
+                result.errors.push("Invalid UTF-8 encoding in restored content");
+                result.isValid = false;
+            }
+
+        } catch (error) {
+            result.errors.push(`Validation error: ${error}`);
+            result.isValid = false;
+        }
+
+        return result;
+    }
+
+    /**
+     * diff適用統計の収集
+     */
+    private async collectDiffApplicationStats(restoredContent: string, originalDiff: string): Promise<DiffApplicationStats> {
+        const startTime = Date.now();
+        
+        const stats: DiffApplicationStats = {
+            totalLines: 0,
+            addedLines: 0,
+            deletedLines: 0,
+            modifiedFiles: 0,
+            processingTime: 0,
+            backupCreated: true
+        };
+
+        try {
+            // 復元内容の統計
+            stats.totalLines = restoredContent.split('\n').length;
+
+            // diff統計の計算
+            const diffLines = originalDiff.split('\n');
+            for (const line of diffLines) {
+                if (line.startsWith('+') && !line.startsWith('+++')) {
+                    stats.addedLines++;
+                } else if (line.startsWith('-') && !line.startsWith('---')) {
+                    stats.deletedLines++;
+                } else if (line.startsWith('@@')) {
+                    // ハンクヘッダー = ファイル修正の境界
+                    stats.modifiedFiles++;
+                }
+            }
+
+            // ファイル数の調整（最低1つ）
+            if (stats.modifiedFiles === 0 && (stats.addedLines > 0 || stats.deletedLines > 0)) {
+                stats.modifiedFiles = 1;
+            }
+
+        } catch (error) {
+            this.logger.logWarning(`Failed to collect diff stats: ${error}`);
+        }
+
+        stats.processingTime = Date.now() - startTime;
+        return stats;
+    }
+
+    /**
+     * エラー発生時のコンテキスト情報収集
+     */
+    private async collectErrorContext(originalDiff: string, errorMessage: string): Promise<ErrorContext> {
+        const context: ErrorContext = {
+            diffPreview: '',
+            affectedFiles: [],
+            systemState: '',
+            possibleCauses: []
+        };
+
+        try {
+            // diffのプレビュー（最初の100文字）
+            context.diffPreview = originalDiff.substring(0, 100) + (originalDiff.length > 100 ? '...' : '');
+
+            // 影響を受けるファイルの特定
+            const diffLines = originalDiff.split('\n');
+            for (const line of diffLines) {
+                if (line.startsWith('---') || line.startsWith('+++')) {
+                    const filePath = line.substring(4).trim();
+                    if (filePath !== '/dev/null' && !context.affectedFiles.includes(filePath)) {
+                        context.affectedFiles.push(filePath);
+                    }
+                }
+            }
+
+            // システム状態の記録
+            context.systemState = `Phase: ${this.internalProgress.currentPhase}, Turn: ${this.currentTurn}, Errors: ${this.internalProgress.errorCount}`;
+
+            // 可能な原因の推測
+            if (errorMessage.includes('ENOENT')) {
+                context.possibleCauses.push('File not found - target file may not exist');
+            }
+            if (errorMessage.includes('EACCES')) {
+                context.possibleCauses.push('Permission denied - insufficient file system permissions');
+            }
+            if (errorMessage.includes('diff') || errorMessage.includes('patch')) {
+                context.possibleCauses.push('Invalid diff format or corrupted patch data');
+            }
+            if (errorMessage.includes('line')) {
+                context.possibleCauses.push('Line number mismatch - file may have been modified');
+            }
+            if (context.possibleCauses.length === 0) {
+                context.possibleCauses.push('Unknown error - check diff format and file accessibility');
+            }
+
+    } catch (error) {
+        this.logger.logWarning(`Failed to collect error context: ${error}`);
+    }
+
+    return context;
+    }
 }
 
+export default LLMFlowController;
