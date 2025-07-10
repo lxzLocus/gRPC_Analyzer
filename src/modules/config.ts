@@ -9,7 +9,7 @@ import path from 'path';
 import Handlebars from 'handlebars';
 
 //実行ファイルが置かれているパス
-const APP_DIR: string = "/app/app/";
+const APP_DIR: string = "/app/src/";
 
 // 外部設定の型定義
 interface ExternalConfig {
@@ -113,7 +113,7 @@ class Config {
      * 外部設定ファイルを読み込み
      */
     private loadExternalConfig(configPath?: string): ExternalConfig {
-        const defaultConfigPath = configPath || '/app/config.json';
+        const defaultConfigPath = configPath || '/app/config/config.json';
         
         try {
             if (fs.existsSync(defaultConfigPath)) {
@@ -130,7 +130,7 @@ class Config {
             llm: { model: 'gpt-4o', maxTokens: 4000, temperature: 0.1, timeout: 30000, retryAttempts: 3 },
             fileOperations: { maxFileSize: 52428800, timeout: 30000, encoding: 'utf-8', enableSizeCheck: true, enableTimeoutCheck: true, backupEnabled: true },
             performance: { enableMonitoring: true, enableDetailedLogs: true, performanceLogPath: '/app/logs/performance', reportGenerationEnabled: true },
-            paths: { promptDir: '/app/app/prompt', outputDir: '/app/output', logsDir: '/app/logs', backupDir: '/app/backups' },
+            paths: { promptDir: '/app/src/prompts', outputDir: '/app/output', logsDir: '/app/logs', backupDir: '/app/backups' },
             testing: { mockMode: false, integrationTestEnabled: true, testReportPath: '/app/output', testTimeout: 60000 },
             security: { validateFilePaths: true, restrictToProjectDir: true, maxDepth: 10 }
         };

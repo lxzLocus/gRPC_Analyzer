@@ -4,7 +4,11 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/js/modules/llmFlowController.js",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "llm": "node run_llm_flow.js",
+    "llm:test": "node run_llm_flow.js --test",
+    "test:prompt": "node test_prompt_loading.js",
+    "generate:prompts": "node dist/js/utils/generatePrompt.js"
   },
   "dependencies": {
     "@llamaindex/openai": "^0.1.61",

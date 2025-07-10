@@ -6,7 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import RestoreDiff from '/app/app/module/restoreDiff.js';
+import RestoreDiff from './restoreDiff.js';
 import Logger from './logger.js';
 import Config from './config.js';
 import MessageHandler from './messageHandler.js';
