@@ -14,12 +14,12 @@ import path from 'path';
 /*
 modules
 */
-import Logger from "/app/app/module/logger.js";
-import RestoreDiff from '/app/app/module/restoreDiff.js';
-import LLMFlowController from '/app/app/module/llmFlowController.js';
+import Logger from "../modules/logger.js";
+import RestoreDiff from '../modules/restoreDiff.js';
+import LLMFlowController from '../modules/llmFlowController.js';
 
 //実行ファイルが置かれているパス
-const appDirRoot = "/app/app/";
+const appDirRoot = "/app/src/";
 
 dotenv.config();
 
@@ -119,6 +119,7 @@ class Config {
     outputDir: string;
     inputDir: string;
     promptDir: string;
+    promptVariableDir: string;
     promptTextfile: string;
     promptRefineTextfile: string;
     tmpDiffRestorePath: string;
@@ -129,8 +130,10 @@ class Config {
         this.inputProjectDir = datasetDir;
         this.outputDir = path.join(appDirRoot, 'output');
         this.inputDir = path.join(appDirRoot, 'input');
-        this.promptDir = path.join(appDirRoot, 'prompt');
-        this.promptTextfile = '00_prompt.txt';
+        this.promptDir = path.join(appDirRoot, 'prompts');
+        // プロンプト変数ファイルは入力データセットディレクトリから読み込む
+        this.promptVariableDir = datasetDir;
+        this.promptTextfile = '00_prompt_gem.txt';
         this.promptRefineTextfile = '00_promptRefine.txt';
         this.tmpDiffRestorePath = path.join(this.outputDir + 'tmpDiffRestore.txt');
         this.maxTokens = 128000;
@@ -169,12 +172,35 @@ class FileManager {
     }
 
     readFirstPromptFile(): string {
-        const promptText = fs.readFileSync(path.join(this.config.promptDir, this.config.promptTextfile), 'utf-8');
-        const protoFileContent = fs.readFileSync(path.join(this.config.promptDir, '01_proto.txt'), 'utf-8');
-        const protoFileChanges = fs.readFileSync(path.join(this.config.promptDir, '02_protoFileChanges.txt'), 'utf-8');
-        const fileChangesContent = fs.readFileSync(path.join(this.config.promptDir, '03_fileChanges.txt'), 'utf-8');
-        const allFilePaths = fs.readFileSync(path.join(this.config.promptDir, '04_allFilePaths.txt'), 'utf-8');
-        const suspectedFiles = fs.readFileSync(path.join(this.config.promptDir, '05_suspectedFiles.txt'), 'utf-8');
+        // プロンプトテンプレートはpromptsディレクトリから読み込み
+        const promptTemplatePath = path.join(this.config.promptDir, this.config.promptTextfile);
+        if (!fs.existsSync(promptTemplatePath)) {
+            throw new Error(`Prompt template file not found: ${promptTemplatePath}`);
+        }
+        const promptText = fs.readFileSync(promptTemplatePath, 'utf-8');
+        
+        // プロンプト変数ファイルは入力データセットディレクトリから読み込み
+        const promptVariableFiles = [
+            '01_proto.txt',
+            '02_protoFileChanges.txt', 
+            '03_fileChanges.txt',
+            '04_surroundedFilePath.txt',
+            '05_suspectedFiles.txt'
+        ];
+        
+        // ファイルの存在確認
+        for (const filename of promptVariableFiles) {
+            const filePath = path.join(this.config.promptVariableDir, filename);
+            if (!fs.existsSync(filePath)) {
+                throw new Error(`Prompt variable file not found: ${filePath}`);
+            }
+        }
+        
+        const protoFileContent = fs.readFileSync(path.join(this.config.promptVariableDir, '01_proto.txt'), 'utf-8');
+        const protoFileChanges = fs.readFileSync(path.join(this.config.promptVariableDir, '02_protoFileChanges.txt'), 'utf-8');
+        const fileChangesContent = fs.readFileSync(path.join(this.config.promptVariableDir, '03_fileChanges.txt'), 'utf-8');
+        const allFilePaths = fs.readFileSync(path.join(this.config.promptVariableDir, '04_surroundedFilePath.txt'), 'utf-8');
+        const suspectedFiles = fs.readFileSync(path.join(this.config.promptVariableDir, '05_suspectedFiles.txt'), 'utf-8');
 
         const context = {
             protoFile: protoFileContent,
@@ -212,7 +238,16 @@ class OpenAIClient {
 
 async function main() {
     // --- 1. 初期設定 ---
-    const datasetDir = "/app/dataset/test"; // データセットのディレクトリ
+    // コマンドライン引数またはデフォルトのデータセットディレクトリを使用
+    const datasetDir = process.argv[2];
+    
+    console.log(`Using dataset directory: ${datasetDir}`);
+    
+    // データセットディレクトリの存在を確認
+    if (!fs.existsSync(datasetDir)) {
+        console.error(`Dataset directory does not exist: ${datasetDir}`);
+        process.exit(1);
+    }
 
     const config = new Config(datasetDir);
     const fileManager = new FileManager(config);
@@ -374,9 +409,13 @@ async function main() {
     console.log("All processes have been completed.");
 }
 
-
-
-main();
+// このファイルが直接実行された場合のみmain()を呼び出す
+if (import.meta.url === `file://${process.argv[1]}`) {
+    main().catch(error => {
+        console.error('Error in main:', error);
+        process.exit(1);
+    });
+}
 
 // LLMFlowController等から利用できるようクラスをエクスポート
-export { Config, FileManager, MessageHandler, OpenAIClient };
+export { Config, FileManager, MessageHandler, OpenAIClient, main };
