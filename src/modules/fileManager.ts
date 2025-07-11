@@ -34,7 +34,7 @@ class FileManager {
         protoFile: '01_proto.txt',
         protoFileChanges: '02_protoFileChanges.txt',
         fileChanges: '03_fileChanges.txt',
-        allFilePaths: '04_allFilePaths.txt',
+        surroundedFilePath: '04_surroundedFilePath.txt',
         suspectedFiles: '05_suspectedFiles.txt'
     };
 
@@ -58,8 +58,37 @@ class FileManager {
      * @returns ファイルが存在するかどうか
      */
     private checkPromptFileExists(filename: string): boolean {
+        // 1. データセットディレクトリからの検索
+        const datasetPromptPath = this.findPromptFileInDataset(filename);
+        if (datasetPromptPath) {
+            return true;
+        }
+        
+        // 2. デフォルトのプロンプトディレクトリからの検索
         const filePath = path.join(this.config.promptDir, filename);
         return fs.existsSync(filePath);
+    }
+
+    /**
+     * データセットディレクトリ内でプロンプトファイルを検索
+     * @param filename プロンプトファイル名
+     * @returns 見つかったファイルのパス（見つからない場合はnull）
+     */
+    private findPromptFileInDataset(filename: string): string | null {
+        if (!this.config.inputProjectDir) {
+            return null;
+        }
+
+        // inputProjectDirの親ディレクトリ（pullrequestディレクトリ）を取得
+        const pullRequestDir = path.dirname(this.config.inputProjectDir);
+        const datasetPromptPath = path.join(pullRequestDir, filename);
+        
+        if (fs.existsSync(datasetPromptPath)) {
+            console.log(`📁 データセットプロンプトファイルを発見: ${datasetPromptPath}`);
+            return datasetPromptPath;
+        }
+        
+        return null;
     }
 
     /**
@@ -69,11 +98,25 @@ class FileManager {
      * @returns ファイル内容またはフォールバック内容
      */
     private safeReadPromptFile(filename: string, fallbackContent: string = ''): string {
+        // 1. データセットディレクトリからの読み込みを試行
+        const datasetPromptPath = this.findPromptFileInDataset(filename);
+        if (datasetPromptPath) {
+            try {
+                const content = fs.readFileSync(datasetPromptPath, 'utf-8');
+                console.log(`✅ データセットプロンプトファイルを読み込み: ${filename}`);
+                return content;
+            } catch (error) {
+                console.warn(`⚠️  データセットプロンプトファイル読み込みエラー: ${filename}`, error);
+            }
+        }
+        
+        // 2. デフォルトディレクトリからの読み込みを試行
         const filePath = path.join(this.config.promptDir, filename);
         
-        if (!this.checkPromptFileExists(filename)) {
+        if (!fs.existsSync(filePath)) {
             console.warn(`⚠️  プロンプトファイルが見つかりません: ${filename}`);
-            console.warn(`   パス: ${filePath}`);
+            console.warn(`   検索パス1: ${datasetPromptPath || 'データセット未指定'}`);
+            console.warn(`   検索パス2: ${filePath}`);
             console.warn(`   フォールバック内容を使用します`);
             return fallbackContent;
         }
@@ -96,7 +139,7 @@ class FileManager {
     private validateTemplateContext(context: PromptTemplateContext): { isValid: boolean; errors: string[] } {
         const errors: string[] = [];
         const requiredFields: (keyof PromptTemplateContext)[] = [
-            'protoFile', 'protoFileChanges', 'fileChanges', 'allFilePaths', 'suspectedFiles'
+            'protoFile', 'protoFileChanges', 'fileChanges', 'surroundedFilePath', 'suspectedFiles'
         ];
 
         requiredFields.forEach(field => {
@@ -117,7 +160,7 @@ class FileManager {
         // メインプロンプトファイルの読み込み
         const promptText = this.safeReadPromptFile(
             this.config.promptTextfile,
-            '# デフォルトプロンプト\n\nFix or improve program code related to gRPC. It may contain potential bugs. Refer to the proto to make code corrections.\n\n{{protoFile}}\n{{protoFileChanges}}\n{{fileChanges}}\n{{allFilePaths}}\n{{suspectedFiles}}'
+            '# デフォルトプロンプト\n\nFix or improve program code related to gRPC. It may contain potential bugs. Refer to the proto to make code corrections.\n\n{{protoFile}}\n{{protoFileChanges}}\n{{fileChanges}}\n{{surroundedFilePath}}\n{{suspectedFiles}}'
         );
 
         // 各プロンプトファイルの読み込み（フォールバック付き）
@@ -133,8 +176,8 @@ class FileManager {
             this.defaultPromptFiles.fileChanges,
             '# ファイル変更情報が利用できません'
         );
-        const allFilePaths = this.safeReadPromptFile(
-            this.defaultPromptFiles.allFilePaths,
+        const surroundedFilePath = this.safeReadPromptFile(
+            this.defaultPromptFiles.surroundedFilePath,
             '# ファイルパス情報が利用できません'
         );
         const suspectedFiles = this.safeReadPromptFile(
@@ -147,7 +190,7 @@ class FileManager {
             protoFile: protoFileContent,
             protoFileChanges: protoFileChanges,
             fileChanges: fileChangesContent,
-            allFilePaths: allFilePaths,
+            surroundedFilePath: surroundedFilePath,
             suspectedFiles: suspectedFiles
         };
 
@@ -222,7 +265,14 @@ class FileManager {
 
             try {
                 if (!fileCheck.exists) {
-                    const errorMsg = `ファイルが見つかりません: ${fileCheck.error || 'File not found'}`;
+                    // 類似ファイルを探す
+                    const originalPath = fileInfos[i].path;
+                    const suggestions = await this.findSimilarFiles(originalPath, this.config.inputProjectDir);
+                    const suggestionText = suggestions.length > 0 
+                        ? `\n\n類似ファイルの候補:\n${suggestions.slice(0, 5).map((s: string) => `  - ${s}`).join('\n')}`
+                        : '';
+                    
+                    const errorMsg = `ファイルが見つかりません: ${fileCheck.error || 'File not found'}${suggestionText}`;
                     contents.push(`--- ${relativePath}\n[${errorMsg}]`);
                     result.error = errorMsg;
                     summary.errors.push({ path: relativePath, error: errorMsg });
@@ -574,6 +624,159 @@ class FileManager {
                     reject(error);
                 });
         });
+    }
+
+    /**
+     * 類似ファイルを検索する
+     * @param targetPath - 検索対象のパス
+     * @param searchDir - 検索ディレクトリ
+     * @returns 類似ファイルのパス配列
+     */
+    private async findSimilarFiles(targetPath: string, searchDir: string): Promise<string[]> {
+        try {
+            const targetBasename = path.basename(targetPath);
+            const targetExt = path.extname(targetPath);
+            const targetNameWithoutExt = path.basename(targetPath, targetExt);
+            
+            const suggestions: Array<{ path: string; score: number }> = [];
+            
+            // ディレクトリを再帰的に検索
+            const searchRecursively = async (dir: string, basePath: string = ''): Promise<void> => {
+                try {
+                    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+                    
+                    for (const entry of entries) {
+                        // スキップするディレクトリ
+                        if (entry.isDirectory() && 
+                            (entry.name === 'node_modules' || entry.name === '.git' || 
+                             entry.name === 'vendor' || entry.name.startsWith('.'))) {
+                            continue;
+                        }
+                        
+                        const fullPath = path.join(dir, entry.name);
+                        const relativePath = path.join(basePath, entry.name);
+                        
+                        if (entry.isDirectory()) {
+                            // 再帰的に検索（深さ制限あり）
+                            if (basePath.split(path.sep).length < 5) {
+                                await searchRecursively(fullPath, relativePath);
+                            }
+                        } else if (entry.isFile()) {
+                            // ファイル名の類似度をチェック
+                            const score = this.calculateFileNameSimilarity(targetPath, relativePath, targetBasename, targetExt, targetNameWithoutExt);
+                            if (score > 0) {
+                                suggestions.push({ path: relativePath, score });
+                            }
+                        }
+                    }
+                } catch (error) {
+                    // ディレクトリアクセスエラーは無視
+                }
+            };
+            
+            await searchRecursively(searchDir);
+            
+            // スコア順にソートして上位を返す
+            return suggestions
+                .sort((a: any, b: any) => b.score - a.score)
+                .slice(0, 10)
+                .map((item: any) => item.path);
+                
+        } catch (error) {
+            console.warn('Error finding similar files:', error);
+            return [];
+        }
+    }
+    
+    /**
+     * ファイル名の類似度を計算する
+     * @param targetPath - ターゲットパス
+     * @param candidatePath - 候補パス
+     * @param targetBasename - ターゲットのベース名
+     * @param targetExt - ターゲットの拡張子
+     * @param targetNameWithoutExt - ターゲットの拡張子なし名前
+     * @returns 類似度スコア（高いほど類似）
+     */
+    private calculateFileNameSimilarity(
+        targetPath: string,
+        candidatePath: string,
+        targetBasename: string,
+        targetExt: string,
+        targetNameWithoutExt: string
+    ): number {
+        const candidateBasename = path.basename(candidatePath);
+        const candidateExt = path.extname(candidatePath);
+        const candidateNameWithoutExt = path.basename(candidatePath, candidateExt);
+        
+        let score = 0;
+        
+        // 完全一致
+        if (candidateBasename === targetBasename) {
+            score += 100;
+        }
+        
+        // 拡張子一致
+        if (candidateExt === targetExt && targetExt) {
+            score += 50;
+        }
+        
+        // 名前の部分一致
+        if (targetNameWithoutExt && candidateNameWithoutExt.includes(targetNameWithoutExt)) {
+            score += 30;
+        }
+        
+        // パスの類似性（ディレクトリ構造）
+        const targetDirs = path.dirname(targetPath).split(path.sep);
+        const candidateDirs = path.dirname(candidatePath).split(path.sep);
+        
+        for (let i = 0; i < Math.min(targetDirs.length, candidateDirs.length); i++) {
+            if (targetDirs[i] === candidateDirs[i]) {
+                score += 10;
+            }
+        }
+        
+        // レーベンシュタイン距離による類似度（逆数でスコア化）
+        const distance = this.levenshteinDistance(targetBasename.toLowerCase(), candidateBasename.toLowerCase());
+        if (distance < targetBasename.length) {
+            score += Math.max(0, 20 - distance * 2);
+        }
+        
+        return score;
+    }
+    
+    /**
+     * レーベンシュタイン距離を計算する
+     * @param str1 - 文字列1
+     * @param str2 - 文字列2
+     * @returns 距離
+     */
+    private levenshteinDistance(str1: string, str2: string): number {
+        const matrix = [];
+        
+        // 初期化
+        for (let i = 0; i <= str2.length; i++) {
+            matrix[i] = [i];
+        }
+        for (let j = 0; j <= str1.length; j++) {
+            matrix[0][j] = j;
+        }
+        
+        // 距離計算
+        for (let i = 1; i <= str2.length; i++) {
+            for (let j = 1; j <= str1.length; j++) {
+                if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j - 1] + 1, // substitution
+                        matrix[i][j - 1] + 1, // insertion
+                        matrix[i - 1][j] + 1 // deletion
+                    );
+                }
+            }
+        }
+        
+        return matrix[str2.length][str1.length];
     }
 }
 

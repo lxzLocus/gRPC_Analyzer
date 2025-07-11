@@ -10,6 +10,7 @@ dataset/*
 !dataset/gRPC_reps_list.csv
 
 dist/
+log/
 logs/
 output/
 docs/

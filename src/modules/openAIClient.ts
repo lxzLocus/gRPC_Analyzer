@@ -7,9 +7,15 @@ class OpenAIClient {
     client: any;
     private initPromise: Promise<void>;
 
-    constructor(apiKey: string) {
+    constructor(apiKey?: string) {
+        // 環境変数から APIキーを取得（優先順位: 引数 > OPENAI_TOKEN > OPENAI_API_KEY）
+        const finalApiKey = apiKey || process.env.OPENAI_TOKEN || process.env.OPENAI_API_KEY || '';
+        
+        console.log(`🔑 OpenAIClient: Using API key length: ${finalApiKey.length}`);
+        console.log(`🔑 Available env vars: OPENAI_TOKEN=${!!process.env.OPENAI_TOKEN}, OPENAI_API_KEY=${!!process.env.OPENAI_API_KEY}`);
+        
         // OpenAIクライアントの初期化を非同期で行う
-        this.initPromise = this.initializeClient(apiKey);
+        this.initPromise = this.initializeClient(finalApiKey);
     }
 
     private async initializeClient(apiKey: string): Promise<void> {

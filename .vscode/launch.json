@@ -29,7 +29,12 @@
             "preLaunchTask": "Compile TypeScript",
             "program": "${file}",
             "cwd": "${workspaceFolder}",
-            "outFiles": ["${workspaceFolder}/build/js/**/*.js"]
+            "outFiles": ["${workspaceFolder}/**/*.js"],
+            "env": {
+                "NODE_ENV": "development",
+                "DEBUG_MODE": "true"
+            },
+            "envFile": "${workspaceFolder}/.env"
         },
         {
             "name": "Docker Debug go",
@@ -40,6 +45,36 @@
             "env": {},
             "showLog": false,
             "args": ["imports", "/app/dataset/clone/emojivote/pullrequest/01_pr/premerge_112/emojivoto-emoji-svc/api/api_test.go"]
-        }
+        },
+        {
+            "name": "Debug LLMFlowBatchRunner",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/modules/llmFlowBatchRunner.ts",
+            "cwd": "${workspaceFolder}",
+            "outFiles": ["${workspaceFolder}/**/*.js"],
+            "env": {
+                "NODE_ENV": "development",
+                "DEBUG_MODE": "true"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "runtimeArgs": ["--loader", "ts-node/esm"],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug LLMFlowBatchRunner (Compiled JS)",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/dist/js/modules/llmFlowBatchRunner.js",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "NODE_ENV": "development",
+                "DEBUG_MODE": "true",
+                "NODE_OPTIONS": "--max-old-space-size=2048"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "console": "integratedTerminal",
+            "sourceMaps": true
+        },
     ]
 }

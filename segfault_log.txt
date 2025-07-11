@@ -1,0 +1,161 @@
+🔄 Processing /app/dataset/test/servantes/pullrequest/add_Secrets_service-_global_yaml...
+🔧 LLMFlowController initialized with path: /app/dataset/test/servantes/pullrequest/add_Secrets_service-_global_yaml/premerge_54
+🔑 OPENAI_TOKEN length: 164
+🔑 OPENAI_API_KEY length: 164
+🌍 NODE_ENV: development
+🐛 DEBUG_MODE: false
+🔑 OpenAIClient: Using API key length: 164
+🔑 Available env vars: OPENAI_TOKEN=true, OPENAI_API_KEY=true
+📋 プロンプトファイルの読み込みを開始...
+⚠️  プロンプトファイルが見つかりません: 01_proto.txt
+   パス: /app/src/prompts/01_proto.txt
+   フォールバック内容を使用します
+⚠️  プロンプトファイルが見つかりません: 02_protoFileChanges.txt
+   パス: /app/src/prompts/02_protoFileChanges.txt
+   フォールバック内容を使用します
+⚠️  プロンプトファイルが見つかりません: 03_fileChanges.txt
+   パス: /app/src/prompts/03_fileChanges.txt
+   フォールバック内容を使用します
+⚠️  プロンプトファイルが見つかりません: 04_allFilePaths.txt
+   パス: /app/src/prompts/04_allFilePaths.txt
+   フォールバック内容を使用します
+⚠️  プロンプトファイルが見つかりません: 05_suspectedFiles.txt
+   パス: /app/src/prompts/05_suspectedFiles.txt
+   フォールバック内容を使用します
+✅ プロンプトファイルの読み込み完了
+[INFO 2025-07-11T08:11:15.885Z] ⏱️ Performance timer started: LLM_Response_Analysis [LLM_Response_Analysis_1752221475884_zvpryb58b]
+[INFO 2025-07-11T08:11:15.885Z] ⏱️ Performance: LLM_Response_Analysis completed in 0.54ms
+[DETAILED_LOG_PERFORMANCE] Logged to: /app/logs/performance/2025-07-11T08-11-15-888Z.json
+[INFO 2025-07-11T08:11:15.898Z] === Progress State ===
+[INFO 2025-07-11T08:11:15.898Z] Phase: INITIAL_ANALYSIS
+[INFO 2025-07-11T08:11:15.898Z] Iteration: 0/10
+[INFO 2025-07-11T08:11:15.898Z] Analysis Depth: 1
+[INFO 2025-07-11T08:11:15.898Z] Steps Completed: 0
+[INFO 2025-07-11T08:11:15.898Z] Steps Remaining: 0
+[INFO 2025-07-11T08:11:15.898Z] Context Accumulated:
+[INFO 2025-07-11T08:11:15.898Z]   - Source Files: 0
+[INFO 2025-07-11T08:11:15.898Z]   - Config Files: 0
+[INFO 2025-07-11T08:11:15.898Z]   - Proto Files: 0
+[INFO 2025-07-11T08:11:15.898Z]   - Test Files: 0
+[INFO 2025-07-11T08:11:15.898Z]   - Directories: 0
+[INFO 2025-07-11T08:11:15.898Z] Errors: 0, Warnings: 0
+[INFO 2025-07-11T08:11:15.898Z] =====================
+[INFO 2025-07-11T08:11:15.898Z] Next state: GetFileContent, Processing 3 files, 0 directories
+[INFO 2025-07-11T08:11:22.749Z] ⏱️ Performance timer started: LLM_Response_Reanalysis [LLM_Response_Reanalysis_1752221482749_ubgtljmqi]
+[INFO 2025-07-11T08:11:22.750Z] ⏱️ Performance: LLM_Response_Reanalysis completed in 0.38ms
+[DETAILED_LOG_PERFORMANCE] Logged to: /app/logs/performance/2025-07-11T08-11-22-750Z.json
+[INFO 2025-07-11T08:11:22.752Z] === Progress State ===
+[INFO 2025-07-11T08:11:22.752Z] Phase: INITIAL_ANALYSIS
+[INFO 2025-07-11T08:11:22.752Z] Iteration: 0/10
+[INFO 2025-07-11T08:11:22.752Z] Analysis Depth: 2
+[INFO 2025-07-11T08:11:22.752Z] Steps Completed: 0
+[INFO 2025-07-11T08:11:22.752Z] Steps Remaining: 3
+[INFO 2025-07-11T08:11:22.752Z] Context Accumulated:
+[INFO 2025-07-11T08:11:22.752Z]   - Source Files: 2
+[INFO 2025-07-11T08:11:22.752Z]   - Config Files: 0
+[INFO 2025-07-11T08:11:22.752Z]   - Proto Files: 1
+[INFO 2025-07-11T08:11:22.752Z]   - Test Files: 0
+[INFO 2025-07-11T08:11:22.752Z]   - Directories: 0
+[INFO 2025-07-11T08:11:22.752Z] Errors: 0, Warnings: 0
+[INFO 2025-07-11T08:11:22.752Z] =====================
+[INFO 2025-07-11T08:11:22.752Z] Next state: GetFileContent, Processing 2 files, 0 directories
+[INFO 2025-07-11T08:11:29.924Z] ⏱️ Performance timer started: LLM_Response_Reanalysis [LLM_Response_Reanalysis_1752221489924_fn3orb9op]
+[INFO 2025-07-11T08:11:29.924Z] ⏱️ Performance: LLM_Response_Reanalysis completed in 0.47ms
+[DETAILED_LOG_PERFORMANCE] Logged to: /app/logs/performance/2025-07-11T08-11-29-927Z.json
+[INFO 2025-07-11T08:11:29.930Z] === Progress State ===
+[INFO 2025-07-11T08:11:29.930Z] Phase: INITIAL_ANALYSIS
+[INFO 2025-07-11T08:11:29.930Z] Iteration: 0/10
+[INFO 2025-07-11T08:11:29.930Z] Analysis Depth: 3
+[INFO 2025-07-11T08:11:29.930Z] Steps Completed: 0
+[INFO 2025-07-11T08:11:29.930Z] Steps Remaining: 2
+[INFO 2025-07-11T08:11:29.930Z] Context Accumulated:
+[INFO 2025-07-11T08:11:29.930Z]   - Source Files: 3
+[INFO 2025-07-11T08:11:29.930Z]   - Config Files: 0
+[INFO 2025-07-11T08:11:29.930Z]   - Proto Files: 2
+[INFO 2025-07-11T08:11:29.930Z]   - Test Files: 0
+[INFO 2025-07-11T08:11:29.930Z]   - Directories: 0
+[INFO 2025-07-11T08:11:29.930Z] Errors: 0, Warnings: 0
+[INFO 2025-07-11T08:11:29.930Z] =====================
+[INFO 2025-07-11T08:11:29.931Z] Next state: GetFileContent, Processing 2 files, 0 directories
+[INFO 2025-07-11T08:11:34.707Z] ⏱️ Performance timer started: LLM_Response_Reanalysis [LLM_Response_Reanalysis_1752221494707_53czjnl9t]
+[INFO 2025-07-11T08:11:34.708Z] ⏱️ Performance: LLM_Response_Reanalysis completed in 0.24ms
+[DETAILED_LOG_PERFORMANCE] Logged to: /app/logs/performance/2025-07-11T08-11-34-713Z.json
+[INFO 2025-07-11T08:11:34.725Z] === Progress State ===
+[INFO 2025-07-11T08:11:34.725Z] Phase: INITIAL_ANALYSIS
+[INFO 2025-07-11T08:11:34.725Z] Iteration: 0/10
+[INFO 2025-07-11T08:11:34.725Z] Analysis Depth: 4
+[INFO 2025-07-11T08:11:34.725Z] Steps Completed: 0
+[INFO 2025-07-11T08:11:34.725Z] Steps Remaining: 2
+[INFO 2025-07-11T08:11:34.725Z] Context Accumulated:
+[INFO 2025-07-11T08:11:34.725Z]   - Source Files: 4
+[INFO 2025-07-11T08:11:34.725Z]   - Config Files: 0
+[INFO 2025-07-11T08:11:34.725Z]   - Proto Files: 3
+[INFO 2025-07-11T08:11:34.725Z]   - Test Files: 0
+[INFO 2025-07-11T08:11:34.725Z]   - Directories: 0
+[INFO 2025-07-11T08:11:34.725Z] Errors: 0, Warnings: 0
+[INFO 2025-07-11T08:11:34.725Z] =====================
+[WARN 2025-07-11T08:11:34.725Z] All 2 files already processed, skipping to avoid circular references
+[INFO 2025-07-11T08:11:34.725Z] Next state: End, Processing 2 files, 0 directories
+🔄 Processing /app/dataset/test/servantes/pullrequest/fix_up_protobufs_and_improve_ci...
+🔧 LLMFlowController initialized with path: /app/dataset/test/servantes/pullrequest/fix_up_protobufs_and_improve_ci/premerge_112
+🔑 OPENAI_TOKEN length: 164
+🔑 OPENAI_API_KEY length: 164
+🌍 NODE_ENV: development
+🐛 DEBUG_MODE: false
+🔑 OpenAIClient: Using API key length: 164
+🔑 Available env vars: OPENAI_TOKEN=true, OPENAI_API_KEY=true
+📋 プロンプトファイルの読み込みを開始...
+⚠️  プロンプトファイルが見つかりません: 01_proto.txt
+   パス: /app/src/prompts/01_proto.txt
+   フォールバック内容を使用します
+⚠️  プロンプトファイルが見つかりません: 02_protoFileChanges.txt
+   パス: /app/src/prompts/02_protoFileChanges.txt
+   フォールバック内容を使用します
+⚠️  プロンプトファイルが見つかりません: 03_fileChanges.txt
+   パス: /app/src/prompts/03_fileChanges.txt
+   フォールバック内容を使用します
+⚠️  プロンプトファイルが見つかりません: 04_allFilePaths.txt
+   パス: /app/src/prompts/04_allFilePaths.txt
+   フォールバック内容を使用します
+⚠️  プロンプトファイルが見つかりません: 05_suspectedFiles.txt
+   パス: /app/src/prompts/05_suspectedFiles.txt
+   フォールバック内容を使用します
+✅ プロンプトファイルの読み込み完了
+[INFO 2025-07-11T08:11:43.367Z] ⏱️ Performance timer started: LLM_Response_Analysis [LLM_Response_Analysis_1752221503367_oszf3gsdi]
+[INFO 2025-07-11T08:11:43.367Z] ⏱️ Performance: LLM_Response_Analysis completed in 0.16ms
+[DETAILED_LOG_PERFORMANCE] Logged to: /app/logs/performance/2025-07-11T08-11-43-368Z.json
+[INFO 2025-07-11T08:11:43.370Z] === Progress State ===
+[INFO 2025-07-11T08:11:43.370Z] Phase: INITIAL_ANALYSIS
+[INFO 2025-07-11T08:11:43.370Z] Iteration: 0/10
+[INFO 2025-07-11T08:11:43.370Z] Analysis Depth: 1
+[INFO 2025-07-11T08:11:43.370Z] Steps Completed: 0
+[INFO 2025-07-11T08:11:43.370Z] Steps Remaining: 0
+[INFO 2025-07-11T08:11:43.370Z] Context Accumulated:
+[INFO 2025-07-11T08:11:43.370Z]   - Source Files: 0
+[INFO 2025-07-11T08:11:43.370Z]   - Config Files: 0
+[INFO 2025-07-11T08:11:43.370Z]   - Proto Files: 0
+[INFO 2025-07-11T08:11:43.370Z]   - Test Files: 0
+[INFO 2025-07-11T08:11:43.370Z]   - Directories: 0
+[INFO 2025-07-11T08:11:43.370Z] Errors: 0, Warnings: 0
+[INFO 2025-07-11T08:11:43.370Z] =====================
+[INFO 2025-07-11T08:11:43.370Z] Next state: GetFileContent, Processing 4 files, 0 directories
+[INFO 2025-07-11T08:11:45.136Z] ⏱️ Performance timer started: LLM_Response_Reanalysis [LLM_Response_Reanalysis_1752221505136_khjlozxh9]
+[INFO 2025-07-11T08:11:45.136Z] ⏱️ Performance: LLM_Response_Reanalysis completed in 0.15ms
+[DETAILED_LOG_PERFORMANCE] Logged to: /app/logs/performance/2025-07-11T08-11-45-137Z.json
+[INFO 2025-07-11T08:11:45.140Z] === Progress State ===
+[INFO 2025-07-11T08:11:45.140Z] Phase: INITIAL_ANALYSIS
+[INFO 2025-07-11T08:11:45.140Z] Iteration: 0/10
+[INFO 2025-07-11T08:11:45.140Z] Analysis Depth: 2
+[INFO 2025-07-11T08:11:45.140Z] Steps Completed: 0
+[INFO 2025-07-11T08:11:45.140Z] Steps Remaining: 4
+[INFO 2025-07-11T08:11:45.140Z] Context Accumulated:
+[INFO 2025-07-11T08:11:45.140Z]   - Source Files: 3
+[INFO 2025-07-11T08:11:45.140Z]   - Config Files: 0
+[INFO 2025-07-11T08:11:45.140Z]   - Proto Files: 1
+[INFO 2025-07-11T08:11:45.140Z]   - Test Files: 0
+[INFO 2025-07-11T08:11:45.140Z]   - Directories: 0
+[INFO 2025-07-11T08:11:45.140Z] Errors: 0, Warnings: 0
+[INFO 2025-07-11T08:11:45.140Z] =====================
+[WARN 2025-07-11T08:11:45.140Z] All 4 files already processed, skipping to avoid circular references
+[INFO 2025-07-11T08:11:45.140Z] Next state: End, Processing 4 files, 0 directories
+✅ Batch processing completed.

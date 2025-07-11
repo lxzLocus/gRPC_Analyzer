@@ -132,7 +132,7 @@ export type PromptTemplateContext = {
     protoFile: string;
     protoFileChanges: string;
     fileChanges: string;
-    allFilePaths: string;
+    surroundedFilePath: string;
     suspectedFiles: string;
 };
 
@@ -141,7 +141,7 @@ export type PromptFileConfig = {
     protoFile: string;
     protoFileChanges: string;
     fileChanges: string;
-    allFilePaths: string;
+    surroundedFilePath: string;
     suspectedFiles: string;
 };
 

@@ -7,6 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 import Handlebars from 'handlebars';
+import dotenv from 'dotenv';
 
 //実行ファイルが置かれているパス
 const APP_DIR: string = "/app/src/";
@@ -91,7 +92,7 @@ class Config {
         this.inputProjectDir = pullRequestPath;
         this.outputDir = this.getConfigValue('paths.outputDir', path.join(APP_DIR, 'output'));
         this.inputDir = path.join(APP_DIR, 'input');
-        this.promptDir = this.getConfigValue('paths.promptDir', path.join(APP_DIR, 'prompt'));
+        this.promptDir = this.getConfigValue('paths.promptDir', path.join(APP_DIR, 'prompts'));
         this.promptTextfile = '00_prompt.txt';
         this.promptRefineTextfile = '00_promptRefine.txt';
         this.tmpDiffRestorePath = path.join(this.outputDir + 'tmpDiffRestore.txt');
@@ -142,7 +143,6 @@ class Config {
     private loadEnvironmentVariables(): void {
         try {
             // dotenvライブラリが利用可能な場合は使用
-            const dotenv = require('dotenv');
             dotenv.config();
         } catch {
             // dotenvが利用できない場合は環境変数のみ使用

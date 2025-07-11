@@ -1,14 +1,73 @@
 import fs from 'fs';
 import path from 'path';
+import { config } from 'dotenv';
 import LLMFlowController from './llmFlowController.js';
 
+// 既存の環境変数をクリア（他の設定が残っている場合）
+delete process.env.OPENAI_TOKEN;
+delete process.env.OPENAI_API_KEY;
+
+// .envファイルを読み込み
+config({ path: path.join(process.cwd(), '.env') });
+
+// グレースフルシャットダウンの実装
+let isShuttingDown = false;
+
+const gracefulShutdown = (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    
+    console.log(`📡 Received ${signal}. Starting graceful shutdown...`);
+    
+    // リソースのクリーンアップ
+    console.log('🧹 Cleaning up resources...');
+    
+    // ガベージコレクション強制実行
+    if ((global as any).gc) {
+        console.log('🗑️ Running garbage collection...');
+        (global as any).gc();
+    }
+    
+    console.log('✅ Graceful shutdown completed');
+    process.exit(0);
+};
+
+// シグナルハンドラーの設定
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// 異常終了のキャッチ
+process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error.message);
+    console.error('Stack:', error.stack);
+    gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    gracefulShutdown('unhandledRejection');
+});
 
 if (import.meta.url === `file://${process.argv[1]}`) {
     /*config*/
     const datasetDir = "/app/dataset/test";
 
-    await runForAllDatasets(datasetDir);
-    console.log("✅ Batch processing completed.");
+    try {
+        await runForAllDatasets(datasetDir);
+        console.log("✅ Batch processing completed.");
+        
+        // 明示的なクリーンアップ
+        if ((global as any).gc) {
+            console.log('🗑️ Final garbage collection...');
+            (global as any).gc();
+        }
+        
+        // 正常終了
+        process.exit(0);
+    } catch (error) {
+        console.error("❌ Error in batch processing:", error);
+        gracefulShutdown('error');
+    }
 }
 
 /**

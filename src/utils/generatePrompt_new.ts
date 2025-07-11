@@ -49,7 +49,7 @@ import getSurroundingDirectoryStructure from '../modules/generatePeripheralStruc
 import {mergeStructures, findAllAndMergeProjectRoots} from '../modules/editFilePathStructure.js';
 
 /*config*/
-const datasetDir = '/app/dataset/filtered_commit';
+const datasetDir = '/app/dataset/test';
 
 /* __MAIN__ */
 // main処理をasync関数でラップ
@@ -104,14 +104,109 @@ async function main() {
                     continue;
                 }
 
-                const protoContentList = await findFiles(premergePath, '.proto');
+                // 全protoファイルを取得
+                const allProtoContentList: any = findFiles(premergePath, '.proto');
+                console.log('allProtoContentList structure:', allProtoContentList);
+                
+                // 変更されたprotoファイルを特定
+                const changedProtoFiles: string[] = [];
+                if (premergePath && mergePath) {
+                    const changedFilesResult = await getChangedFiles(premergePath, mergePath, '');
+                    changedProtoFiles.push(...changedFilesResult.filter((file: string) => file.endsWith('.proto')));
+                }
+                
+                console.log('Changed Proto Files:', changedProtoFiles);
+                
+                // 変更されたprotoファイルが直接importするファイルを抽出
+                const importedProtoFiles = new Set<string>();
+                
+                /**
+                 * protoファイル内容からimport文を抽出する
+                 * @param {string} content - protoファイルの内容
+                 * @returns {string[]} - importされているファイルパスのリスト
+                 */
+                function extractImports(content: string): string[] {
+                    const imports: string[] = [];
+                    const lines = content.split('\n');
+                    
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        // import "path/to/file.proto"; の形式を検出
+                        const match = trimmed.match(/^\s*import\s+["']([^"']+\.proto)["']\s*;?/);
+                        if (match) {
+                            imports.push(match[1]);
+                        }
+                    }
+                    return imports;
+                }
+                
+                // 変更されたprotoファイルの内容を読み込み、import文を解析
+                for (const changedProtoFile of changedProtoFiles) {
+                    const protoInfo = allProtoContentList.proto_files?.find((proto: any) => proto.path === changedProtoFile);
+                    if (protoInfo) {
+                        const imports = extractImports(protoInfo.content);
+                        imports.forEach(importPath => {
+                            // 相対パスを正規化して追加
+                            const normalizedPath = path.normalize(importPath).replace(/\\/g, '/');
+                            importedProtoFiles.add(normalizedPath);
+                        });
+                    }
+                }
+                
+                console.log('Imported Proto Files:', Array.from(importedProtoFiles));
+                
+                // 最終的な01_proto.txtの構造を作成
+                const relevantProtoFiles: any[] = [];
+                const otherProtoFilePaths: string[] = [];
+                
+                if (allProtoContentList.proto_files) {
+                    for (const protoInfo of allProtoContentList.proto_files) {
+                        const filePath = protoInfo.path;
+                        const normalizedPath = path.normalize(filePath).replace(/\\/g, '/');
+                        
+                        // 変更されたファイルまたはimportされたファイルかチェック
+                        const isChanged = changedProtoFiles.includes(filePath);
+                        const isImported = importedProtoFiles.has(normalizedPath) || 
+                                         importedProtoFiles.has(filePath) ||
+                                         Array.from(importedProtoFiles).some(importPath => 
+                                             normalizedPath.endsWith(importPath) || filePath.endsWith(importPath)
+                                         );
+                        
+                        if (isChanged || isImported) {
+                            // フル内容を含める
+                            relevantProtoFiles.push({
+                                path: filePath,
+                                content: protoInfo.content,
+                                reason: isChanged ? 'changed' : 'imported'
+                            });
+                        } else {
+                            // パスのみ
+                            otherProtoFilePaths.push(filePath);
+                        }
+                    }
+                }
+                
+                // 最終的な出力構造
+                const protoOutput = {
+                    relevant_proto_files: relevantProtoFiles,
+                    other_proto_file_paths: otherProtoFilePaths,
+                    summary: {
+                        total_proto_files: (allProtoContentList.proto_files?.length || 0),
+                        relevant_files_count: relevantProtoFiles.length,
+                        other_files_count: otherProtoFilePaths.length,
+                        changed_files_count: changedProtoFiles.length,
+                        imported_files_count: importedProtoFiles.size
+                    }
+                };
+                
                 const protoFilePath = path.join(pullRequestPath, '01_proto.txt');
 
                 // 既存のファイルがあれば削除
                 if (fs.existsSync(protoFilePath)) {
                     fs.unlinkSync(protoFilePath);
                 }
-                fs.writeFileSync(protoFilePath, JSON.stringify(protoContentList, null, 2), 'utf8');
+                fs.writeFileSync(protoFilePath, JSON.stringify(protoOutput, null, 2), 'utf8');
+                console.log(`Generated optimized proto file list: ${relevantProtoFiles.length} full content files, ${otherProtoFilePaths.length} path-only files`);
 
                 // ========================================================================
                 // 02_protoFileChanges.txt の処理

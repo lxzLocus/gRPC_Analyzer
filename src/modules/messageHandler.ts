@@ -66,22 +66,11 @@ class MessageHandler {
 
             if (currentTag) {
                 if (currentTag === 'required') {
-                    // JSON形式の解析を試みる
-                    if (trimmed.startsWith('[') || trimmed.startsWith('{') || trimmed.includes('"path"') || trimmed.includes('"type"') || trimmed.endsWith('}') || trimmed.endsWith(']')) {
-                        // JSONバッファに追加
-                        if (!buffers.required) {
-                            buffers.required = [];
-                        }
-                        buffers.required.push(line);
-                    } else {
-                        // 従来の文字列マッチング
-                        const match = trimmed.match(/"(.+?)"/);
-                        if (match) {
-                            sections.requiredFilepaths.push(match[1]);
-                        } else if (trimmed && !trimmed.startsWith('[') && !trimmed.startsWith(']')) {
-                            sections.requiredFilepaths.push(trimmed);
-                        }
+                    // すべてのrequiredラインをバッファに追加（後で統一的に処理）
+                    if (!buffers.required) {
+                        buffers.required = [];
                     }
+                    buffers.required.push(line);
                 } else if (buffers[currentTag]) {
                     buffers[currentTag].push(line);
                 }
@@ -93,75 +82,214 @@ class MessageHandler {
         sections.modifiedDiff = buffers.modified.join('\n').trim();
         sections.commentText = buffers.comment.join('\n').trim();
 
-        // Required filesの後処理（JSON解析）
+        // Required filesの後処理（統一的な解析）
+        console.log('📊 Buffer contents summary:');
+        console.log('  - thought:', buffers.thought.length, 'lines');
+        console.log('  - plan:', buffers.plan.length, 'lines');
+        console.log('  - modified:', buffers.modified.length, 'lines');
+        console.log('  - comment:', buffers.comment.length, 'lines');
+        console.log('  - required:', buffers.required.length, 'lines');
+        
+        if (buffers.required.length > 0) {
+            console.log('📝 Required buffer first 3 lines:', buffers.required.slice(0, 3));
+            console.log('📝 Required buffer last 3 lines:', buffers.required.slice(-3));
+        }
         if (buffers.required && buffers.required.length > 0) {
             const requiredText = buffers.required.join('\n').trim();
-            try {
-                // まずJSON全体として解析を試みる
-                const parsedRequired = JSON.parse(requiredText);
-                if (Array.isArray(parsedRequired)) {
-                    for (const item of parsedRequired) {
-                        if (typeof item === 'object' && item.path) {
-                            const fileInfo: RequiredFileInfo = {
-                                type: item.type === 'DIRECTORY_LISTING' ? 'DIRECTORY_LISTING' : 'FILE_CONTENT',
-                                path: item.path
-                            };
-                            sections.requiredFileInfos.push(fileInfo);
-                            // 後方互換性のため、pathも追加
-                            sections.requiredFilepaths.push(item.path);
-                        } else if (typeof item === 'string') {
-                            // 文字列の場合はFILE_CONTENTとして扱う
-                            const fileInfo: RequiredFileInfo = {
-                                type: 'FILE_CONTENT',
-                                path: item
-                            };
-                            sections.requiredFileInfos.push(fileInfo);
-                            sections.requiredFilepaths.push(item);
+            
+            // デバッグ情報：解析対象のテキストを確認
+            console.log('🔍 Required text to parse:', JSON.stringify(requiredText));
+            console.log('🔍 Required text length:', requiredText.length);
+            console.log('🔍 Required buffer length:', buffers.required.length);
+            
+            // 空文字列チェック
+            if (!requiredText || requiredText.length === 0) {
+                console.log('⚠️ Required text is empty, skipping parsing');
+                return sections;
+            }
+            
+            // まずJSON形式の判定を行う
+            const trimmedText = requiredText.trim();
+            console.log('🔍 JSON detection - trimmed length:', trimmedText.length);
+            console.log('🔍 JSON detection - starts with:', JSON.stringify(trimmedText.substring(0, 20)));
+            console.log('🔍 JSON detection - ends with:', JSON.stringify(trimmedText.substring(Math.max(0, trimmedText.length - 20))));
+            
+            const startsWithJSON = trimmedText.startsWith('[') || trimmedText.startsWith('{');
+            const endsWithJSON = trimmedText.endsWith(']') || trimmedText.endsWith('}');
+            const hasJSONIndicators = trimmedText.includes('"path"') || trimmedText.includes('"type"');
+            
+            console.log('🔍 JSON detection - startsWithJSON:', startsWithJSON, 'endsWithJSON:', endsWithJSON, 'hasJSONIndicators:', hasJSONIndicators);
+            
+            const looksLikeJSON = (startsWithJSON && endsWithJSON) || hasJSONIndicators;
+            
+            if (looksLikeJSON) {
+                console.log('🔄 Text appears to be JSON format, attempting JSON.parse...');
+                console.log('📝 Text to parse (length:', requiredText.length, '):', 
+                    requiredText.length > 200 ? requiredText.substring(0, 200) + '...' : requiredText);
+                console.log('📝 Text starts with:', JSON.stringify(requiredText.substring(0, 50)));
+                console.log('📝 Text ends with:', JSON.stringify(requiredText.substring(Math.max(0, requiredText.length - 50))));
+                
+                if (requiredText.length === 0) {
+                    console.log('⚠️ Cannot parse empty text as JSON');
+                    return sections;
+                }
+                
+                try {
+                    const parsedRequired = JSON.parse(requiredText);
+                    console.log('✅ JSON.parse successful, result:', parsedRequired);
+                    
+                    if (Array.isArray(parsedRequired)) {
+                        for (const item of parsedRequired) {
+                            if (typeof item === 'object' && item.path) {
+                                const fileInfo: RequiredFileInfo = {
+                                    type: item.type === 'DIRECTORY_LISTING' ? 'DIRECTORY_LISTING' : 'FILE_CONTENT',
+                                    path: item.path
+                                };
+                                sections.requiredFileInfos.push(fileInfo);
+                                sections.requiredFilepaths.push(item.path);
+                            } else if (typeof item === 'string') {
+                                const fileInfo: RequiredFileInfo = {
+                                    type: 'FILE_CONTENT',
+                                    path: item
+                                };
+                                sections.requiredFileInfos.push(fileInfo);
+                                sections.requiredFilepaths.push(item);
+                            }
                         }
+                    }
+                    return sections; // JSON解析成功時は早期リターン
+                } catch (e) {
+                    console.log('❌ JSON parsing failed:', (e as Error).message);
+                    console.log('� Failed text (first 500 chars):', requiredText.substring(0, 500));
+                    console.log('📝 Failed text (last 500 chars):', requiredText.substring(Math.max(0, requiredText.length - 500)));
+                    
+                    // 不完全なJSONを修正してみる
+                    let fixedText = requiredText.trim();
+                    
+                    // 先頭の不正な文字を除去
+                    if (!fixedText.startsWith('[') && !fixedText.startsWith('{')) {
+                        const jsonStart = Math.max(fixedText.indexOf('['), fixedText.indexOf('{'));
+                        if (jsonStart > 0) {
+                            console.log('🔧 Removing prefix before JSON start at position:', jsonStart);
+                            fixedText = fixedText.substring(jsonStart);
+                        }
+                    }
+                    
+                    // 末尾の不正な文字を除去
+                    if (!fixedText.endsWith(']') && !fixedText.endsWith('}')) {
+                        const lastBrace = Math.max(fixedText.lastIndexOf(']'), fixedText.lastIndexOf('}'));
+                        if (lastBrace > 0) {
+                            console.log('🔧 Removing suffix after JSON end at position:', lastBrace);
+                            fixedText = fixedText.substring(0, lastBrace + 1);
+                        }
+                    }
+                    
+                    if (fixedText !== requiredText.trim()) {
+                        console.log('🔧 Attempting to parse fixed JSON...');
+                        try {
+                            const parsedRequired = JSON.parse(fixedText);
+                            console.log('✅ Fixed JSON.parse successful!');
+                            
+                            if (Array.isArray(parsedRequired)) {
+                                for (const item of parsedRequired) {
+                                    if (typeof item === 'object' && item.path) {
+                                        const fileInfo: RequiredFileInfo = {
+                                            type: item.type === 'DIRECTORY_LISTING' ? 'DIRECTORY_LISTING' : 'FILE_CONTENT',
+                                            path: item.path
+                                        };
+                                        sections.requiredFileInfos.push(fileInfo);
+                                        sections.requiredFilepaths.push(item.path);
+                                    } else if (typeof item === 'string') {
+                                        const fileInfo: RequiredFileInfo = {
+                                            type: 'FILE_CONTENT',
+                                            path: item
+                                        };
+                                        sections.requiredFileInfos.push(fileInfo);
+                                        sections.requiredFilepaths.push(item);
+                                    }
+                                }
+                            } else if (typeof parsedRequired === 'object' && parsedRequired.path) {
+                                const fileInfo: RequiredFileInfo = {
+                                    type: parsedRequired.type === 'DIRECTORY_LISTING' ? 'DIRECTORY_LISTING' : 'FILE_CONTENT',
+                                    path: parsedRequired.path
+                                };
+                                sections.requiredFileInfos.push(fileInfo);
+                                sections.requiredFilepaths.push(parsedRequired.path);
+                            }
+                            return sections;
+                        } catch (fixedParseError) {
+                            console.log('❌ Fixed JSON.parse also failed:', (fixedParseError as Error).message);
+                        }
+                    }
+                    
+                    console.log('�🔄 Falling back to manual parsing...');
+                }
+            } else {
+                console.log('⚠️ Text does not appear to be JSON format, using manual parsing');
+            }
+            
+            // フォールバック：手動パース
+            console.log('🔄 Manual parsing of required text...');
+            
+            // まずJSONパターンを試す
+            const pathMatches = requiredText.match(/"path":\s*"([^"]+)"/g);
+            const typeMatches = requiredText.match(/"type":\s*"([^"]+)"/g);
+            
+            console.log('🔍 pathMatches found:', pathMatches);
+            console.log('🔍 typeMatches found:', typeMatches);
+            
+            if (pathMatches && pathMatches.length > 0) {
+                console.log('✅ Using regex path extraction');
+                for (let i = 0; i < pathMatches.length; i++) {
+                    const pathMatch = pathMatches[i].match(/"path":\s*"([^"]+)"/);
+                    const typeMatch = typeMatches && typeMatches[i] ? typeMatches[i].match(/"type":\s*"([^"]+)"/) : null;
+                    
+                    if (pathMatch) {
+                        const path = pathMatch[1];
+                        const type = (typeMatch && typeMatch[1] === 'DIRECTORY_LISTING') ? 'DIRECTORY_LISTING' : 'FILE_CONTENT';
+                        
+                        console.log(`📁 Extracted: ${type} - ${path}`);
+                        const fileInfo: RequiredFileInfo = { type, path };
+                        sections.requiredFileInfos.push(fileInfo);
+                        sections.requiredFilepaths.push(path);
                     }
                 }
-            } catch (e) {
-                // JSONが不正な場合は、pathを直接抽出
-                const pathMatches = requiredText.match(/"path":\s*"([^"]+)"/g);
-                const typeMatches = requiredText.match(/"type":\s*"([^"]+)"/g);
-                
-                if (pathMatches) {
-                    for (let i = 0; i < pathMatches.length; i++) {
-                        const pathMatch = pathMatches[i].match(/"path":\s*"([^"]+)"/);
-                        const typeMatch = typeMatches && typeMatches[i] ? typeMatches[i].match(/"type":\s*"([^"]+)"/) : null;
+            } else {
+                console.log('🔄 Using fallback string extraction');
+                // 最後の手段：単純な文字列抽出
+                const lines = requiredText.split('\n');
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed && !trimmed.startsWith('[') && !trimmed.startsWith(']') && 
+                        !trimmed.startsWith('{') && !trimmed.startsWith('}') && 
+                        !trimmed.includes('"type"') && !trimmed.includes('"path"') && 
+                        !trimmed.includes('FILE_CONTENT') && !trimmed.includes('DIRECTORY_LISTING') && 
+                        trimmed !== ',' && trimmed !== '') {
                         
-                        if (pathMatch) {
-                            const path = pathMatch[1];
-                            const type = (typeMatch && typeMatch[1] === 'DIRECTORY_LISTING') ? 'DIRECTORY_LISTING' : 'FILE_CONTENT';
-                            
-                            const fileInfo: RequiredFileInfo = { type, path };
+                        // 引用符で囲まれた文字列を抽出
+                        const quotedMatch = trimmed.match(/"([^"]+)"/);
+                        if (quotedMatch) {
+                            const path = quotedMatch[1];
+                            console.log(`📄 Fallback extracted: ${path}`);
+                            const fileInfo: RequiredFileInfo = { type: 'FILE_CONTENT', path };
                             sections.requiredFileInfos.push(fileInfo);
                             sections.requiredFilepaths.push(path);
-                        }
-                    }
-                } else {
-                    // 最後の手段：単純な文字列抽出（FILE_CONTENTとして扱う）
-                    const lines = requiredText.split('\n');
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (trimmed && !trimmed.startsWith('[') && !trimmed.startsWith(']') && 
-                            !trimmed.startsWith('{') && !trimmed.startsWith('}') && 
-                            !trimmed.includes('"type"') && !trimmed.includes('"path"') && 
-                            !trimmed.includes('FILE_CONTENT') && !trimmed.includes('DIRECTORY_LISTING') && trimmed !== ',') {
-                            // 実際のファイルパスらしい文字列のみ抽出
-                            const quotedMatch = trimmed.match(/"([^"]+)"/);
-                            if (quotedMatch) {
-                                const path = quotedMatch[1];
-                                const fileInfo: RequiredFileInfo = { type: 'FILE_CONTENT', path };
-                                sections.requiredFileInfos.push(fileInfo);
-                                sections.requiredFilepaths.push(path);
-                            }
+                        } else if (trimmed.match(/^[a-zA-Z0-9_\-\/\.]+$/)) {
+                            // 引用符なしのファイルパス形式
+                            console.log(`📄 Fallback extracted (unquoted): ${trimmed}`);
+                            const fileInfo: RequiredFileInfo = { type: 'FILE_CONTENT', path: trimmed };
+                            sections.requiredFileInfos.push(fileInfo);
+                            sections.requiredFilepaths.push(trimmed);
                         }
                     }
                 }
             }
         }
 
+        console.log('✅ analyzeMessages completed');
+        console.log('📋 Final requiredFileInfos:', sections.requiredFileInfos);
+        console.log('📋 Final requiredFilepaths:', sections.requiredFilepaths);
+        
         return sections;
     }
 }

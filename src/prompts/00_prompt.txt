@@ -23,7 +23,7 @@ You are tasked with identifying and fixing potential gRPC-related issues in the 
 {{fileChanges}}
 
 ### List of All File Paths ###
-{{allFilePaths}}
+{{surroundedFilePath}}
 
 ### Suspected Files ###
 {{suspectedFiles}}

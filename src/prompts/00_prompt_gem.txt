@@ -24,7 +24,7 @@ You will first analyze the situation, create a plan, request any necessary addit
 {{fileChanges}}
 
 ### List of All File Paths (Consider this a global view, prioritize targeted requests) ###
-{{allFilePaths}}
+{{surroundedFilePath}}
 
 ### Suspected Files (Content provided - Pre-commit state) ###
 {{suspectedFiles}}
@@ -42,8 +42,7 @@ You will first analyze the situation, create a plan, request any necessary addit
 
 %_Plan_%
 [
-  {"step": 1, "action": "REVIEW_FILE_CONTENT", "filePath": "{{first_suspected_file_path}}", "reason": "Initial suspected file, check direct impact of proto change."},
-  {"step": 2, "action": "REQUEST_FILE_CONTENT", "filePath": "path/to/potentially_affected_file.ext", "reason": "This file likely uses the modified message/service based on its name/location within {{allFilePaths}} and the nature of {{protoFileChanges}}."},
+  {"step": 1, "action": "REVIEW_FILE_CONTENT", "filePath": "{{first_suspected_file_path}}", "reason": "Initial suspected file, check direct impact of proto change."},  {"step": 2, "action": "REQUEST_FILE_CONTENT", "filePath": "path/to/potentially_affected_file.ext", "reason": "This file likely uses the modified message/service based on its name/location within {{surroundedFilePath}} and the nature of {{protoFileChanges}}."},
   {"step": 3, "action": "MODIFY_FILE", "filePath": "{{first_suspected_file_path}}", "reason": "Apply necessary changes based on reviewed content and proto."},
   // ... more plan steps
 ]

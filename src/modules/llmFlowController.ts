@@ -77,6 +77,13 @@ class LLMFlowController {
     constructor(pullRequestPath: string) {
         this.inputPremergeDir = pullRequestPath;
         this.startTime = new Date().toISOString();
+        
+        // デバッグ情報：環境変数の確認
+        console.log(`🔧 LLMFlowController initialized with path: ${pullRequestPath}`);
+        console.log(`🔑 OPENAI_TOKEN length: ${(process.env.OPENAI_TOKEN || '').length}`);
+        console.log(`🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
+        console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
+        console.log(`🐛 DEBUG_MODE: ${process.env.DEBUG_MODE || 'undefined'}`);
     }
 
     // 型変換ヘルパー
@@ -229,7 +236,7 @@ class LLMFlowController {
         this.config = new Config(this.inputPremergeDir);
         this.fileManager = new FileManager(this.config, this.logger);
         this.messageHandler = new MessageHandler();
-        this.openAIClient = new OpenAIClient(process.env.OPENAI_TOKEN || '');
+        this.openAIClient = new OpenAIClient(); // 環境変数から自動取得
 
         // OpenAIClientの初期化完了を待機
         await (this.openAIClient as any).initPromise;

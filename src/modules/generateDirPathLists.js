@@ -1,7 +1,7 @@
 /**
  * 入力パスより、指定されたフォルダを再帰的に探索し、ファイルパスを収集するモジュール
  * 
- * #04_allFilePaths
+ * #04_surroundedFilePath
  * 
  * @module generateDirPathLists
  * @description 指定されたフォルダを再帰的に探索し、ファイルパスを収集する

@@ -32,23 +32,29 @@ if (import.meta.url === `file://${process.argv[1]}`) {
  */
 export default function findFiles(folderDirPath, fileExtension, originalDirPath = folderDirPath) {
     const results = [];
-    const list = fs.readdirSync(folderDirPath);
-
-    list.forEach(file => {
-        const filePath = path.join(folderDirPath, file);
-        const stat = fs.statSync(filePath);
-
-        if (stat.isDirectory()) {
-            // findFiles の戻り値から適切なキーを指定して配列を取得
-            results.push(...findFiles(filePath, fileExtension, originalDirPath)[fileExtension === '.proto' ? 'proto_files' : 'files']);
-        } else if (file.endsWith(fileExtension)) {
-            const content = fs.readFileSync(filePath, 'utf8');
-            const relativePath = path.relative(originalDirPath, filePath);
-            results.push({ path: relativePath, content });
-        }
-    });
-
     const key = fileExtension === '.proto' ? 'proto_files' : 'files';
+    
+    try {
+        const list = fs.readdirSync(folderDirPath);
+
+        list.forEach(file => {
+            const filePath = path.join(folderDirPath, file);
+            const stat = fs.statSync(filePath);
+
+            if (stat.isDirectory()) {
+                // findFiles の戻り値から適切なキーを指定して配列を取得
+                const subResults = findFiles(filePath, fileExtension, originalDirPath);
+                results.push(...subResults[key]);
+            } else if (file.endsWith(fileExtension)) {
+                const content = fs.readFileSync(filePath, 'utf8');
+                const relativePath = path.relative(originalDirPath, filePath);
+                results.push({ path: relativePath, content });
+            }
+        });
+    } catch (error) {
+        console.error(`Error reading directory ${folderDirPath}:`, error.message);
+    }
+
     return { [key]: results };
 }
 
