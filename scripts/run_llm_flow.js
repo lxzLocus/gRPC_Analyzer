@@ -19,6 +19,22 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import dotenv from 'dotenv';
+
+// .envファイルを読み込み（プロジェクトルートから）
+const envPath = path.resolve(path.dirname(process.argv[1]), '../.env');
+const envResult = dotenv.config({ path: envPath });
+
+// .envファイルの読み込み状況をデバッグ表示
+if (process.argv.includes('--debug')) {
+    console.log('🔧 デバッグ情報:');
+    console.log(`   .envファイル: ${fs.existsSync(envPath) ? '✅ 存在' : '❌ 見つかりません'} (${envPath})`);
+    if (envResult.error) {
+        console.log(`   .env読み込みエラー: ${envResult.error.message}`);
+    } else {
+        console.log('   .env読み込み: ✅ 成功');
+    }
+}
 
 const execAsync = promisify(exec);
 
@@ -35,12 +51,14 @@ LLMFlowController実行スクリプト
 
 オプション:
   --test: テストモード（OPENAI_TOKEN環境変数のチェックをスキップ）
+  --debug: デバッグモード（.envファイルの読み込み状況を表示）
 
 例:
   node run_llm_flow.js
   node run_llm_flow.js --test
+  node run_llm_flow.js --debug
   node run_llm_flow.js /app/dataset/test/another_project/pullrequest/feature_xyz
-  node run_llm_flow.js /path/to/dataset --test
+  node run_llm_flow.js /path/to/dataset --test --debug
 
 必要なファイル（データセットディレクトリ内）:
   - 01_proto.txt
@@ -51,6 +69,10 @@ LLMFlowController実行スクリプト
 
 環境変数:
   OPENAI_TOKEN: OpenAI APIキー（通常実行時は必須、--testフラグ時はスキップ可能）
+  
+環境変数の設定方法:
+  1. .envファイルを作成: OPENAI_TOKEN=your_api_key_here
+  2. 直接export: export OPENAI_TOKEN=your_api_key_here
 `);
 }
 
@@ -64,7 +86,8 @@ async function validateEnvironment(skipEnvCheck = false) {
     // OpenAI APIキーの確認
     if (!process.env.OPENAI_TOKEN) {
         console.error('❌ エラー: OPENAI_TOKEN環境変数が設定されていません');
-        console.error('   例: export OPENAI_TOKEN=your_api_key_here');
+        console.error('   .envファイル例: OPENAI_TOKEN=your_api_key_here');
+        console.error('   または直接export: export OPENAI_TOKEN=your_api_key_here');
         console.error('   テスト実行の場合: --test フラグを追加してください');
         return false;
     }
@@ -140,9 +163,9 @@ async function main() {
         process.exit(0);
     }
     
-    // データセットディレクトリの決定（--testフラグを除外）
-    const args = process.argv.filter(arg => arg !== '--test');
-    const datasetDir = args[2] || '/app/dataset/test/servantes/pullrequest/add_Secrets_service-_global_yaml';
+    // データセットディレクトリの決定（--testと--debugフラグを除外）
+    const args = process.argv.filter(arg => arg !== '--test' && arg !== '--debug');
+    const datasetDir = args[2] || '/app/dataset/test';
     
     // テストモード判定
     const isTestMode = process.argv.includes('--test');

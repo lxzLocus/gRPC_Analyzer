@@ -135,7 +135,17 @@ class MessageHandler {
                 }
                 
                 try {
-                    const parsedRequired = JSON.parse(requiredText);
+                    // JSON解析前の文字列クリーンアップ
+                    let cleanedText = requiredText
+                        .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ') // 全角スペースや特殊空白を通常スペースに変換
+                        .replace(/[\u200B-\u200D\uFEFF]/g, '') // ゼロ幅文字を削除
+                        .replace(/[""]/g, '"') // 全角クォートを半角に変換
+                        .replace(/['']/g, "'") // 全角シングルクォートを半角に変換
+                        .trim();
+                    
+                    console.log('🧹 Cleaned text for JSON parsing:', JSON.stringify(cleanedText.substring(0, 100) + '...'));
+                    
+                    const parsedRequired = JSON.parse(cleanedText);
                     console.log('✅ JSON.parse successful, result:', parsedRequired);
                     
                     if (Array.isArray(parsedRequired)) {
@@ -159,12 +169,28 @@ class MessageHandler {
                     }
                     return sections; // JSON解析成功時は早期リターン
                 } catch (e) {
-                    console.log('❌ JSON parsing failed:', (e as Error).message);
-                    console.log('� Failed text (first 500 chars):', requiredText.substring(0, 500));
+                    const error = e as Error;
+                    console.log('❌ JSON parsing failed:', error.message);
+                    console.log('📝 Failed text (first 500 chars):', requiredText.substring(0, 500));
                     console.log('📝 Failed text (last 500 chars):', requiredText.substring(Math.max(0, requiredText.length - 500)));
                     
+                    // エラーの詳細分析
+                    console.log('🔍 Detailed error analysis:');
+                    for (let i = 0; i < Math.min(requiredText.length, 100); i++) {
+                        const char = requiredText[i];
+                        const charCode = char.charCodeAt(0);
+                        if (charCode > 127) { // 非ASCII文字
+                            console.log(`  Position ${i}: "${char}" (U+${charCode.toString(16).toUpperCase().padStart(4, '0')})`);
+                        }
+                    }
+                    
                     // 不完全なJSONを修正してみる
-                    let fixedText = requiredText.trim();
+                    let fixedText = requiredText
+                        .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ') // 全角スペースや特殊空白を通常スペースに変換
+                        .replace(/[\u200B-\u200D\uFEFF]/g, '') // ゼロ幅文字を削除
+                        .replace(/[""]/g, '"') // 全角クォートを半角に変換
+                        .replace(/['']/g, "'") // 全角シングルクォートを半角に変換
+                        .trim();
                     
                     // 先頭の不正な文字を除去
                     if (!fixedText.startsWith('[') && !fixedText.startsWith('{')) {
@@ -222,7 +248,7 @@ class MessageHandler {
                         }
                     }
                     
-                    console.log('�🔄 Falling back to manual parsing...');
+                    console.log('🔄 Falling back to manual parsing...');
                 }
             } else {
                 console.log('⚠️ Text does not appear to be JSON format, using manual parsing');
@@ -231,9 +257,37 @@ class MessageHandler {
             // フォールバック：手動パース
             console.log('🔄 Manual parsing of required text...');
             
-            // まずJSONパターンを試す
-            const pathMatches = requiredText.match(/"path":\s*"([^"]+)"/g);
-            const typeMatches = requiredText.match(/"type":\s*"([^"]+)"/g);
+            // テキストをクリーンアップ
+            const cleanedRequiredText = requiredText
+                .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ') // 全角スペースや特殊空白を通常スペースに変換
+                .replace(/[\u200B-\u200D\uFEFF]/g, '') // ゼロ幅文字を削除
+                .replace(/[""]/g, '"') // 全角クォートを半角に変換
+                .replace(/['']/g, "'"); // 全角シングルクォートを半角に変換
+            
+            // パターン1: 標準的なJSON配列形式 ["file1", "file2"]
+            let arrayMatch = cleanedRequiredText.match(/\[(.*?)\]/s);
+            if (arrayMatch) {
+                console.log('📋 Found array pattern in required text');
+                try {
+                    const jsonArray = JSON.parse(`[${arrayMatch[1]}]`);
+                    if (Array.isArray(jsonArray)) {
+                        for (const item of jsonArray) {
+                            if (typeof item === 'string') {
+                                const fileInfo: RequiredFileInfo = { type: 'FILE_CONTENT', path: item };
+                                sections.requiredFileInfos.push(fileInfo);
+                                sections.requiredFilepaths.push(item);
+                            }
+                        }
+                        return sections;
+                    }
+                } catch (e) {
+                    console.log('❌ Array JSON parsing failed, trying line-by-line parsing');
+                }
+            }
+            
+            // パターン2: まずJSONパターンを試す
+            const pathMatches = cleanedRequiredText.match(/"path":\s*"([^"]+)"/g);
+            const typeMatches = cleanedRequiredText.match(/"type":\s*"([^"]+)"/g);
             
             console.log('🔍 pathMatches found:', pathMatches);
             console.log('🔍 typeMatches found:', typeMatches);
@@ -257,7 +311,7 @@ class MessageHandler {
             } else {
                 console.log('🔄 Using fallback string extraction');
                 // 最後の手段：単純な文字列抽出
-                const lines = requiredText.split('\n');
+                const lines = cleanedRequiredText.split('\n');
                 for (const line of lines) {
                     const trimmed = line.trim();
                     if (trimmed && !trimmed.startsWith('[') && !trimmed.startsWith(']') && 
@@ -295,94 +349,3 @@ class MessageHandler {
 }
 
 export default MessageHandler;
-
-
-
-
-// このファイルが直接実行された場合のみ、以下のテストコードを実行
-if (import.meta.url === `file://${process.argv[1]}`) {
-    console.log("Running MessageHandler in debug mode...");
-
-    const testMessageHandler = () => {
-        const handler = new MessageHandler();
-
-        // --- Test case 1: analyzeMessages with various tags ---
-        console.log("\n--- Testing analyzeMessages ---");
-        const testMessage = `
-%_Thought_%
-The provided context indicates a significant change in ra.proto from proto2 to proto3. The most critical change is the removal of the optional keyword from fields in messages like NewAuthorizationRequest. In proto3, scalar fields are no longer pointers and cannot be nil. This means that code in ra / ra.go that likely checks for nil on these fields (e.g., if req.Authz != nil) will now cause a compile error or be logically incorrect.
-My primary task is to identify and correct these nil checks. The provided content of ra / ra.go is the first place to look.
-Additionally, the fileChanges list shows that wfe / wfe.go was also modified in the original commit. This strongly suggests that wfe / wfe.go also uses the changed proto messages and will require similar corrections. I do not have the content for this file, so I will need to request it.
-My plan is to first review ra / ra.go and formulate the exact modifications. Then, I will request the content of wfe / wfe.go to analyze its impact. Modifying ra / ra.go can wait until I have a complete picture, but for now, I will create a plan that includes requesting the other necessary files.
-
-%_Plan_%
-[
-  {
-    "step": 1,
-    "action": "REVIEW_FILE_CONTENT",
-    "filePath": "ra/ra.go",
-    "reason": "Analyze the provided content to confirm the impact of the optional field removal and identify specific lines to be modified."
-  },
-  {
-    "step": 2,
-    "action": "REQUEST_FILE_CONTENT",
-    "filePath": "wfe/wfe.go",
-    "reason": "This file was part of the original commit's changed file list, suggesting it is also affected by the proto changes. Its content is needed for a complete fix."
-  },
-  {
-    "step": 3,
-    "action": "MODIFY_FILE",
-    "filePath": "ra/ra.go",
-    "reason": "Apply corrections to ra / ra.go based on the analysis in step 1. This step will be executed after gathering all necessary information."
-  },
-  {
-    "step": 4,
-    "action": "MODIFY_FILE",
-    "filePath": "wfe/wfe.go",
-    "reason": "Apply corrections to wfe / wfe.go after analyzing its content from step 2."
-  }
-]
-
-%_Reply Required_%
-[
-  {
-    "type": "FILE_CONTENT",
-    "path": "wfe/wfe.go"
-  },
-  {
-    "type": "DIRECTORY_LISTING",
-    "path": "src/controllers"
-  }
-]
-
-%_Comment_%
-I have analyzed the initial context and created a four-step plan. I am starting by requesting the content of wfe / wfe.go as it is essential for understanding the full scope of required changes. I will proceed with code modification once I have all necessary file contents.
-
-%%_Fin_%%
-`;
-
-        const result = handler.analyzeMessages(testMessage);
-        console.log("Analysis Result:");
-        console.log(JSON.stringify(result, null, 2));
-
-        // Required files の詳細確認
-        console.log("\n--- Required Files Detail ---");
-        console.log("requiredFilepaths (legacy):", result.requiredFilepaths);
-        console.log("requiredFileInfos (new):", result.requiredFileInfos);
-        
-        // タイプ別の分類
-        const fileContentRequests = result.requiredFileInfos.filter(info => info.type === 'FILE_CONTENT');
-        const directoryListingRequests = result.requiredFileInfos.filter(info => info.type === 'DIRECTORY_LISTING');
-        
-        console.log("FILE_CONTENT requests:", fileContentRequests);
-        console.log("DIRECTORY_LISTING requests:", directoryListingRequests);
-
-        // --- Test case 2: attachMessages ---
-        console.log("\n--- Testing attachMessages ---");
-        const newMessages = handler.attachMessages("user", "Hello, this is a new message.");
-        console.log("Updated Messages:");
-        console.log(JSON.stringify(newMessages, null, 2));
-    };
-
-    testMessageHandler();
-}

@@ -1,0 +1,48 @@
+# Template 5: Context Discrepancy Notification Prompt
+
+## ⚠️ Context Warning: Discrepancy Between Provided Files and Expected State ##
+
+The files you requested have been modified in this commit.
+Due to my operational constraints, I can only provide file contents from the **pre-change state (`premerge` state)**.
+
+There may be discrepancies between the latest `.proto` definitions you have and the file contents I'm about to provide.
+Recognizing this contradiction, please analyze the provided older version file contents and appropriately update/execute your plan to reach the final goal (post-change state).
+
+---
+
+## Latest Proto File Definitions ##
+{{protoFile}}
+
+---
+
+## Proto File Changes ##
+{{protoFileChanges}}
+
+---
+
+## Files Changed in This Commit ##
+{{fileChanges}}
+
+---
+
+## File You Requested ##
+**Note**: The following file content is from the pre-change state
+
+{{fileVersionMismatch}}
+
+---
+
+## Additional Context Files ##
+{{suspectedFiles}}
+
+---
+
+## Your Next Action ##
+Considering the above discrepancies, please determine your next action:
+
+1. **Differential Analysis**: Identify differences between the latest proto definitions and the provided old file contents
+2. **Inference-based Completion**: Reasonably infer the post-change state and clearly state your reasoning
+3. **Modification Plan Development**: Plan the changes needed to transition from the old state to the new state
+4. **Implementation Proposal**: Present specific code modification proposals to resolve the discrepancies
+
+Leverage this constraint to maximize your differential reasoning capabilities.
