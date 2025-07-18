@@ -52,22 +52,24 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     /*config*/
     const datasetDir = "/app/dataset/test";
 
-    try {
-        await runForAllDatasets(datasetDir);
-        console.log("✅ Batch processing completed.");
-        
-        // 明示的なクリーンアップ
-        if ((global as any).gc) {
-            console.log('🗑️ Final garbage collection...');
-            (global as any).gc();
+    (async () => {
+        try {
+            await runForAllDatasets(datasetDir);
+            console.log("✅ Batch processing completed.");
+            
+            // 明示的なクリーンアップ
+            if ((global as any).gc) {
+                console.log('🗑️ Final garbage collection...');
+                (global as any).gc();
+            }
+            
+            // 正常終了
+            process.exit(0);
+        } catch (error) {
+            console.error("❌ Error in batch processing:", error);
+            gracefulShutdown('error');
         }
-        
-        // 正常終了
-        process.exit(0);
-    } catch (error) {
-        console.error("❌ Error in batch processing:", error);
-        gracefulShutdown('error');
-    }
+    })();
 }
 
 /**

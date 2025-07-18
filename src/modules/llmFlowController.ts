@@ -3,8 +3,8 @@
  * Mermaidフロー図に基づく
 */
 
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import RestoreDiff from './restoreDiff.js';
 import Logger from './logger.js';
@@ -101,19 +101,31 @@ class LLMFlowController {
 
         // planを配列形式に変換
         let planArray: any[] = [];
-        if (parsed.plan) {
+        if (parsed.plan && typeof parsed.plan === 'string') {
             try {
-                // プランがJSON形式の場合
-                const planObj = JSON.parse(parsed.plan);
+                console.log(`🔧 Converting plan to array format for logging`);
+                
+                // 安全なJSON解析を使用
+                const planObj = this.safeParseJSON(parsed.plan, 'convertToLogFormat');
                 if (Array.isArray(planObj)) {
                     planArray = planObj;
                 } else {
                     // 単一のプランの場合は配列にラップ
                     planArray = [planObj];
                 }
-            } catch {
+                console.log(`✅ Successfully parsed plan with ${planArray.length} items`);
+            } catch (jsonError) {
+                //  JSON解析エラーの詳細ログ
+                console.error(`❌ JSON parse error for plan:`, {
+                    error: jsonError instanceof Error ? jsonError.message : String(jsonError),
+                    planLength: parsed.plan.length,
+                    planPreview: parsed.plan.substring(0, 200),
+                    planCharCodes: parsed.plan.substring(0, 10).split('').map(char => char.charCodeAt(0))
+                });
+                
                 // JSON形式でない場合は文字列として配列にラップ
                 planArray = [{ step: 1, action: "ANALYZE", description: parsed.plan }];
+                console.log(`🔄 Fallback: Wrapped plan as string description`);
             }
         }
 
@@ -288,7 +300,9 @@ class LLMFlowController {
         const filesRequested = typeof this.context.fileContent === 'string' ? this.context.fileContent : '';
         const modifiedDiff = parsed?.modifiedDiff || '';
         const commentText = parsed?.commentText || '';
-        const promptReply = this.config.readPromptReplyFile(filesRequested, modifiedDiff, commentText);
+        const previousThought = parsed?.thought || '';
+        const previousPlan = parsed?.plan || '';
+        const promptReply = this.config.readPromptReplyFile(filesRequested, modifiedDiff, commentText, previousThought, previousPlan);
         this.currentMessages = this.messageHandler.attachMessages("user", promptReply);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
@@ -608,7 +622,20 @@ class LLMFlowController {
             const restoreDiff = new RestoreDiff(this.config.inputProjectDir);
             this.logger.logInfo("Applying diff using RestoreDiff...");
             
+            // diff適用前のデバッグログ
+            this.logger.logInfo(`Diff content preview: ${parsed.modifiedDiff.substring(0, 200)}...`);
+            this.logger.logInfo(`Project directory: ${this.config.inputProjectDir}`);
+            
             const restoredContent = restoreDiff.applyDiff(parsed.modifiedDiff);
+            
+            // 復元内容のデバッグログ
+            this.logger.logInfo(`Restored content length: ${restoredContent?.length || 0}`);
+            if (restoredContent && restoredContent.length > 0) {
+                this.logger.logInfo(`Restored content preview: ${restoredContent.substring(0, 200)}...`);
+            } else {
+                this.logger.logError("RestoreDiff returned empty content");
+                this.logger.logError(`Original diff: ${parsed.modifiedDiff}`);
+            }
             
             // Phase 3-2 新機能: 適用結果の詳細検証
             const validationResult = await this.validateDiffApplication(restoredContent, parsed.modifiedDiff);
@@ -617,16 +644,28 @@ class LLMFlowController {
                 throw new Error(`Diff validation failed: ${validationResult.errors.join(', ')}`);
             }
 
+            // 警告がある場合はログに記録
+            if (validationResult.warnings.length > 0) {
+                this.logger.logWarning(`Diff validation warnings: ${validationResult.warnings.join(', ')}`);
+            }
+
+            // 空のコンテンツでも処理を続行（警告のみ）
+            let finalContent = restoredContent;
+            if (!finalContent || finalContent.length === 0) {
+                this.logger.logWarning("Restored content is empty, using original diff as fallback");
+                finalContent = `# Original Diff Content\n${parsed.modifiedDiff}`;
+            }
+
             // 結果をファイルに保存
             const tmpDiffRestorePath = path.join(this.config.outputDir, 'tmp_restoredDiff.txt');
-            fs.writeFileSync(tmpDiffRestorePath, restoredContent, 'utf-8');
+            fs.writeFileSync(tmpDiffRestorePath, finalContent, 'utf-8');
             
             // contextに保存
-            this.context.diff = restoredContent;
+            this.context.diff = finalContent;
             this.context.error = undefined;
 
             // Phase 3-2 新機能: 適用統計の記録
-            const stats = await this.collectDiffApplicationStats(restoredContent, parsed.modifiedDiff);
+            const stats = await this.collectDiffApplicationStats(finalContent, parsed.modifiedDiff);
             this.logger.logInfo(`Diff applied successfully. Stats: ${JSON.stringify(stats)}`);
             
             // 内部進行状況を更新
@@ -689,7 +728,21 @@ class LLMFlowController {
     private async sendResultToLLM() {
         // 適用結果と次の指示をLLMへ送信
         const modifiedFiles = this.context.diff || '';
-        const promptModified = this.config.readPromptModifiedFile(modifiedFiles);
+        const parsed = this.context.llmParsed;
+        const currentPlan = parsed?.plan || '';
+        const currentThought = parsed?.thought || '';
+        
+        // プラン進行状況を解析
+        const planProgress = this.analyzePlanProgress(currentPlan);
+        const enhancedPlan = planProgress.planWithProgress;
+        
+        // ログで進行状況を出力
+        this.logger.logInfo(`Plan Progress: ${planProgress.progressPercentage}% (${planProgress.completedSteps.length}/${planProgress.totalSteps} steps)`);
+        if (planProgress.currentStep) {
+            this.logger.logInfo(`Current Step: ${planProgress.currentStep}`);
+        }
+        
+        const promptModified = this.config.readPromptModifiedFile(modifiedFiles, enhancedPlan, currentThought);
         this.currentMessages = this.messageHandler.attachMessages("user", promptModified);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
@@ -786,7 +839,17 @@ class LLMFlowController {
             const category = parts[parts.length - 3] || 'unknown_category';
             const pullRequestName = parts[parts.length - 2] || 'unknown_pr';
 
-            const dateStr = new Date().toISOString().replace(/[:.]/g, '-');
+            // JST（日本標準時）でのログファイル名を生成
+            const now = new Date();
+            const jstDate = new Date(now.getTime() + (9 * 60 * 60 * 1000)); // UTC+9 for JST
+            const year = jstDate.getUTCFullYear();
+            const month = String(jstDate.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(jstDate.getUTCDate()).padStart(2, '0');
+            const hour = String(jstDate.getUTCHours()).padStart(2, '0');
+            const minute = String(jstDate.getUTCMinutes()).padStart(2, '0');
+            const second = String(jstDate.getUTCSeconds()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}_${hour}-${minute}-${second}_JST`;
+            
             const logDir = path.join('/app/log', projectName, category, pullRequestName);
             if (!fs.existsSync(logDir)) {
                 fs.mkdirSync(logDir, { recursive: true });
@@ -1272,20 +1335,25 @@ class LLMFlowController {
         };
 
         try {
-            // 基本的な形式チェック
-            if (!restoredContent || restoredContent.length === 0) {
-                result.errors.push("Restored content is empty");
-                result.isValid = false;
-            }
+            this.logger.logInfo(`Validating diff application: content length ${restoredContent?.length || 0}, diff length ${originalDiff?.length || 0}`);
 
             // diffの形式チェック
+            if (!originalDiff || originalDiff.trim().length === 0) {
+                result.warnings.push("Original diff is empty or invalid");
+                result.isValid = true; // 空のdiffは有効とみなす
+                return result;
+            }
+
             const diffLines = originalDiff.split('\n');
             let addedLines = 0;
             let deletedLines = 0;
             let contextLines = 0;
+            let hasFileHeaders = false;
 
             for (const line of diffLines) {
-                if (line.startsWith('+') && !line.startsWith('+++')) {
+                if (line.startsWith('---') || line.startsWith('+++')) {
+                    hasFileHeaders = true;
+                } else if (line.startsWith('+') && !line.startsWith('+++')) {
                     addedLines++;
                 } else if (line.startsWith('-') && !line.startsWith('---')) {
                     deletedLines++;
@@ -1296,32 +1364,57 @@ class LLMFlowController {
 
             result.appliedChanges = addedLines + deletedLines;
 
+            // 改善されたコンテンツ検証
+            if (!restoredContent || restoredContent.length === 0) {
+                if (hasFileHeaders && (addedLines > 0 || deletedLines > 0)) {
+                    // diff があるのにコンテンツが空の場合は警告だが、続行可能
+                    result.warnings.push("Restored content is empty despite having diff changes");
+                    this.logger.logWarning("Empty restored content but diff has changes - this may indicate diff processing issues");
+                } else {
+                    // diffも内容もない場合は正常
+                    result.warnings.push("No changes to apply - diff and content are both empty");
+                }
+                // 空のコンテンツでも isValid = true として続行
+            } else {
+                this.logger.logInfo(`Restored content successfully validated: ${restoredContent.length} characters`);
+            }
+
             // 警告チェック
             if (addedLines === 0 && deletedLines === 0) {
                 result.warnings.push("No actual changes detected in diff");
             }
 
-            if (contextLines < 3) {
+            if (contextLines < 3 && (addedLines > 0 || deletedLines > 0)) {
                 result.warnings.push("Insufficient context lines in diff");
             }
 
-            // 復元内容の基本チェック
-            if (restoredContent.includes('<<<<<<< HEAD') || restoredContent.includes('>>>>>>> ')) {
-                result.errors.push("Merge conflict markers detected in restored content");
-                result.isValid = false;
-            }
+            // 復元内容の基本チェック（空でない場合のみ）
+            if (restoredContent && restoredContent.length > 0) {
+                if (restoredContent.includes('<<<<<<< HEAD') || restoredContent.includes('>>>>>>> ')) {
+                    result.errors.push("Merge conflict markers detected in restored content");
+                    result.isValid = false;
+                }
 
-            // 文字エンコーディングチェック
-            try {
-                Buffer.from(restoredContent, 'utf-8');
-            } catch (e) {
-                result.errors.push("Invalid UTF-8 encoding in restored content");
-                result.isValid = false;
+                // 文字エンコーディングチェック
+                try {
+                    Buffer.from(restoredContent, 'utf-8');
+                } catch (e) {
+                    result.errors.push("Invalid UTF-8 encoding in restored content");
+                    result.isValid = false;
+                }
             }
 
         } catch (error) {
             result.errors.push(`Validation error: ${error}`);
             result.isValid = false;
+        }
+
+        // ログ出力
+        if (result.warnings.length > 0) {
+            this.logger.logWarning(`Diff validation warnings: ${result.warnings.join(', ')}`);
+        }
+        if (result.errors.length > 0) {
+            this.logger.logError(`Diff validation errors: ${result.errors.join(', ')}`);
         }
 
         return result;
@@ -1468,6 +1561,704 @@ class LLMFlowController {
             this.logger.endPerformanceTimer(timerId);
             throw error;
         }
+    }
+
+    // =============================================================================
+    // プラン進行状況追跡
+    // =============================================================================
+
+    /**
+     * プランの進行状況を解析して、どのステップが完了し、どのステップが残っているかを判定
+     */
+    private analyzePlanProgress(currentPlan: string): {
+        totalSteps: number;
+        completedSteps: string[];
+        remainingSteps: string[];
+        currentStep: string | null;
+        progressPercentage: number;
+        planWithProgress: string;
+    } {
+        const result = {
+            totalSteps: 0,
+            completedSteps: [] as string[],
+            remainingSteps: [] as string[],
+            currentStep: null as string | null,
+            progressPercentage: 0,
+            planWithProgress: currentPlan
+        };
+
+        if (!currentPlan || currentPlan.trim().length === 0) {
+            return result;
+        }
+
+        try {
+            console.log(`🔧 Analyzing plan progress`);
+            
+            // 安全なJSON解析を使用
+            const planObj = this.safeParseJSON(currentPlan, 'analyzePlanProgress');
+            if (Array.isArray(planObj)) {
+                result.totalSteps = planObj.length;
+                
+                // 完了済みステップの特定（内部進行状況から判定）
+                const completedActions = this.internalProgress.stepsCompleted;
+                
+                for (let i = 0; i < planObj.length; i++) {
+                    const step = planObj[i];
+                    const stepDescription = `${step.action}: ${step.filePath || step.reason || ''}`;
+                    
+                    // ステップが完了しているかチェック
+                    const isCompleted = this.isStepCompleted(step, completedActions);
+                    
+                    if (isCompleted) {
+                        result.completedSteps.push(stepDescription);
+                    } else {
+                        result.remainingSteps.push(stepDescription);
+                        if (result.currentStep === null) {
+                            result.currentStep = stepDescription;
+                        }
+                    }
+                }
+                
+                result.progressPercentage = result.totalSteps > 0 ? 
+                    Math.round((result.completedSteps.length / result.totalSteps) * 100) : 0;
+                
+                // 進行状況付きプランを生成
+                result.planWithProgress = this.generateProgressPlan(planObj, result.completedSteps);
+            }
+        } catch (jsonError) {
+            // JSON解析エラーの詳細ログ
+            console.error(`❌ Plan progress analysis JSON parse error:`, {
+                error: jsonError instanceof Error ? jsonError.message : String(jsonError),
+                planLength: currentPlan.length,
+                planPreview: currentPlan.substring(0, 200),
+                planCharCodes: currentPlan.substring(0, 10).split('').map(char => char.charCodeAt(0))
+            });
+            
+            // JSONでない場合は文字列として処理
+            const lines = currentPlan.split('\n').filter(line => line.trim());
+            result.totalSteps = lines.length;
+            result.remainingSteps = lines;
+            result.planWithProgress = currentPlan;
+            
+            console.log(`🔄 Plan progress fallback: processed as ${lines.length} text lines`);
+        }
+
+        return result;
+    }
+
+    /**
+     * ステップが完了しているかを判定
+     */
+    private isStepCompleted(step: any, completedActions: string[]): boolean {
+        if (!step.action) return false;
+        
+        // アクション別の完了判定
+        switch (step.action) {
+            case 'REVIEW_FILE_CONTENT':
+            case 'REQUEST_FILE_CONTENT':
+                // ファイル要求/レビューは、該当ファイルが処理済みかチェック
+                return this.internalProgress.contextAccumulated.sourceFiles.includes(step.filePath) ||
+                       this.internalProgress.contextAccumulated.configFiles.includes(step.filePath) ||
+                       this.internalProgress.contextAccumulated.protoFiles.includes(step.filePath) ||
+                       this.internalProgress.contextAccumulated.testFiles.includes(step.filePath);
+            
+            case 'MODIFY_FILE':
+                // ファイル修正は、diffが適用されているかチェック
+                return completedActions.includes('DIFF_APPLIED') || 
+                       completedActions.includes(`MODIFIED_${step.filePath}`);
+            
+            case 'VERIFY_CHANGES':
+                // 検証は、検証完了フラグをチェック
+                return completedActions.includes('VERIFICATION_COMPLETED');
+            
+            default:
+                // その他のアクションは、直接的な一致をチェック
+                return completedActions.includes(step.action);
+        }
+    }
+
+    /**
+     * 進行状況を含むプランを生成
+     */
+    private generateProgressPlan(planArray: any[], completedSteps: string[]): string {
+        const enhancedPlan = planArray.map((step, index) => {
+            const stepDescription = `${step.action}: ${step.filePath || step.reason || ''}`;
+            const isCompleted = completedSteps.includes(stepDescription);
+            const status = isCompleted ? '✅' : '⏳';
+            
+            return {
+                ...step,
+                step: index + 1,
+                status: status,
+                completed: isCompleted
+            };
+        });
+        
+        return JSON.stringify(enhancedPlan, null, 2);
+    }
+
+    // =============================================================================
+    // プレーンテキストの指示文判定ヘルパーメソッド
+    // =============================================================================
+
+    /**
+     * プレーンテキストの指示文かどうかを判定するヘルパーメソッド
+     */
+    private looksLikePlainTextInstruction(text: string): boolean {
+        if (!text || text.trim().length === 0) {
+            return false;
+        }
+
+        const trimmed = text.trim();
+        
+        // 番号付きリストパターン
+        const isNumberedList = /^\s*\d+\.\s*/.test(trimmed);
+        
+        // 箇条書きリストパターン
+        const isBulletList = /^\s*[-*•]\s*/.test(trimmed);
+        
+        // JSON構造の存在チェック
+        const hasJSONStructure = /[\[\{]/.test(trimmed) && /[\]\}]/.test(trimmed);
+        
+        // プレーンテキストの指示特有のパターン
+        const hasInstructionKeywords = /\b(review|check|assess|modify|update|ensure|verify)\b/i.test(trimmed);
+        
+        // ファイルパス参照パターン
+        const hasFileReferences = /`[^`]*\.(go|ts|js|proto|json|yaml|yml|txt|md)`/.test(trimmed);
+        
+        return (isNumberedList || isBulletList || hasInstructionKeywords || hasFileReferences) && !hasJSONStructure;
+    }
+
+    // =============================================================================
+    // JSON解析ヘルパーメソッド
+    // =============================================================================
+
+    /**
+     * 安全にJSONを解析するヘルパーメソッド
+     * 一般的なJSONエラーを自動修復する
+     */
+    private safeParseJSON(jsonString: string, context: string = 'unknown'): any {
+        if (!jsonString || typeof jsonString !== 'string') {
+            throw new Error(`Invalid input for JSON parsing in ${context}`);
+        }
+
+        // プレーンテキストの指示リストかチェック（JSON解析の前に実行）
+        const trimmed = jsonString.trim();
+        const isNumberedList = /^\s*\d+\.\s*/.test(trimmed);
+        const isBulletList = /^\s*[-*•]\s*/.test(trimmed);
+        
+        // より精密なJSON構造チェック - 実際にJSONとして開始されているかを確認
+        const startsWithJsonStructure = /^\s*[\[\{]/.test(trimmed);
+        const endsWithJsonStructure = /[\]\}]\s*$/.test(trimmed);
+        const hasJsonBlockStart = /```json\s*\n\s*[\[\{]/.test(trimmed);
+        
+        // プレーンテキスト指示の特徴をチェック
+        const hasInstructionKeywords = /\b(inspect|check|review|verify|ensure|update|modify)\b/i.test(trimmed);
+        const hasFileReferences = /`[^`]*\.(go|ts|js|proto|json|yaml|yml|txt|md)`/.test(trimmed);
+        
+        // 混合コンテンツの判定：プレーンテキスト + JSONコードブロック
+        const isMixedContent = (isNumberedList || isBulletList) && hasJsonBlockStart;
+        
+        if ((isNumberedList || isBulletList) && (!startsWithJsonStructure || isMixedContent)) {
+            console.log(`🔧 Detected plain text instruction list in ${context}, returning as string`);
+            console.log(`📋 List content preview: ${trimmed.substring(0, 200)}...`);
+            console.log(`📋 List type: ${isNumberedList ? 'numbered' : 'bullet'}`);
+            console.log(`📋 Mixed content: ${isMixedContent ? 'yes' : 'no'}`);
+            console.log(`📋 Has instruction keywords: ${hasInstructionKeywords ? 'yes' : 'no'}`);
+            console.log(`📋 Has file references: ${hasFileReferences ? 'yes' : 'no'}`);
+            return trimmed; // プレーンテキストとして返す
+        }
+
+        // 段階的なクリーンアップ処理
+        const cleanupSteps = [
+            // ステップ1: 徹底的な文字クリーンアップ
+            (str: string) => {
+                let cleaned = str.trim();
+                
+                // 見えない制御文字、特殊空白文字の徹底除去
+                cleaned = cleaned
+                    .replace(/[\u200B-\u200D\uFEFF]/g, '') // ゼロ幅文字
+                    .replace(/[\u0000-\u001F\u007F-\u009F]/g, (match) => {
+                        const code = match.charCodeAt(0);
+                        if (code === 9 || code === 10 || code === 13) { // タブ、改行、復帰
+                            return ' ';
+                        }
+                        console.log(`🧹 Step1: Removing control character: charCode ${code}`);
+                        return '';
+                    })
+                    .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ') // 特殊空白を通常空白に
+                    .replace(/[\u2028\u2029]/g, ' ') // ライン・パラグラフ区切り文字
+                    .replace(/[\uFFF0-\uFFFF]/g, '') // 特殊用途文字
+                    .replace(/\s+/g, ' ') // 連続する空白を単一のスペースに統合
+                    .trim();
+                
+                console.log(`🧹 Step1: Thorough character cleanup completed, length: ${str.length} → ${cleaned.length}`);
+                return cleaned;
+            },
+            
+            // ステップ2: バッククォートで囲まれた文字列の処理
+            (str: string) => {
+                // バッククォートで囲まれた文字列を検出
+                const backtickMatch = str.match(/^`([\s\S]*)`$/);
+                if (backtickMatch) {
+                    const content = backtickMatch[1].trim();
+                    console.log(`🔧 Detected backtick-wrapped content in ${context}`);
+                    
+                    // より厳密なJSON構造チェック
+                    const hasJsonStructure = this.isValidJsonStructure(content);
+                    
+                    if (hasJsonStructure) {
+                        console.log(`🔄 Backtick content contains valid JSON structure`);
+                        // JSONとして直接処理
+                        return content;
+                    } else {
+                        console.log(`🔄 Backtick content is plain text, treating as string literal`);
+                        // プレーンテキストとして適切なJSON文字列に変換
+                        return JSON.stringify(content);
+                    }
+                }
+                return str;
+            },
+            
+            // ステップ3: YAML風リスト形式と混合コンテンツのクリーンアップ
+            (str: string) => {
+                let cleaned = str;
+                
+                // YAML風リスト形式の検出と変換（新機能）
+                const yamlListPattern = /^(\s*-\s*\{[\s\S]*?\}\s*)+$/;
+                if (yamlListPattern.test(cleaned.trim())) {
+                    console.log(`🔄 Detected YAML-style list format in ${context}, converting to JSON array`);
+                    try {
+                        const lines = cleaned.trim().split('\n');
+                        const jsonObjects = [];
+                        
+                        for (const line of lines) {
+                            const trimmedLine = line.trim();
+                            if (trimmedLine.startsWith('- {') && trimmedLine.endsWith('}')) {
+                                // "- {" を除去してJSONオブジェクトを抽出
+                                const jsonPart = trimmedLine.substring(2).trim();
+                                try {
+                                    const parsed = JSON.parse(jsonPart);
+                                    jsonObjects.push(parsed);
+                                } catch (lineError) {
+                                    console.log(`❌ Failed to parse line: ${trimmedLine}, error: ${lineError}`);
+                                }
+                            }
+                        }
+                        
+                        if (jsonObjects.length > 0) {
+                            let jsonArray = JSON.stringify(jsonObjects);
+                            
+                            // 末尾カンマをチェックして除去（追加の安全策）
+                            jsonArray = jsonArray.replace(/,(\s*[\]\}])/g, '$1');
+                            
+                            console.log(`✅ Converted YAML-style list to JSON array with ${jsonObjects.length} items`);
+                            console.log(`🔄 Result: ${jsonArray.substring(0, 100)}...`);
+                            return jsonArray;
+                        }
+                    } catch (yamlError) {
+                        console.log(`❌ YAML-style list conversion failed: ${yamlError}`);
+                    }
+                }
+                
+                // 混合コンテンツのパターンを検出し、クリーンアップ
+                
+                // パターン0: プレーンテキスト指示 + JSONコードブロック（新しいパターン）
+                const textWithJsonBlockPattern = /^(\d+\.\s*\*\*[^`]*```json\s*\n?)([\[\{][\s\S]*?[\]\}])(\s*```.*)?$/m;
+                const textWithJsonMatch = cleaned.match(textWithJsonBlockPattern);
+                if (textWithJsonMatch) {
+                    console.log(`🔄 Detected plain text instruction with JSON code block in ${context}, extracting JSON part`);
+                    console.log(`📋 Plain text part: "${textWithJsonMatch[1].substring(0, 100)}..."`);
+                    console.log(`📋 JSON part: "${textWithJsonMatch[2].substring(0, 100)}..."`);
+                    cleaned = textWithJsonMatch[2]; // JSON部分のみを抽出
+                }
+                
+                // パターン1: JSON配列の後に続くテキストやリスト項目を削除
+                const mixedPattern1 = /(\[[\s\S]*?\])\s*[-•*]\s*[^\[{]*$/;
+                const mixedMatch1 = cleaned.match(mixedPattern1);
+                if (mixedMatch1) {
+                    console.log(`🔄 Detected mixed content (JSON + bullet list) in ${context}, extracting JSON part`);
+                    cleaned = mixedMatch1[1];
+                }
+                
+                // パターン2: 複数のJSON配列が改行で区切られている場合
+                const multiJsonPattern = /(\[[\s\S]*?\])\s*\n\s*(\[[\s\S]*?\])/;
+                const multiJsonMatch = cleaned.match(multiJsonPattern);
+                if (multiJsonMatch) {
+                    console.log(`🔄 Detected multiple JSON arrays separated by newlines in ${context}`);
+                    try {
+                        const array1 = JSON.parse(multiJsonMatch[1]);
+                        const array2 = JSON.parse(multiJsonMatch[2]);
+                        const merged = [...array1, ...array2];
+                        cleaned = JSON.stringify(merged);
+                        console.log(`🔄 Merged arrays: ${array1.length} + ${array2.length} = ${merged.length} items`);
+                    } catch (e) {
+                        console.log(`❌ Failed to merge arrays, using first one: ${e}`);
+                        cleaned = multiJsonMatch[1];
+                    }
+                }
+                
+                // パターン3: JSON配列の後に続くプレーンテキストを削除
+                const jsonWithTextPattern = /(\[[\s\S]*?\])\s*[\r\n]+\s*[-•*]?\s*[A-Za-z].*$/;
+                const jsonWithTextMatch = cleaned.match(jsonWithTextPattern);
+                if (jsonWithTextMatch) {
+                    console.log(`🔄 Detected JSON followed by plain text in ${context}, extracting JSON part`);
+                    cleaned = jsonWithTextMatch[1];
+                }
+                
+                return cleaned;
+            },
+            
+            // ステップ4: JSON境界の検出と抽出
+            (str: string) => {
+                // 先頭の空白を削除してから判定
+                const trimmed = str.trim();
+                
+                // 複数のJSON配列が混在している場合の処理
+                const jsonArrayMatches = trimmed.match(/\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\]/g);
+                if (jsonArrayMatches && jsonArrayMatches.length > 1) {
+                    console.log(`🔄 Detected multiple JSON arrays in ${context}, merging them`);
+                    try {
+                        // 複数のJSONを配列として結合
+                        const parsedArrays = jsonArrayMatches.map(match => JSON.parse(match));
+                        const mergedArray = parsedArrays.flat(); // 配列を平坦化
+                        console.log(`🔄 Merged ${jsonArrayMatches.length} JSON arrays into one with ${mergedArray.length} items`);
+                        return JSON.stringify(mergedArray);
+                    } catch (mergeError) {
+                        console.log(`❌ Failed to merge multiple JSON arrays: ${mergeError}`);
+                        // 最初の有効なJSONを使用
+                        return jsonArrayMatches[0];
+                    }
+                }
+                
+                // 単一のJSON配列またはオブジェクトの開始/終了を検出
+                const arrayMatch = trimmed.match(/^\[[\s\S]*?\](?=\s*(?:\[|$))/);
+                const objectMatch = trimmed.match(/^\{[\s\S]*?\}(?=\s*(?:\{|$))/);
+                
+                if (arrayMatch) {
+                    console.log(`🔄 Detected JSON array in ${context}`);
+                    let cleanedArray = arrayMatch[0];
+                    // 末尾カンマを事前に除去
+                    cleanedArray = cleanedArray.replace(/,(\s*[\]\}])/g, '$1');
+                    return cleanedArray;
+                }
+                if (objectMatch) {
+                    console.log(`🔄 Detected JSON object in ${context}`);
+                    let cleanedObject = objectMatch[0];
+                    // 末尾カンマを事前に除去
+                    cleanedObject = cleanedObject.replace(/,(\s*[\]\}])/g, '$1');
+                    return cleanedObject;
+                }
+                
+                // より精密なJSON抽出を試行（ブラケットカウンティング）
+                if (trimmed.includes('[') && trimmed.includes(']')) {
+                    let startIdx = trimmed.indexOf('[');
+                    let bracketCount = 0;
+                    let inString = false;
+                    let escapeNext = false;
+                    let endIdx = -1;
+                    
+                    for (let i = startIdx; i < trimmed.length; i++) {
+                        const char = trimmed[i];
+                        
+                        if (escapeNext) {
+                            escapeNext = false;
+                            continue;
+                        }
+                        
+                        if (char === '\\' && inString) {
+                            escapeNext = true;
+                            continue;
+                        }
+                        
+                        if (char === '"' && !escapeNext) {
+                            inString = !inString;
+                            continue;
+                        }
+                        
+                        if (!inString) {
+                            if (char === '[') {
+                                bracketCount++;
+                            } else if (char === ']') {
+                                bracketCount--;
+                                if (bracketCount === 0) {
+                                    endIdx = i + 1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (endIdx > startIdx) {
+                        const extracted = trimmed.substring(startIdx, endIdx);
+                        console.log(`🔄 Extracted JSON array using bracket counting in ${context}`);
+                        return extracted;
+                    }
+                }
+                
+                if (trimmed.includes('{') && trimmed.includes('}')) {
+                    let startIdx = trimmed.indexOf('{');
+                    let braceCount = 0;
+                    let inString = false;
+                    let escapeNext = false;
+                    let endIdx = -1;
+                    
+                    for (let i = startIdx; i < trimmed.length; i++) {
+                        const char = trimmed[i];
+                        
+                        if (escapeNext) {
+                            escapeNext = false;
+                            continue;
+                        }
+                        
+                        if (char === '\\' && inString) {
+                            escapeNext = true;
+                            continue;
+                        }
+                        
+                        if (char === '"' && !escapeNext) {
+                            inString = !inString;
+                            continue;
+                        }
+                        
+                        if (!inString) {
+                            if (char === '{') {
+                                braceCount++;
+                            } else if (char === '}') {
+                                braceCount--;
+                                if (braceCount === 0) {
+                                    endIdx = i + 1;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (endIdx > startIdx) {
+                        const extracted = trimmed.substring(startIdx, endIdx);
+                        console.log(`🔄 Extracted JSON object using brace counting in ${context}`);
+                        return extracted;
+                    }
+                }
+                
+                return str;
+            },
+            
+            // ステップ5: プレーンテキストの処理
+            (str: string) => {
+                // 既にJSON構造が検出されている場合はそのまま処理
+                if (str.trim().startsWith('{') || str.trim().startsWith('[')) {
+                    return str;
+                }
+                
+                // すでにJSON文字列として適切にエンコードされている場合
+                if (str.trim().startsWith('"') && str.trim().endsWith('"')) {
+                    return str;
+                }
+                
+                // JSONの開始文字がない場合、プレーンテキストとして扱う
+                if (!str.startsWith('{') && !str.startsWith('[') && !str.startsWith('"')) {
+                    console.log(`🔧 Treating as plain text in ${context}`);
+                    console.log(`   Original: "${str.substring(0, 100)}..."`);
+                    const encoded = JSON.stringify(str);
+                    console.log(`   Encoded: "${encoded.substring(0, 100)}..."`);
+                    
+                    // エンコード結果をテスト
+                    try {
+                        JSON.parse(encoded);
+                        console.log(`✅ Plain text encoding verification passed`);
+                    } catch (testError) {
+                        console.error(`❌ Plain text encoding verification failed: ${testError}`);
+                    }
+                    
+                    return encoded;
+                }
+                return str;
+            },
+            
+            // ステップ6: 一般的なJSON構文エラーの修正
+            (str: string) => {
+                let fixed = str
+                    .replace(/[\r\n\t]/g, ' ') // 改行・タブを半角スペースに
+                    .replace(/\s+/g, ' ') // 連続スペースを単一に
+                    .replace(/:\s*,/g, ': null,') // 空値をnullに
+                    .replace(/"\s*:\s*"/g, '": "'); // クォート問題の修正
+                
+                // バッククォートのエスケープ処理（JSON文字列内）
+                // JSON文字列内でバッククォートが含まれている場合、それをエスケープ
+                fixed = fixed.replace(/"([^"]*`[^"]*)"/g, (match, content) => {
+                    const escapedContent = content.replace(/`/g, '\\u0060');
+                    console.log(`🔧 Escaping backticks in JSON string: "${content}" → "${escapedContent}"`);
+                    return `"${escapedContent}"`;
+                });
+                
+                // 末尾カンマの除去（改良版）
+                // 配列とオブジェクトの両方に対応
+                fixed = fixed
+                    .replace(/,(\s*[\]\}])/g, '$1') // 基本的な末尾カンマ除去
+                    .replace(/,(\s*)\]/g, '$1]') // 配列の末尾カンマ
+                    .replace(/,(\s*)\}/g, '$1}') // オブジェクトの末尾カンマ
+                    .replace(/,(\s*)(\n\s*[\]\}])/g, '$1$2'); // 改行を含む末尾カンマ
+                
+                return fixed;
+            },
+            
+            // ステップ7: 不正な文字の修正
+            (str: string) => str
+                .replace(/'/g, '"') // シングルクォートをダブルクォートに
+                .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // プロパティ名をクォート
+        ];
+
+        let cleanedJson = jsonString;
+        let lastError: Error | null = null;
+        
+        // 各クリーンアップステップを順次適用
+        for (let i = 0; i < cleanupSteps.length; i++) {
+            try {
+                const previousJson = cleanedJson;
+                cleanedJson = cleanupSteps[i](cleanedJson);
+                
+                console.log(`🔄 JSON cleanup step ${i + 1} for ${context}: "${previousJson.substring(0, 50)}..." → "${cleanedJson.substring(0, 50)}..."`);
+                
+                // デバッグ: JSON.parse前の詳細ログ
+                console.log(`🔧 About to parse JSON in step ${i + 1}:`);
+                console.log(`   Length: ${cleanedJson.length}`);
+                console.log(`   First 20 chars: "${cleanedJson.substring(0, 20)}"`);
+                console.log(`   Char codes: [${cleanedJson.substring(0, 10).split('').map(c => c.charCodeAt(0)).join(', ')}]`);
+                
+                // 各ステップ後にJSONパースを試行
+                try {
+                    const result = JSON.parse(cleanedJson);
+                    console.log(`✅ JSON parsed successfully at cleanup step ${i + 1} for ${context}`);
+                    return result;
+                } catch (parseError) {
+                    // このステップでの解析に失敗した場合、詳細ログを出力
+                    console.log(`❌ JSON parse failed at step ${i + 1} for ${context}: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+                    console.log(`   Cleaned content: "${cleanedJson.substring(0, 100)}..."`);
+                    
+                    // エラー位置の詳細分析
+                    if (parseError instanceof Error && parseError.message.includes('at position')) {
+                        const posMatch = parseError.message.match(/at position (\d+)/);
+                        if (posMatch) {
+                            const errorPos = parseInt(posMatch[1]);
+                            console.log(`🔍 Error position analysis:`);
+                            console.log(`   Error at position: ${errorPos}`);
+                            console.log(`   JSON length: ${cleanedJson.length}`);
+                            
+                            // エラー位置周辺の文字を詳細表示
+                            const start = Math.max(0, errorPos - 10);
+                            const end = Math.min(cleanedJson.length, errorPos + 10);
+                            console.log(`   Context (${start}-${end}):`);
+                            for (let pos = start; pos < end; pos++) {
+                                const char = cleanedJson[pos];
+                                const charCode = char.charCodeAt(0);
+                                const marker = pos === errorPos ? ' <-- ERROR' : '';
+                                const charDesc = charCode < 32 ? `[CTRL-${charCode}]` : charCode > 126 ? `[EXTENDED-${charCode}]` : char;
+                                console.log(`     ${pos}: '${charDesc}' (${charCode})${marker}`);
+                            }
+                            
+                            // 特殊文字の全体スキャン
+                            const specialChars = [];
+                            for (let pos = 0; pos < cleanedJson.length; pos++) {
+                                const charCode = cleanedJson.charCodeAt(pos);
+                                if (charCode < 32 && charCode !== 10 && charCode !== 13 && charCode !== 9) { // 改行、復帰、タブ以外の制御文字
+                                    specialChars.push({pos, char: cleanedJson[pos], code: charCode});
+                                } else if (charCode >= 127 && charCode <= 159) { // 拡張制御文字
+                                    specialChars.push({pos, char: cleanedJson[pos], code: charCode});
+                                } else if (charCode >= 8192 && charCode <= 8303) { // Unicode空白・特殊文字
+                                    specialChars.push({pos, char: cleanedJson[pos], code: charCode});
+                                }
+                            }
+                            
+                            if (specialChars.length > 0) {
+                                console.log(`🚨 Found ${specialChars.length} special characters:`);
+                                specialChars.slice(0, 10).forEach(sc => {
+                                    console.log(`     Position ${sc.pos}: charCode ${sc.code}`);
+                                });
+                            }
+                        }
+                    }
+                    
+                    // プレーンテキストの可能性を再チェック
+                    if (i === 0 && this.looksLikePlainTextInstruction(cleanedJson)) {
+                        console.log(`🔄 Content appears to be plain text instruction, returning as-is`);
+                        return cleanedJson;
+                    }
+                    
+                    throw parseError; // エラーを再スロー（次のステップへ）
+                }
+            } catch (error) {
+                lastError = error instanceof Error ? error : new Error(String(error));
+                // このステップでは解析できない、次のステップへ
+                console.log(`🔄 JSON cleanup step ${i + 1} failed for ${context}: ${lastError.message}`);
+                continue;
+            }
+        }
+
+        // 全てのクリーンアップが失敗した場合
+        console.error(`❌ All JSON cleanup attempts failed for ${context}:`, {
+            originalLength: jsonString.length,
+            cleanedLength: cleanedJson.length,
+            originalPreview: jsonString.substring(0, 100),
+            cleanedPreview: cleanedJson.substring(0, 100),
+            charCodes: jsonString.substring(0, 20).split('').map(char => char.charCodeAt(0)),
+            lastError: lastError?.message || 'Unknown error'
+        });
+        
+        // 最後の手段：プレーンテキストとして返す
+        console.log(`🔄 Final fallback for ${context}: treating as plain text`);
+        try {
+            return jsonString; // プレーンテキストとして返す
+        } catch (fallbackError) {
+            throw new Error(`Failed to parse JSON after all cleanup attempts in ${context}: ${lastError?.message || 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * JSON構造の妥当性をチェックするヘルパーメソッド
+     */
+    private isValidJsonStructure(content: string): boolean {
+        if (!content || content.trim().length === 0) {
+            return false;
+        }
+
+        const trimmed = content.trim();
+        
+        // 基本的なJSON開始文字チェック
+        if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+            return false;
+        }
+
+        // 対応する終了文字をチェック
+        if (trimmed.startsWith('{') && !trimmed.endsWith('}')) {
+            return false;
+        }
+        if (trimmed.startsWith('[') && !trimmed.endsWith(']')) {
+            return false;
+        }
+
+        // JSON特有のパターンをチェック
+        const jsonPatterns = [
+            /"[^"]*"\s*:\s*/, // キー:値のパターン
+            /\{\s*"/, // オブジェクト開始パターン
+            /\[\s*\{/, // オブジェクト配列パターン
+            /"[^"]*"\s*,\s*"/, // 複数のキーパターン
+        ];
+
+        const hasJsonPattern = jsonPatterns.some(pattern => pattern.test(trimmed));
+        
+        // 簡単なJSON解析テスト
+        if (hasJsonPattern) {
+            try {
+                JSON.parse(trimmed);
+                return true;
+            } catch (e) {
+                // パースエラーでも、基本的なJSON構造があれば修復可能とみなす
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 

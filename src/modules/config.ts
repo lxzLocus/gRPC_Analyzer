@@ -4,10 +4,16 @@
  * Phase 4-3: 外部設定ファイルと環境変数に対応
  */
 
-import fs from 'fs';
-import path from 'path';
-import Handlebars from 'handlebars';
-import dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as dotenv from 'dotenv';
+
+// HandlebarsをPromiseで動的import
+let Handlebars: any;
+const handlebarsPromise = import('handlebars').then(module => {
+    Handlebars = module.default || module;
+    return Handlebars;
+});
 
 //実行ファイルが置かれているパス
 const APP_DIR: string = "/app/src/";
@@ -93,7 +99,7 @@ class Config {
         this.outputDir = this.getConfigValue('paths.outputDir', path.join(APP_DIR, 'output'));
         this.inputDir = path.join(APP_DIR, 'input');
         this.promptDir = this.getConfigValue('paths.promptDir', path.join(APP_DIR, 'prompts'));
-        this.promptTextfile = '00_prompt.txt';
+        this.promptTextfile = '00_prompt_gem.txt'; // Gemini用プロンプトに変更
         this.promptRefineTextfile = '00_promptRefine.txt';
         this.tmpDiffRestorePath = path.join(this.outputDir + 'tmpDiffRestore.txt');
         this.maxTokens = this.getConfigValue('llm.maxTokens', 128000);
@@ -263,22 +269,26 @@ class Config {
         this.debugLog(`Config updated: ${key} = ${value}`);
     }
 
-    readPromptReplyFile(filesRequested: string, modifiedDiff: string, commentText: string): string {
+    readPromptReplyFile(filesRequested: string, modifiedDiff: string, commentText: string, previousThought?: string, previousPlan?: string): string {
         const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptReply.txt'), 'utf-8');
 
         const context = {
-            filesToReview: filesRequested, // required section from previous message
+            filesRequested: filesRequested, // required section from previous message
             previousModifications: modifiedDiff, // diff from previous step
+            previousThought: previousThought || '', // 前回の思考内容
+            previousPlan: previousPlan || '' // 前回の計画内容
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
     }
 
-    readPromptModifiedFile(modifiedFiles: string): string {
+    readPromptModifiedFile(modifiedFiles: string, currentPlan?: string, currentThought?: string): string {
         const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified.txt'), 'utf-8');
 
         const context = {
-            modifiedFiles: modifiedFiles // diff that was just applied or restored
+            modifiedFiles: modifiedFiles, // diff that was just applied or restored
+            current_plan: currentPlan || '', // 現在のプラン
+            current_thought: currentThought || '' // 現在の思考
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);

@@ -49,7 +49,7 @@ import getSurroundingDirectoryStructure from '../modules/generatePeripheralStruc
 import {mergeStructures, findAllAndMergeProjectRoots} from '../modules/editFilePathStructure.js';
 
 /*config*/
-const datasetDir = '/app/dataset/test';
+const datasetDir = '/app/dataset/filtered_commit';
 
 /* __MAIN__ */
 // main処理をasync関数でラップ
