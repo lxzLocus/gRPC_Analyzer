@@ -8,7 +8,10 @@
     "llm": "node run_llm_flow.js",
     "llm:test": "node run_llm_flow.js --test",
     "test:prompt": "node test_prompt_loading.js",
-    "generate:prompts": "node dist/js/utils/generatePrompt.js"
+    "generate:prompts": "node dist/js/utils/generatePrompt.js",
+    "batch:safe": "node scripts/safeBatchRunner.js",
+    "batch:test": "node scripts/safeBatchRunner.js /app/dataset/test /app/output",
+    "batch:large": "node scripts/safeBatchRunner.js /app/dataset/filtered_commit /app/output"
   },
   "dependencies": {
     "@llamaindex/openai": "^0.1.61",

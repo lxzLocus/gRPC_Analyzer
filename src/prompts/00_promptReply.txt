@@ -31,6 +31,10 @@ You are tasked with retrieving and reviewing specific source code files that wer
 2.  **Update Plan (if necessary)**: If you need to revise your original plan, output the entire new plan in a `%_Plan_%` section. If no changes to the plan are needed, omit this tag.
 3.  **Act**: Proceed with the next action according to your plan by using ONE of the following action tags: `%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`.
 
+// Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
+
+**IMPORTANT RULE: If you output a `%_Modified_%` tag and you believe this is the FINAL modification needed to complete your entire plan, you MUST also include the `%%_Fin_%%` tag in the SAME response.**
+
 ---
 ## Response Structure Example ##
 
