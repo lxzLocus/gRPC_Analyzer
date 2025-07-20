@@ -3,8 +3,6 @@
  * LLMとの通信を担当
  */
 class OpenAIClient {
-    client;
-    initPromise;
     constructor(apiKey) {
         // 環境変数から APIキーを取得（優先順位: 引数 > OPENAI_TOKEN > OPENAI_API_KEY）
         const finalApiKey = apiKey || process.env.OPENAI_TOKEN || process.env.OPENAI_API_KEY || '';

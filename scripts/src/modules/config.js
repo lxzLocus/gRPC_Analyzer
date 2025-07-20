@@ -19,20 +19,6 @@ const APP_DIR = "/app/src/";
  * @pullRequestPath: プルリクエストのパス "/PATH/premerge_xxx"
  */
 class Config {
-    // 従来のプロパティ
-    inputProjectDir;
-    outputDir;
-    inputDir;
-    promptDir;
-    promptTextfile;
-    promptRefineTextfile;
-    tmpDiffRestorePath;
-    maxTokens;
-    // Phase 4-3: 新しい設定プロパティ
-    externalConfig;
-    debugMode;
-    logLevel;
-    environment;
     constructor(pullRequestPath, configPath) {
         // 外部設定を読み込み
         this.externalConfig = this.loadExternalConfig(configPath);

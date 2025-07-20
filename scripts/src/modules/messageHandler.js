@@ -3,7 +3,6 @@
  * LLMとの会話とレスポンス解析を担当
  */
 class MessageHandler {
-    messagesTemplate;
     constructor() {
         this.messagesTemplate = [
             {

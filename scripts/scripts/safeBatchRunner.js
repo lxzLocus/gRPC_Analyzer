@@ -4,9 +4,6 @@ import { config } from 'dotenv';
 // 環境変数の設定
 config({ path: path.join(process.cwd(), '.env') });
 class SafeBatchRunner {
-    errorReportFile;
-    summaryReportFile;
-    stats;
     constructor(baseOutputDir = '/app/output') {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         this.errorReportFile = path.join(baseOutputDir, `error_report_${timestamp}.json`);
@@ -137,10 +134,23 @@ class SafeBatchRunner {
             const logFilePath = path.join(logDir, latestLogFile);
             const logContent = fs.readFileSync(logFilePath, 'utf-8');
             const logData = JSON.parse(logContent);
-            // ステータスを確認（Completed, Completed (Implicit)を成功として扱う）
+            // ステータスを確認（%%_Fin_%%タグベースの厳密な判定）
             const status = logData.experiment_metadata?.status || 'Unknown';
-            const isSuccess = status.includes('Completed') || status === 'Completed (Implicit)';
-            console.log(`📊 Processing result for ${pullRequestTitle}: ${status} (${isSuccess ? 'SUCCESS' : 'FAILURE'})`);
+            // %%_Fin_%%タグの存在確認
+            const hasFinTag = logContent.includes('%%_Fin_%%') || status.includes('%%_Fin_%%');
+            // 明示的なエラーの確認
+            const hasErrors = logContent.includes('400 This model\'s maximum context length') ||
+                logContent.includes('JSON parse failed') ||
+                status.includes('Incomplete') ||
+                status.includes('Error') ||
+                status.includes('Failed');
+            // 成功条件: %%_Fin_%%タグがあり、重大なエラーがない
+            const isSuccess = hasFinTag && !hasErrors;
+            console.log(`📊 Processing result for ${pullRequestTitle}:`);
+            console.log(`   Status: ${status}`);
+            console.log(`   %%_Fin_%% tag: ${hasFinTag ? 'YES' : 'NO'}`);
+            console.log(`   Has errors: ${hasErrors ? 'YES' : 'NO'}`);
+            console.log(`   Final result: ${isSuccess ? 'SUCCESS' : 'FAILURE'}`);
             return isSuccess;
         }
         catch (error) {

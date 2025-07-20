@@ -1,7 +1,9 @@
 import * as fs from 'fs';
 export default class Logger {
-    interactionLogs = [];
-    experimentMetadata = null;
+    constructor() {
+        this.interactionLogs = [];
+        this.experimentMetadata = null;
+    }
     // 古いメソッドは不要になるため削除またはコメントアウト
     // public logInteractionToFile(...) { ... }
     /**
@@ -223,10 +225,6 @@ export default class Logger {
         this.writeDetailedLogToFile('performance', performanceLog);
         this.performanceTimers.delete(timerId);
     }
-    // =============================================================================
-    // ヘルパーメソッド
-    // =============================================================================
-    performanceTimers;
     captureSystemState() {
         return {
             memory: process.memoryUsage(),

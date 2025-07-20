@@ -12,45 +12,40 @@ import FileManager from './fileManager.js';
 import OpenAIClient from './openAIClient.js';
 import { State } from './types.js';
 class LLMFlowController {
-    // 状態管理
-    state = State.Start;
-    context = {};
-    inputPremergeDir = ''; // プルリクエストのパス "/PATH/premerge_xxx"
-    // 内部進行状況管理
-    internalProgress = {
-        currentPhase: 'INITIAL_ANALYSIS',
-        stepsCompleted: [],
-        stepsRemaining: [],
-        contextAccumulated: {
-            sourceFiles: [],
-            configFiles: [],
-            protoFiles: [],
-            testFiles: [],
-            directories: [],
-            dependencies: []
-        },
-        analysisDepth: 1,
-        iterationCount: 0,
-        maxIterations: 10,
-        errorCount: 0,
-        warningCount: 0
-    };
-    // 依存関係
-    config;
-    fileManager;
-    messageHandler;
-    openAIClient;
-    logger = new Logger();
-    // 作業用データ
-    currentMessages = [];
-    prompt_template_name = '';
-    next_prompt_content = null;
-    // ログ管理
-    currentTurn = 0;
-    startTime = '';
-    totalPromptTokens = 0;
-    totalCompletionTokens = 0;
     constructor(pullRequestPath) {
+        // 状態管理
+        this.state = State.Start;
+        this.context = {};
+        this.inputPremergeDir = ''; // プルリクエストのパス "/PATH/premerge_xxx"
+        // 内部進行状況管理
+        this.internalProgress = {
+            currentPhase: 'INITIAL_ANALYSIS',
+            stepsCompleted: [],
+            stepsRemaining: [],
+            contextAccumulated: {
+                sourceFiles: [],
+                configFiles: [],
+                protoFiles: [],
+                testFiles: [],
+                directories: [],
+                dependencies: []
+            },
+            analysisDepth: 1,
+            iterationCount: 0,
+            maxIterations: 10,
+            errorCount: 0,
+            warningCount: 0
+        };
+        this.logger = new Logger();
+        // 作業用データ
+        this.currentMessages = [];
+        this.prompt_template_name = '';
+        this.next_prompt_content = null;
+        // ログ管理
+        this.currentTurn = 0;
+        this.startTime = '';
+        this.totalPromptTokens = 0;
+        this.totalCompletionTokens = 0;
         this.inputPremergeDir = pullRequestPath;
         this.startTime = new Date().toISOString();
         // デバッグ情報：環境変数の確認

@@ -15,26 +15,24 @@ import getSurroundingDirectoryStructure from './generatePeripheralStructure.js';
 const readFileAsync = promisify(fs.readFile);
 const statAsync = promisify(fs.stat);
 class FileManager {
-    config;
-    logger;
-    // デフォルトのプロンプトファイル設定
-    defaultPromptFiles = {
-        promptTextfile: '00_prompt_gem.txt', // Gemini用プロンプトに変更
-        protoFile: '01_proto.txt',
-        protoFileChanges: '02_protoFileChanges.txt',
-        fileChanges: '03_fileChanges.txt',
-        surroundedFilePath: '04_surroundedFilePath.txt',
-        suspectedFiles: '05_suspectedFiles.txt'
-    };
-    // ファイル操作の設定
-    fileOperationConfig = {
-        maxFileSize: 50 * 1024 * 1024, // 50MB
-        timeoutMs: 30000, // 30秒
-        encoding: 'utf-8',
-        enableSizeCheck: true,
-        enableTimeoutCheck: true
-    };
     constructor(config, logger) {
+        // デフォルトのプロンプトファイル設定
+        this.defaultPromptFiles = {
+            promptTextfile: '00_prompt_gem.txt', // Gemini用プロンプトに変更
+            protoFile: '01_proto.txt',
+            protoFileChanges: '02_protoFileChanges.txt',
+            fileChanges: '03_fileChanges.txt',
+            surroundedFilePath: '04_surroundedFilePath.txt',
+            suspectedFiles: '05_suspectedFiles.txt'
+        };
+        // ファイル操作の設定
+        this.fileOperationConfig = {
+            maxFileSize: 50 * 1024 * 1024, // 50MB
+            timeoutMs: 30000, // 30秒
+            encoding: 'utf-8',
+            enableSizeCheck: true,
+            enableTimeoutCheck: true
+        };
         this.config = config;
         this.logger = logger;
     }
