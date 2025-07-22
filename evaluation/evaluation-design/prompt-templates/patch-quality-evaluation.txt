@@ -1,0 +1,95 @@
+## パッチ品質評価プロンプト ##
+
+あなたは自動プログラム修復（APR）において、AIエージェントが生成したパッチの品質を評価する専門家です。
+
+### 評価タスク ###
+
+正解パッチとエージェント生成パッチを比較し、学術的基準に基づいて品質を評価してください。
+
+### 評価対象 ###
+
+**正解パッチ (Ground Truth)**:
+```diff
+{{ground_truth_diff}}
+```
+
+**エージェント生成パッチ**:
+```diff  
+{{agent_generated_diff}}
+```
+
+**エージェントの思考プロセス**:
+- **主要な洞察**: {{key_insights}}
+- **戦略的アプローチ**: {{strategic_approaches}}
+- **使用ターン数**: {{total_turns}}
+
+### 評価基準 ###
+
+#### 1. Plausibility (適用可能性) - Yes/No
+パッチが技術的に有効で適用可能かを判定：
+- [ ] 構文的に正しい
+- [ ] コンパイル/実行可能
+- [ ] ファイルパスが存在
+- [ ] 変更対象が適切
+
+#### 2. Correctness (正確性) - R1-R10 or None
+正解との比較による正確性レベル：
+- **R1**: 完全一致
+- **R2**: 空白・コメント・フォーマットの差異のみ
+- **R3**: 変数名・関数名の差異のみ  
+- **R4**: 意味的に同等（if文↔三項演算子等）
+- **R5**: より良い実装（性能向上、可読性向上等）
+- **R6-R10**: 部分的正解（一部の問題を解決）
+- **None**: 不正確または無関係
+
+#### 3. Reasoning Quality (推論品質) - 1-5点
+思考プロセスの質を評価：
+- **問題分析**: 根本原因の特定能力
+- **解決策設計**: 論理的で実現可能なアプローチ
+- **ファイル要求**: 必要な情報の的確な特定
+
+#### 4. Efficiency (効率性) - Excellent/Good/Fair/Poor  
+解決に要したターン数と質の関係：
+- **Excellent**: 1-2ターンで高品質な解決
+- **Good**: 3-4ターンで適切な解決
+- **Fair**: 5-6ターンで解決、やや非効率
+- **Poor**: 7ターン以上、または低品質
+
+### Few-shot Examples ###
+
+#### Example 1: R4 (意味的同等)
+**正解**: `if (condition) { return true; } else { return false; }`
+**エージェント**: `return condition;`
+**評価**: R4 - 意味的に同等でより簡潔
+
+#### Example 2: R2 (フォーマット差異)
+**正解**: `function(param1,param2){`
+**エージェント**: `function(param1, param2) {`
+**評価**: R2 - 空白の差異のみ
+
+#### Example 3: None (不正確)
+**正解**: gRPC接続エラーの修正
+**エージェント**: HTML表示の修正
+**評価**: None - 無関係な変更
+
+### 出力形式 ###
+
+```json
+{
+  "plausible": true/false,
+  "plausible_reasoning": "Technical validity explanation",
+  "correctness_level": "R1|R2|R3|R4|R5|R6|R7|R8|R9|R10|None",
+  "correctness_reasoning": "Detailed comparison with ground truth",
+  "reasoning_quality": 1-5,
+  "reasoning_breakdown": {
+    "problem_analysis": 1-5,
+    "solution_design": 1-5, 
+    "information_gathering": 1-5
+  },
+  "efficiency_rating": "Excellent|Good|Fair|Poor",
+  "efficiency_reasoning": "Turn count and quality relationship analysis",
+  "overall_assessment": "Comprehensive evaluation summary",
+  "strengths": ["Strength 1", "Strength 2"],
+  "weaknesses": ["Weakness 1", "Weakness 2"]
+}
+```

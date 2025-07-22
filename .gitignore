@@ -16,4 +16,14 @@ output/
 docs/
 backups/
 
+# 評価システム関連
+evaluation/logs/
+evaluation/cache/
+evaluation/results/
+evaluation/__pycache__/
+evaluation/src/__pycache__/
+
+# Docker関連（オプション）
+# .docker/volumes/
+
 

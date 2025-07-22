@@ -20,7 +20,7 @@ services:
     # restart: always
     tty: true
     volumes:
-      - /app/node_modules # ←追加
+      - /app/node_modules
       - type: bind
         source: ../
         target: /app
@@ -36,3 +36,37 @@ services:
       - type: bind
         source: E:/Workspace/gRPC_Analyzer/dataset/filtered_commit
         target: /app/dataset/filtered_commit
+
+  # ===========================================
+  # 評価システム（新規追加）
+  # ===========================================
+  evaluation-system:
+    build:
+      context: ../evaluation
+      dockerfile: Dockerfile_evaluation
+    container_name: grpc-analyzer-evaluation
+    tty: true
+    working_dir: /app
+    environment:
+      - PYTHONPATH=/app
+      - EVALUATION_MODE=production
+    volumes:
+      # 評価システムコード（/app/evaluation → コンテナの/app）
+      - type: bind
+        source: F:/Workspace/gRPC_Analyzer/evaluation
+        target: /app
+      # データセット（読み取り専用）
+      - type: bind
+        source: F:/Workspace/gRPC_Analyzer/dataset
+        target: /app/dataset
+        read_only: true
+      # APRログ（読み取り専用）
+      - type: bind
+        source: F:/Workspace/gRPC_Analyzer/log
+        target: /app/apr-logs
+        read_only: true
+      # APR結果（読み取り専用）
+      - type: bind
+        source: F:/Workspace/gRPC_Analyzer/output
+        target: /app/apr-output
+        read_only: true
