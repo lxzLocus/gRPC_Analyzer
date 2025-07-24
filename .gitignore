@@ -16,8 +16,15 @@ output/
 docs/
 backups/
 
+test*.*
+
+
+
 # 評価システム関連
 evaluation/logs/
+evaluation/full_dataset_results/
+evaluation/llm_evaluation_logs/
+evaluation/verification_results/
 evaluation/cache/
 evaluation/results/
 evaluation/__pycache__/

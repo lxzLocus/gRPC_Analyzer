@@ -248,7 +248,7 @@ class LLMFlowController {
         this.config = new Config(this.inputPremergeDir);
         this.fileManager = new FileManager(this.config, this.logger);
         this.messageHandler = new MessageHandler();
-        this.openAIClient = new OpenAIClient(); // 環境変数から自動取得
+        this.openAIClient = new OpenAIClient(this.config); // Configインスタンスを渡す
 
         // OpenAIClientの初期化完了を待機
         await (this.openAIClient as any).initPromise;

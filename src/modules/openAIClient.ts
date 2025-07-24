@@ -3,16 +3,22 @@
  * LLMとの通信を担当
  */
 
+import Config from './config.js';
+
 class OpenAIClient {
     client: any;
     private initPromise: Promise<void>;
+    private config: Config;
 
-    constructor(apiKey?: string) {
+    constructor(config: Config, apiKey?: string) {
+        this.config = config;
+        
         // 環境変数から APIキーを取得（優先順位: 引数 > OPENAI_TOKEN > OPENAI_API_KEY）
         const finalApiKey = apiKey || process.env.OPENAI_TOKEN || process.env.OPENAI_API_KEY || '';
         
         console.log(`🔑 OpenAIClient: Using API key length: ${finalApiKey.length}`);
         console.log(`🔑 Available env vars: OPENAI_TOKEN=${!!process.env.OPENAI_TOKEN}, OPENAI_API_KEY=${!!process.env.OPENAI_API_KEY}`);
+        console.log(`🤖 OpenAIClient: Using model: ${this.config.get('llm.model', 'gpt-4o')}`);
         
         // OpenAIクライアントの初期化を非同期で行う
         this.initPromise = this.initializeClient(finalApiKey);
@@ -45,8 +51,9 @@ class OpenAIClient {
         await this.initPromise;
 
         try {
+            const model = this.config.get('llm.model', 'gpt-4o');
             const completion = await this.client.chat.completions.create({
-                model: 'gpt-4o',
+                model: model,
                 messages: messages
             });
             return completion;
