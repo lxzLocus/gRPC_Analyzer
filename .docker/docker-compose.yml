@@ -36,6 +36,9 @@ services:
       - type: bind
         source: E:/Workspace/gRPC_Analyzer/dataset/filtered_commit
         target: /app/dataset/filtered_commit
+      - type: bind
+        source: E:/Workspace/gRPC_Analyzer/dataset/filtered_fewChanged
+        target: /app/dataset/filtered_fewChanged
 
   # ===========================================
   # 評価システム（新規追加）
