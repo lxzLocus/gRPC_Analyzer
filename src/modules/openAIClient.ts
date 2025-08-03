@@ -1,84 +1,92 @@
 /**
- * OpenAI API クライアント
- * LLMとの通信を担当
+ * OpenAI API クライアント (レガシー互換性)
+ * 新しいLLMクライアントシステムと既存コードの橋渡し
  */
 
 import Config from './config.js';
+import { LLMClientFactory } from './llmClientFactory.js';
+import { LLMClient } from './llmClient.js';
 
 class OpenAIClient {
-    client: any;
-    private initPromise: Promise<void>;
+    private llmClient: LLMClient;
     private config: Config;
+    public initPromise: Promise<void>;
 
     constructor(config: Config, apiKey?: string) {
         this.config = config;
         
-        // 環境変数から APIキーを取得（優先順位: 引数 > OPENAI_TOKEN > OPENAI_API_KEY）
-        const finalApiKey = apiKey || process.env.OPENAI_TOKEN || process.env.OPENAI_API_KEY || '';
+        console.log(`🔑 OPENAI_TOKEN length: ${(process.env.OPENAI_TOKEN || '').length}`);
+        console.log(`🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
+        console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
+        console.log(`� DEBUG_MODE: ${process.env.DEBUG_MODE || 'undefined'}`);
         
-        console.log(`🔑 OpenAIClient: Using API key length: ${finalApiKey.length}`);
-        console.log(`🔑 Available env vars: OPENAI_TOKEN=${!!process.env.OPENAI_TOKEN}, OPENAI_API_KEY=${!!process.env.OPENAI_API_KEY}`);
-        console.log(`🤖 OpenAIClient: Using model: ${this.config.get('llm.model', 'gpt-4o')}`);
+        // プロバイダーの自動選択または設定に基づく選択
+        const provider = LLMClientFactory.autoSelectProvider(config);
+        console.log(`🤖 Selected LLM provider: ${provider}`);
         
-        // OpenAIクライアントの初期化を非同期で行う
-        this.initPromise = this.initializeClient(finalApiKey);
-    }
-
-    private async initializeClient(apiKey: string): Promise<void> {
-        try {
-            // 動的importを使用してES modules対応
-            const { default: OpenAI } = await import('openai');
-            this.client = new OpenAI({ apiKey });
-        } catch (error) {
-            console.error('Failed to initialize OpenAI client:', error);
-            // フォールバック: モック用の最小実装
-            this.client = {
-                chat: {
-                    completions: {
-                        create: async () => ({
-                            id: 'mock',
-                            choices: [{ message: { content: 'Mock response' } }],
-                            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
-                        })
-                    }
-                }
-            };
-        }
+        this.llmClient = LLMClientFactory.create(config, provider);
+        this.initPromise = this.llmClient.waitForInitialization();
     }
 
     async fetchOpenAPI(messages: Array<{ role: string, content: string }>): Promise<any> {
-        // クライアントが初期化されるまで待機
+        // 新しいLLMクライアントを使用してレスポンスを取得
         await this.initPromise;
 
         try {
-            const model = this.config.get('llm.model', 'gpt-4o');
-            const completion = await this.client.chat.completions.create({
-                model: model,
-                messages: messages
+            const response = await this.llmClient.generateContent({
+                messages: messages.map(msg => ({
+                    role: msg.role as 'system' | 'user' | 'assistant',
+                    content: msg.content
+                }))
             });
-            return completion;
-        } catch (error) {
-            console.error((error as any).message);
-            // エラー時はモックレスポンスを返す
+
+            // 既存のコードとの互換性のため、OpenAI形式のレスポンスを模倣
             return {
-                id: 'error-mock',
-                choices: [{ message: { content: 'Error occurred, returning mock response' } }],
-                usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+                choices: [{
+                    message: {
+                        content: response.content,
+                        role: 'assistant'
+                    },
+                    finish_reason: response.finishReason || 'stop'
+                }],
+                usage: response.usage ? {
+                    prompt_tokens: response.usage.promptTokens,
+                    completion_tokens: response.usage.completionTokens,
+                    total_tokens: response.usage.totalTokens
+                } : {
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0
+                },
+                model: response.model || 'unknown'
             };
+
+        } catch (error) {
+            console.error('❌ LLM API error:', error);
+            throw error;
         }
     }
 
     /**
-     * モック用メソッド: レスポンスを直接設定
+     * 使用中のLLMプロバイダー名を取得
+     */
+    getProviderName(): string {
+        return this.llmClient.getProviderName();
+    }
+
+    /**
+     * LLMクライアントが準備完了かチェック
+     */
+    isReady(): boolean {
+        return this.llmClient.isReady();
+    }
+
+    /**
+     * モック用メソッド: レスポンスを直接設定（互換性のため残す）
      */
     setMockResponse(response: any): void {
-        this.client = {
-            chat: {
-                completions: {
-                    create: async () => response
-                }
-            }
-        };
+        // 新しいシステムではモック機能は各クライアントで処理
+        console.warn('⚠️  setMockResponse is deprecated in new LLM system');
     }
 }
 

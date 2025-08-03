@@ -92,26 +92,47 @@ class APRLogIterator:
         )
     
     def _collect_logs(self, project_name: str, log_type: str, log_dir: Path) -> List[LogEntry]:
-        """ログディレクトリからログファイルを収集"""
+        """ログディレクトリからログファイルを収集（プルリクエスト単位で最新のみ選択）"""
         logs = []
         
         # 対象とするファイル拡張子を定義
         log_extensions = ["*.json", "*.log", "*.txt"]
+        
+        # プルリクエスト/issueディレクトリごとにログをグループ化
+        pr_logs_map = {}  # {pr_directory: [LogEntry, ...]}
         
         # ログディレクトリを再帰的に探索
         for extension in log_extensions:
             for log_file in log_dir.rglob(extension):
                 try:
                     stat_info = log_file.stat()
-                    logs.append(LogEntry(
+                    log_entry = LogEntry(
                         project_name=project_name,
                         log_type=log_type,
                         log_path=log_file,
                         timestamp=datetime.fromtimestamp(stat_info.st_mtime),
                         size=stat_info.st_size
-                    ))
+                    )
+                    
+                    # プルリクエスト/issueディレクトリを特定
+                    pr_directory = log_file.parent
+                    if pr_directory not in pr_logs_map:
+                        pr_logs_map[pr_directory] = []
+                    pr_logs_map[pr_directory].append(log_entry)
+                    
                 except Exception as e:
                     print(f"⚠️  ログファイル読み取りエラー: {log_file} - {e}")
+        
+        # 各プルリクエスト/issueディレクトリから最新のログのみを選択
+        for pr_directory, pr_logs in pr_logs_map.items():
+            if len(pr_logs) > 1:
+                # 複数のログがある場合は最新のものを選択
+                latest_log = max(pr_logs, key=lambda x: x.timestamp)
+                print(f"📁 {pr_directory.name}: {len(pr_logs)}個のログから最新を選択 ({latest_log.log_path.name})")
+                logs.append(latest_log)
+            else:
+                # 1個のみの場合はそのまま追加
+                logs.append(pr_logs[0])
         
         return logs
     

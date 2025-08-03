@@ -63,17 +63,20 @@ class SystemComplianceEvaluator:
         
         # OpenAI利用可能モデル一覧
         openai_models = [
-            "gpt-4o",           # 最新の高性能モデル
-            "gpt-4o-mini",      # 軽量版
-            "gpt-4-turbo",      # 高速版
-            "gpt-4",            # 標準GPT-4
-            "gpt-3.5-turbo"     # 軽量高速
+            "gpt-4.1",                    # 最新の高性能モデル (2024年5月リリース)
+            "gpt-4.1-mini",              # 軽量版
+            "gpt-4-turbo",              # 高速版 (最新のTurbo)
+            "gpt-4-turbo-preview",      # Turbo プレビュー版
+            "gpt-4-1106-preview",       # GPT-4 Turbo (2023年11月版)
+            "gpt-4-0125-preview",       # GPT-4 Turbo (2024年1月版)
+            "gpt-4",                    # 標準GPT-4
+            "gpt-3.5-turbo"             # 軽量高速
         ]
         
         # LLMプロバイダーを作成
         if llm_provider == "openai":
             # モデル名が指定されていればそれを使用、なければデフォルト
-            model_name = llm_model or "gpt-4o"  # gpt-4oをデフォルトに
+            model_name = llm_model or "gpt-4-turbo"  # gpt-4-turboをデフォルトに
             
             # 指定されたモデルが利用可能リストにあるかチェック
             if llm_model and llm_model not in openai_models:
@@ -519,9 +522,10 @@ async def demo_compliance_evaluation():
     
     # デモ用に複数のモデルを試行
     demo_configs = [
-        {"provider": "openai", "model": "gpt-4o", "description": "OpenAI GPT-4o (推奨)"},
-        {"provider": "openai", "model": "gpt-4o-mini", "description": "OpenAI GPT-4o Mini (軽量)"},
-        {"provider": "openai", "model": "gpt-4-turbo", "description": "OpenAI GPT-4 Turbo (高速)"},
+        {"provider": "openai", "model": "gpt-4-turbo", "description": "OpenAI GPT-4 Turbo (推奨・高性能)"},
+        {"provider": "openai", "model": "gpt-4-1106-preview", "description": "OpenAI GPT-4 Turbo (2023年11月版)"},
+        {"provider": "openai", "model": "gpt-4.1", "description": "OpenAI gpt-4.1 (最新)"},
+        {"provider": "openai", "model": "gpt-4.1-mini", "description": "OpenAI gpt-4.1 Mini (軽量)"},
         {"provider": "mock", "model": None, "description": "Mock LLM (テスト用)"}
     ]
     
@@ -553,13 +557,13 @@ async def demo_compliance_evaluation():
     print(f"  - 使用モデル: {results['llm_model']}")
     
     print("\n💡 他のOpenAIモデルを試すには:")
-    print('  evaluator = SystemComplianceEvaluator(llm_provider="openai", llm_model="gpt-4o-mini")')
+    print('  evaluator = SystemComplianceEvaluator(llm_provider="openai", llm_model="gpt-4.1-mini")')
     print('  evaluator = SystemComplianceEvaluator(llm_provider="openai", llm_model="gpt-4-turbo")')
     print('  evaluator = SystemComplianceEvaluator(llm_provider="openai", llm_model="gpt-3.5-turbo")')
     
 
 # 個別モデル実行用のヘルパー関数も追加
-async def run_with_specific_model(provider: str = "openai", model: str = "gpt-4o"):
+async def run_with_specific_model(provider: str = "openai", model: str = "gpt-4.1"):
     """指定されたモデルで評価を実行"""
     print(f"🎯 指定モデルでの評価: {provider}/{model}")
     

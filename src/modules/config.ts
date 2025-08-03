@@ -27,11 +27,18 @@ interface ExternalConfig {
         logLevel: string;
     };
     llm: {
+        provider?: string;
         model: string;
         maxTokens: number;
         temperature: number;
         timeout: number;
         retryAttempts: number;
+    };
+    gemini?: {
+        model: string;
+        maxTokens: number;
+        temperature: number;
+        timeout: number;
     };
     fileOperations: {
         maxFileSize: number;
@@ -134,7 +141,8 @@ class Config {
         // デフォルト設定
         return {
             system: { version: '1.0.0', environment: 'development', debugMode: false, logLevel: 'info' },
-            llm: { model: 'gpt-4o', maxTokens: 4000, temperature: 0.1, timeout: 30000, retryAttempts: 3 },
+            llm: { provider: 'openai', model: 'gpt-4.1', maxTokens: 4000, temperature: 0.1, timeout: 30000, retryAttempts: 3 },
+            gemini: { model: 'gemini-2.5-pro', maxTokens: 4000, temperature: 0.1, timeout: 30000 },
             fileOperations: { maxFileSize: 52428800, timeout: 30000, encoding: 'utf-8', enableSizeCheck: true, enableTimeoutCheck: true, backupEnabled: true },
             performance: { enableMonitoring: true, enableDetailedLogs: true, performanceLogPath: '/app/logs/performance', reportGenerationEnabled: true },
             paths: { promptDir: '/app/src/prompts', outputDir: '/app/output', logsDir: '/app/logs', backupDir: '/app/backups' },
@@ -161,8 +169,22 @@ class Config {
         if (process.env.LOG_LEVEL) {
             this.externalConfig.system.logLevel = process.env.LOG_LEVEL;
         }
+        if (process.env.LLM_PROVIDER) {
+            this.externalConfig.llm.provider = process.env.LLM_PROVIDER;
+        }
         if (process.env.OPENAI_MODEL) {
             this.externalConfig.llm.model = process.env.OPENAI_MODEL;
+        }
+        if (process.env.GEMINI_MODEL) {
+            if (!this.externalConfig.gemini) {
+                this.externalConfig.gemini = {
+                    model: 'gemini-2.5-pro',
+                    maxTokens: 4000,
+                    temperature: 0.1,
+                    timeout: 30000
+                };
+            }
+            this.externalConfig.gemini.model = process.env.GEMINI_MODEL;
         }
         if (process.env.MAX_FILE_SIZE) {
             this.externalConfig.fileOperations.maxFileSize = parseInt(process.env.MAX_FILE_SIZE);

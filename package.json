@@ -14,6 +14,7 @@
     "batch:large": "node scripts/safeBatchRunner.js /app/dataset/filtered_commit /app/output"
   },
   "dependencies": {
+    "@google/genai": "^1.0.0",
     "@llamaindex/openai": "^0.1.61",
     "@octokit/rest": "^21.0.0",
     "acorn": "^8.12.1",

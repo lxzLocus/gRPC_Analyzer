@@ -21,7 +21,7 @@ https://platform.openai.com/tokenizer
 
 ## Models
 
-GPT-4o
+gpt-4.1
 
 max length : 1048576 charactors
 max tokens : 128000 tokens

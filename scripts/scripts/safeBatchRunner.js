@@ -355,7 +355,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 // メイン実行
 if (import.meta.url === `file://${process.argv[1]}`) {
-    const datasetDir = process.argv[2] || "/app/dataset/test";
+    const datasetDir = process.argv[2] || "/app/dataset/filtered_fewChanged";
     const outputDir = process.argv[3] || "/app/output";
     console.log(`🎯 Safe Batch Runner Starting...`);
     console.log(`📁 Dataset Directory: ${datasetDir}`);

@@ -81,7 +81,7 @@ class FileManager {
         if (datasetPromptPath) {
             try {
                 const content = fs.readFileSync(datasetPromptPath, 'utf-8');
-                console.log(`✅ データセットプロンプトファイルを読み込み: ${filename}`);
+                console.log(`✅ データセットプロンプトファイルを読み込み: ${filename} (長さ: ${content.length})`);
                 return content;
             }
             catch (error) {
@@ -118,7 +118,10 @@ class FileManager {
             'protoFile', 'protoFileChanges', 'fileChanges', 'surroundedFilePath', 'suspectedFiles'
         ];
         requiredFields.forEach(field => {
-            if (!context[field] || context[field].trim() === '') {
+            const value = context[field];
+            const isEmpty = !value || value.trim() === '';
+            console.log(`🔍 フィールド検証 '${field}': 長さ=${value?.length || 0}, 空=${isEmpty}`);
+            if (isEmpty) {
                 errors.push(`テンプレート変数 '${field}' が空です`);
             }
         });
@@ -1067,3 +1070,4 @@ Leverage this constraint to maximize your differential reasoning capabilities.`
     }
 }
 export default FileManager;
+//# sourceMappingURL=fileManager.js.map

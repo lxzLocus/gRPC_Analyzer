@@ -223,8 +223,8 @@ class OpenAIClient {
 
     async fetchOpenAPI(messages: Array<{ role: string, content: string }>): Promise<any> {
         try {
-            // 環境変数からモデルを取得、デフォルトは gpt-4o
-            const model = process.env.OPENAI_MODEL || 'gpt-4o';
+            // 環境変数からモデルを取得、デフォルトは gpt-4.1
+            const model = process.env.OPENAI_MODEL || 'gpt-4.1';
             const completion = await this.client.chat.completions.create({
                 model: model,
                 messages: messages

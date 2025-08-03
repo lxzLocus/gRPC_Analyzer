@@ -30,24 +30,54 @@ cd /app/.docker
 ## 📁 ディレクトリ構造
 
 ```
-/app/evaluation/                    # 評価システムルート
-├── main.py                        # メインエントリーポイント
-├── Dockerfile_evaluation          # Docker設定
-├── requirements_evaluation.txt    # Python依存関係
-├── 📋 HANDOVER_DOCUMENTATION.md   # 引き継ぎドキュメント（重要）
-├── 🛠️ DEVELOPMENT_GUIDE.md        # 開発者ガイド
-├── 📚 API_SPECIFICATION.md        # API仕様書
-├── 📊 SYSTEM_SPECIFICATION.md     # システム仕様書
-├── evaluation-design/             # 評価設計
-│   ├── integrated-evaluation-system.md
-│   ├── step1-system-compliance-evaluator.md
-│   ├── step2-patch-quality-evaluator.md
-│   └── prompt-templates/
-├── src/                           # ソースコード
+## 📁 ディレクトリ構造
+
+```text
+/app/
+├── scripts/                       # 実行可能スクリプト
+│   ├── run_full_evaluation.sh     # 全ログ評価（推奨）
+│   ├── run_real_llm_evaluation.sh # 学習・テスト用
+│   ├── real_llm_evaluator.py      # メイン評価エンジン
+│   ├── main.py                    # エントリーポイント
+│   ├── evaluation_log_viewer.py   # ログ詳細表示
+│   ├── verification_report.py     # レポート生成
+│   ├── llm_response_viewer.py     # LLM応答詳細表示
+│   ├── detailed_analysis.py       # 詳細分析
+│   ├── full_dataset_evaluation.py # 大規模データセット評価
+│   ├── demo_openai_models.py      # OpenAI接続テスト
+│   ├── verify_single_repo.py      # 単一リポ検証
+│   └── analyze_evaluation_results.py # 評価結果分析
+├── src/                           # コアライブラリ
 │   ├── evaluators/
 │   ├── analyzers/
 │   ├── llm/
 │   ├── reporters/
+│   ├── utils/
+│   └── tests/
+├── logs/                          # 評価ログ
+│   ├── evaluation_results_*.json
+│   ├── error_reports_*.json
+│   └── processing_summaries_*.json
+├── apr-logs/                      # APRデータセット
+├── apr-output/                    # 評価出力
+├── config/                        # 設定ファイル
+├── dataset/                       # データセット
+├── results/                       # 評価結果
+└── docs/                          # ドキュメント
+    ├── HANDOVER_DOCUMENTATION.md  # 引き継ぎドキュメント（重要）
+    ├── DEVELOPMENT_GUIDE.md       # 開発者ガイド
+    ├── API_SPECIFICATION.md       # API仕様書
+    ├── SYSTEM_SPECIFICATION.md    # システム仕様書
+    ├── SYSTEM_FILE_DOCUMENTATION.md # ファイル構成説明
+    └── FILE_DEPENDENCY_DIAGRAM.md # 依存関係図
+```
+├── apr-logs/                      # 入力APRログ（86件）
+├── logs/                          # 評価ログ出力
+├── verification_results/          # 評価結果
+├── config/                        # 設定ファイル
+├── evaluation-design/             # 評価設計
+├── Dockerfile_evaluation          # Docker設定
+└── requirements_evaluation.txt    # Python依存関係
 │   ├── utils/
 │   └── tests/
 ├── config/                        # 設定ファイル
@@ -59,6 +89,32 @@ cd /app/.docker
 ```
 
 ## ⚙️ 主要コマンド
+
+### 🔥 全ログ評価（推奨）
+
+**すべてのAPRログ（86ログ）を評価したい場合**:
+
+```bash
+# 全ログ一括評価（推奨）
+bash scripts/run_full_evaluation.sh
+
+# または個別プロジェクト評価
+python scripts/real_llm_evaluator.py --repo boulder --max-logs 999 --provider openai --model gpt-4.1-mini
+python scripts/real_llm_evaluator.py --repo daos --max-logs 999 --provider openai --model gpt-4.1-mini
+# ...全11プロジェクト
+```
+
+**学習・テスト用ガイド**:
+
+```bash
+bash scripts/run_real_llm_evaluation.sh
+```
+
+**評価モード選択**:
+
+- 🎭 **Mock LLM**: テスト用・高速・無料
+- 💰 **gpt-4.1-mini**: 高品質・低コスト（全86ログで約$0.15）
+- 🎯 **gpt-4.1**: 最高品質・高コスト（全86ログで約$3.87）
 
 ### manage.sh スクリプト使用
 
