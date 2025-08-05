@@ -1,8 +1,11 @@
+"use strict";
 /**
  * 型定義ファイル
  * プロジェクト全体で使用する共通の型定義
  */
-export var State;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.State = void 0;
+var State;
 (function (State) {
     State["Start"] = "Start";
     State["PrepareInitialContext"] = "PrepareInitialContext";
@@ -23,5 +26,4 @@ export var State;
     State["SendErrorToLLM"] = "SendErrorToLLM";
     State["LLMErrorReanalyze"] = "LLMErrorReanalyze";
     State["End"] = "End";
-})(State || (State = {}));
-//# sourceMappingURL=types.js.map
+})(State || (exports.State = State = {}));

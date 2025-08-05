@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { config } from 'dotenv';
-import { runForAllDatasets } from './llmFlowBatchRunner.js';
+import { runForAllDatasets } from '../src/modules/llmFlowBatchRunner.js';
+import LLMFlowController from '../src/modules/llmFlowController.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -255,7 +256,6 @@ class SafeBatchRunner {
                 console.log(`🔄 Processing (attempt ${retry + 1}/${maxRetries + 1}): ${repositoryName}/${category}/${pullRequestTitle}`);
                 
                 // LLMFlowControllerを直接インスタンス化
-                const { default: LLMFlowController } = await import('../src/modules/llmFlowController.js');
                 controller = new LLMFlowController(premergeDir);
                 
                 // エラーハンドリングを強化した処理実行

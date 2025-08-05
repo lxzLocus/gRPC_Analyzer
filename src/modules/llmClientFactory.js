@@ -1,42 +1,47 @@
+"use strict";
 /**
  * LLM Client Factory
  * 設定に基づいて適切なLLMクライアントを生成
  */
-import OpenAILLMClient from './openAILLMClient.js';
-import GeminiLLMClient from './geminiLLMClient.js';
-export class LLMClientFactory {
-    static create(config, provider) {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.LLMClientFactory = void 0;
+var openAILLMClient_js_1 = require("./openAILLMClient.js");
+var geminiLLMClient_js_1 = require("./geminiLLMClient.js");
+var LLMClientFactory = /** @class */ (function () {
+    function LLMClientFactory() {
+    }
+    LLMClientFactory.create = function (config, provider) {
         // プロバイダーの決定（優先順位: 引数 > 設定 > デフォルト）
-        const selectedProvider = provider ||
+        var selectedProvider = provider ||
             config.get('llm.provider', 'openai');
-        console.log(`🏭 LLMClientFactory: Creating ${selectedProvider} client`);
+        console.log("\uD83C\uDFED LLMClientFactory: Creating ".concat(selectedProvider, " client"));
         switch (selectedProvider) {
             case 'openai':
-                return new OpenAILLMClient(config);
+                return new openAILLMClient_js_1.default(config);
             case 'gemini':
-                return new GeminiLLMClient(config);
+                return new geminiLLMClient_js_1.default(config);
             default:
-                console.warn(`⚠️  Unknown LLM provider: ${selectedProvider}, falling back to OpenAI`);
-                return new OpenAILLMClient(config);
+                console.warn("\u26A0\uFE0F  Unknown LLM provider: ".concat(selectedProvider, ", falling back to OpenAI"));
+                return new openAILLMClient_js_1.default(config);
         }
-    }
+    };
     /**
      * 利用可能なプロバイダーの一覧を取得
      */
-    static getAvailableProviders() {
+    LLMClientFactory.getAvailableProviders = function () {
         return ['openai', 'gemini'];
-    }
+    };
     /**
      * プロバイダーの自動選択（APIキーの有無で判定）
      */
-    static autoSelectProvider(config) {
-        const hasOpenAIKey = !!(process.env.OPENAI_TOKEN || process.env.OPENAI_API_KEY);
-        const hasGeminiKey = !!process.env.GEMINI_API_KEY;
-        console.log(`🔍 Auto-selecting provider: OpenAI=${hasOpenAIKey}, Gemini=${hasGeminiKey}`);
+    LLMClientFactory.autoSelectProvider = function (config) {
+        var hasOpenAIKey = !!(process.env.OPENAI_TOKEN || process.env.OPENAI_API_KEY);
+        var hasGeminiKey = !!process.env.GEMINI_API_KEY;
+        console.log("\uD83D\uDD0D Auto-selecting provider: OpenAI=".concat(hasOpenAIKey, ", Gemini=").concat(hasGeminiKey));
         // 設定で明示的に指定されている場合はそれを優先
-        const configuredProvider = config.get('llm.provider');
+        var configuredProvider = config.get('llm.provider');
         if (configuredProvider) {
-            console.log(`📋 Using configured provider: ${configuredProvider}`);
+            console.log("\uD83D\uDCCB Using configured provider: ".concat(configuredProvider));
             return configuredProvider;
         }
         // APIキーの有無で自動選択
@@ -45,7 +50,8 @@ export class LLMClientFactory {
         }
         // デフォルトはOpenAI
         return 'openai';
-    }
-}
-export default LLMClientFactory;
-//# sourceMappingURL=llmClientFactory.js.map
+    };
+    return LLMClientFactory;
+}());
+exports.LLMClientFactory = LLMClientFactory;
+exports.default = LLMClientFactory;

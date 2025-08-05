@@ -45,7 +45,7 @@ services:
   # ===========================================
   evaluation-system:
     build:
-      context: ../
+      context: ../evaluation
       dockerfile: Dockerfile_evaluation
     container_name: grpc-analyzer-evaluation
     tty: true
@@ -57,6 +57,34 @@ services:
       # 評価システムコード（/app/evaluation → コンテナの/app）
       - type: bind
         source: F:/Workspace/gRPC_Analyzer/evaluation
+        target: /app
+      # データセット（読み取り専用）
+      - type: bind
+        source: F:/Workspace/gRPC_Analyzer/dataset
+        target: /app/dataset
+        read_only: true
+      # APRログ（読み取り専用）
+      - type: bind
+        source: F:/Workspace/gRPC_Analyzer/log
+        target: /app/apr-logs
+        read_only: true
+      # APR結果（読み取り専用）
+      - type: bind
+        source: F:/Workspace/gRPC_Analyzer/output
+        target: /app/apr-output
+        read_only: true
+
+  patch-evaluation:
+    build:
+      context: ../patchEvaluation
+      dockerfile: Dockerfile
+    container_name: patch-evaluation
+    tty: true
+    working_dir: /app
+    volumes:
+      # 評価システムコード（/app/evaluation → コンテナの/app）
+      - type: bind
+        source: F:/Workspace/gRPC_Analyzer/patchEvaluation
         target: /app
       # データセット（読み取り専用）
       - type: bind

@@ -1,25 +1,27 @@
+"use strict";
 /**
  * 設定管理クラス
  * プロンプトテンプレートやファイルパスの管理を行う
  * Phase 4-3: 外部設定ファイルと環境変数に対応
  */
-import * as fs from 'fs';
-import * as path from 'path';
-import * as dotenv from 'dotenv';
+Object.defineProperty(exports, "__esModule", { value: true });
+var fs = require("fs");
+var path = require("path");
+var dotenv = require("dotenv");
 // HandlebarsをPromiseで動的import
-let Handlebars;
-const handlebarsPromise = import('handlebars').then(module => {
+var Handlebars;
+var handlebarsPromise = Promise.resolve().then(function () { return require('handlebars'); }).then(function (module) {
     Handlebars = module.default || module;
     return Handlebars;
 });
 //実行ファイルが置かれているパス
-const APP_DIR = "/app/src/";
+var APP_DIR = "/app/src/";
 /**
  * Configuration class for managing file paths and prompt templates.
  * @pullRequestPath: プルリクエストのパス "/PATH/premerge_xxx"
  */
-class Config {
-    constructor(pullRequestPath, configPath) {
+var Config = /** @class */ (function () {
+    function Config(pullRequestPath, configPath) {
         // 外部設定を読み込み
         this.externalConfig = this.loadExternalConfig(configPath);
         // 環境変数の読み込み
@@ -46,11 +48,11 @@ class Config {
     /**
      * 外部設定ファイルを読み込み
      */
-    loadExternalConfig(configPath) {
-        const defaultConfigPath = configPath || '/app/config/config.json';
+    Config.prototype.loadExternalConfig = function (configPath) {
+        var defaultConfigPath = configPath || '/app/config/config.json';
         try {
             if (fs.existsSync(defaultConfigPath)) {
-                const configContent = fs.readFileSync(defaultConfigPath, 'utf-8');
+                var configContent = fs.readFileSync(defaultConfigPath, 'utf-8');
                 return JSON.parse(configContent);
             }
         }
@@ -68,16 +70,16 @@ class Config {
             testing: { mockMode: false, integrationTestEnabled: true, testReportPath: '/app/output', testTimeout: 60000 },
             security: { validateFilePaths: true, restrictToProjectDir: true, maxDepth: 10 }
         };
-    }
+    };
     /**
      * 環境変数を読み込み（.env ファイルの値を上書き）
      */
-    loadEnvironmentVariables() {
+    Config.prototype.loadEnvironmentVariables = function () {
         try {
             // dotenvライブラリが利用可能な場合は使用
             dotenv.config();
         }
-        catch {
+        catch (_a) {
             // dotenvが利用できない場合は環境変数のみ使用
         }
         // 環境変数で外部設定を上書き
@@ -108,14 +110,15 @@ class Config {
             this.externalConfig.fileOperations.maxFileSize = parseInt(process.env.MAX_FILE_SIZE);
         }
         // 他の環境変数も同様に処理...
-    }
+    };
     /**
      * 設定値を取得（ドット記法対応）
      */
-    getConfigValue(key, defaultValue) {
-        const keys = key.split('.');
-        let value = this.externalConfig;
-        for (const k of keys) {
+    Config.prototype.getConfigValue = function (key, defaultValue) {
+        var keys = key.split('.');
+        var value = this.externalConfig;
+        for (var _i = 0, keys_1 = keys; _i < keys_1.length; _i++) {
+            var k = keys_1[_i];
             if (value && typeof value === 'object' && k in value) {
                 value = value[k];
             }
@@ -124,12 +127,13 @@ class Config {
             }
         }
         return value !== undefined ? value : defaultValue;
-    }
+    };
     /**
      * 必要なディレクトリを作成
      */
-    ensureDirectoriesExist() {
-        const directories = [
+    Config.prototype.ensureDirectoriesExist = function () {
+        var _this = this;
+        var directories = [
             this.outputDir,
             this.getConfigValue('paths.logsDir', '/app/logs'),
             this.getConfigValue('paths.backupDir', '/app/backups'),
@@ -138,88 +142,88 @@ class Config {
             path.join(this.getConfigValue('paths.logsDir', '/app/logs'), 'parsing_errors'),
             path.join(this.getConfigValue('paths.logsDir', '/app/logs'), 'file_errors')
         ];
-        directories.forEach(dir => {
+        directories.forEach(function (dir) {
             if (!fs.existsSync(dir)) {
                 try {
                     fs.mkdirSync(dir, { recursive: true });
-                    if (this.debugMode) {
-                        console.log(`Created directory: ${dir}`);
+                    if (_this.debugMode) {
+                        console.log("Created directory: ".concat(dir));
                     }
                 }
                 catch (error) {
-                    console.error(`Failed to create directory ${dir}:`, error);
+                    console.error("Failed to create directory ".concat(dir, ":"), error);
                 }
             }
         });
-    }
+    };
     /**
      * デバッグモード用のログ出力
      */
-    debugLog(message, data) {
+    Config.prototype.debugLog = function (message, data) {
         if (this.debugMode) {
-            const timestamp = new Date().toISOString();
-            console.log(`[DEBUG ${timestamp}] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+            var timestamp = new Date().toISOString();
+            console.log("[DEBUG ".concat(timestamp, "] ").concat(message), data ? JSON.stringify(data, null, 2) : '');
         }
-    }
+    };
     /**
      * 設定情報の表示
      */
-    displayConfig() {
+    Config.prototype.displayConfig = function () {
         if (this.debugMode) {
             console.log('=== Configuration Summary ===');
-            console.log(`Environment: ${this.environment}`);
-            console.log(`Debug Mode: ${this.debugMode}`);
-            console.log(`Log Level: ${this.logLevel}`);
-            console.log(`LLM Model: ${this.getConfigValue('llm.model', 'N/A')}`);
-            console.log(`Max Tokens: ${this.maxTokens}`);
-            console.log(`Input Project Dir: ${this.inputProjectDir}`);
-            console.log(`Output Dir: ${this.outputDir}`);
-            console.log(`Prompt Dir: ${this.promptDir}`);
+            console.log("Environment: ".concat(this.environment));
+            console.log("Debug Mode: ".concat(this.debugMode));
+            console.log("Log Level: ".concat(this.logLevel));
+            console.log("LLM Model: ".concat(this.getConfigValue('llm.model', 'N/A')));
+            console.log("Max Tokens: ".concat(this.maxTokens));
+            console.log("Input Project Dir: ".concat(this.inputProjectDir));
+            console.log("Output Dir: ".concat(this.outputDir));
+            console.log("Prompt Dir: ".concat(this.promptDir));
             console.log('============================');
         }
-    }
+    };
     /**
      * 外部設定の値を取得（公開メソッド）
      */
-    get(key, defaultValue) {
+    Config.prototype.get = function (key, defaultValue) {
         return this.getConfigValue(key, defaultValue);
-    }
+    };
     /**
      * 設定値を動的に更新
      */
-    set(key, value) {
-        const keys = key.split('.');
-        let config = this.externalConfig;
-        for (let i = 0; i < keys.length - 1; i++) {
+    Config.prototype.set = function (key, value) {
+        var keys = key.split('.');
+        var config = this.externalConfig;
+        for (var i = 0; i < keys.length - 1; i++) {
             if (!(keys[i] in config)) {
                 config[keys[i]] = {};
             }
             config = config[keys[i]];
         }
         config[keys[keys.length - 1]] = value;
-        this.debugLog(`Config updated: ${key} = ${value}`);
-    }
-    readPromptReplyFile(filesRequested, modifiedDiff, commentText, previousThought, previousPlan) {
-        const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptReply.txt'), 'utf-8');
-        const context = {
+        this.debugLog("Config updated: ".concat(key, " = ").concat(value));
+    };
+    Config.prototype.readPromptReplyFile = function (filesRequested, modifiedDiff, commentText, previousThought, previousPlan) {
+        var promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptReply.txt'), 'utf-8');
+        var context = {
             filesRequested: filesRequested, // required section from previous message
             previousModifications: modifiedDiff, // diff from previous step
             previousThought: previousThought || '', // 前回の思考内容
             previousPlan: previousPlan || '' // 前回の計画内容
         };
-        const template = Handlebars.compile(promptRefineText, { noEscape: true });
+        var template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
-    }
-    readPromptModifiedFile(modifiedFiles, currentPlan, currentThought) {
-        const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified.txt'), 'utf-8');
-        const context = {
+    };
+    Config.prototype.readPromptModifiedFile = function (modifiedFiles, currentPlan, currentThought) {
+        var promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified.txt'), 'utf-8');
+        var context = {
             modifiedFiles: modifiedFiles, // diff that was just applied or restored
             current_plan: currentPlan || '', // 現在のプラン
             current_thought: currentThought || '' // 現在の思考
         };
-        const template = Handlebars.compile(promptRefineText, { noEscape: true });
+        var template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
-    }
-}
-export default Config;
-//# sourceMappingURL=config.js.map
+    };
+    return Config;
+}());
+exports.default = Config;

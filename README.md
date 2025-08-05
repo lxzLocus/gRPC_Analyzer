@@ -2,6 +2,48 @@
 
 ---
 
+## 📁 プロジェクト構造
+
+```
+/app/
+├── src/                          # TypeScript ソースコード
+│   ├── modules/                  # メインモジュール（開発用）
+│   │   ├── llmFlowController.ts  # メインコントローラークラス
+│   │   ├── config.ts            # 設定管理
+│   │   ├── messageHandler.ts    # LLMメッセージ処理
+│   │   ├── fileManager.ts       # ファイル操作
+│   │   ├── openAIClient.ts      # OpenAI API クライアント
+│   │   ├── types.ts             # 型定義
+│   │   ├── restoreDiff.ts       # 差分復元処理
+│   │   └── ...                  # その他のモジュール
+│   └── ...
+├── dist/                         # コンパイル済みJavaScript
+│   └── js/
+│       └── modules/              # 実行用モジュール（本番用）
+│           ├── llmFlowController.js
+│           ├── config.js
+│           ├── messageHandler.js
+│           └── ...               # 対応するJSファイル
+├── scripts/                      # 実行スクリプト
+│   ├── safeBatchRunner.js       # バッチ実行スクリプト
+│   └── README_SafeBatchRunner.md
+├── config/                       # 設定ファイル
+├── dataset/                      # テストデータセット
+├── docs/                         # プロジェクトドキュメント
+├── evaluation/                   # 評価システム（独立）
+├── log/                          # ログファイル
+├── logs/                         # 追加ログ
+├── output/                       # 出力ファイル
+├── package.json                  # Node.js 設定
+├── tsconfig.json                 # TypeScript 設定（src → dist/js）
+└── README.md                     # このファイル
+```
+
+### 開発・実行フロー
+1. **開発**: `src/modules/*.ts` でTypeScriptコードを編集
+2. **コンパイル**: `tsc` コマンドで `dist/js/modules/*.js` を生成
+3. **実行**: スクリプトは `dist/js/modules/` 内のコンパイル済みモジュールを使用
+
 ## アーキテクチャ
 
 ### システム構成図（クラス図）

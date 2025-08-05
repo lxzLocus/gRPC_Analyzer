@@ -1,6 +1,8 @@
-import * as fs from 'fs';
-export default class Logger {
-    constructor() {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var fs = require("fs");
+var Logger = /** @class */ (function () {
+    function Logger() {
         this.interactionLogs = [];
         this.experimentMetadata = null;
     }
@@ -9,19 +11,19 @@ export default class Logger {
     /**
      * 情報ログを出力（コンソール + ファイル出力対応）
      */
-    logInfo(message) {
-        const timestamp = new Date().toISOString();
-        const logMessage = `[INFO ${timestamp}] ${message}`;
+    Logger.prototype.logInfo = function (message) {
+        var timestamp = new Date().toISOString();
+        var logMessage = "[INFO ".concat(timestamp, "] ").concat(message);
         console.log(logMessage);
         // TODO: ファイル出力機能を後で実装
         // this.writeLogToFile(logMessage);
-    }
+    };
     /**
      * エラーログを出力
      */
-    logError(message, error) {
-        const timestamp = new Date().toISOString();
-        const logMessage = `[ERROR ${timestamp}] ${message}`;
+    Logger.prototype.logError = function (message, error) {
+        var timestamp = new Date().toISOString();
+        var logMessage = "[ERROR ".concat(timestamp, "] ").concat(message);
         if (error) {
             console.error(logMessage, error);
         }
@@ -29,73 +31,73 @@ export default class Logger {
             console.error(logMessage);
         }
         // TODO: ファイル出力機能を後で実装
-    }
+    };
     /**
      * 警告ログを出力
      */
-    logWarning(message) {
-        const timestamp = new Date().toISOString();
-        const logMessage = `[WARN ${timestamp}] ${message}`;
+    Logger.prototype.logWarning = function (message) {
+        var timestamp = new Date().toISOString();
+        var logMessage = "[WARN ".concat(timestamp, "] ").concat(message);
         console.warn(logMessage);
         // TODO: ファイル出力機能を後で実装
-    }
+    };
     /**
      * インタラクションログを追加
      */
-    addInteractionLog(turn, timestamp, llmRequest, llmResponse, systemAction) {
+    Logger.prototype.addInteractionLog = function (turn, timestamp, llmRequest, llmResponse, systemAction) {
         this.interactionLogs.push({
-            turn,
-            timestamp,
+            turn: turn,
+            timestamp: timestamp,
             llm_request: llmRequest,
             llm_response: llmResponse,
             system_action: systemAction
         });
-    }
+    };
     /**
      * 実験メタデータをセット
      */
-    setExperimentMetadata(experimentId, startTime, endTime, status, totalTurns, promptTokens, completionTokens) {
+    Logger.prototype.setExperimentMetadata = function (experimentId, startTime, endTime, status, totalTurns, promptTokens, completionTokens) {
         this.experimentMetadata = {
             experiment_id: experimentId,
             start_time: startTime,
             end_time: endTime,
-            status,
+            status: status,
             total_turns: totalTurns,
             total_tokens: {
-                promptTokens,
-                completionTokens,
+                promptTokens: promptTokens,
+                completionTokens: completionTokens,
                 total: promptTokens + completionTokens
             }
         };
-    }
+    };
     /**
      * 全てのログデータを結合して最終的なJSONオブジェクトとして取得
      */
-    getFinalJSON() {
+    Logger.prototype.getFinalJSON = function () {
         if (!this.experimentMetadata)
             return null;
         return {
             experiment_metadata: this.experimentMetadata,
             interaction_log: this.interactionLogs
         };
-    }
+    };
     /**
      * インタラクションログを取得
      */
-    getInteractionLog() {
+    Logger.prototype.getInteractionLog = function () {
         return this.interactionLogs;
-    }
+    };
     // =============================================================================
     // Phase 3-3: 詳細エラーログとパフォーマンス監視機能
     // =============================================================================
     /**
      * diff適用エラーの詳細ログ
      */
-    logDiffApplicationError(error, diffContent, targetFiles, errorContext) {
-        const timestamp = new Date().toISOString();
-        const errorDetails = {
+    Logger.prototype.logDiffApplicationError = function (error, diffContent, targetFiles, errorContext) {
+        var timestamp = new Date().toISOString();
+        var errorDetails = {
             type: 'DIFF_APPLICATION_ERROR',
-            timestamp,
+            timestamp: timestamp,
             error: {
                 message: error.message,
                 stack: error.stack,
@@ -110,20 +112,20 @@ export default class Logger {
             context: errorContext,
             systemState: this.captureSystemState()
         };
-        const logMessage = `[DIFF_ERROR ${timestamp}] ${error.message}`;
+        var logMessage = "[DIFF_ERROR ".concat(timestamp, "] ").concat(error.message);
         console.error(logMessage, errorDetails);
         // ファイル出力用の詳細ログも保存
         this.writeDetailedLogToFile('diff_errors', errorDetails);
-    }
+    };
     /**
      * LLM応答解析エラーの詳細ログ
      */
-    logLLMParsingError(rawResponse, parsingStage, expectedFormat, actualFormat, error) {
-        const timestamp = new Date().toISOString();
-        const errorDetails = {
+    Logger.prototype.logLLMParsingError = function (rawResponse, parsingStage, expectedFormat, actualFormat, error) {
+        var timestamp = new Date().toISOString();
+        var errorDetails = {
             type: 'LLM_PARSING_ERROR',
-            timestamp,
-            parsingStage,
+            timestamp: timestamp,
+            parsingStage: parsingStage,
             responseMetadata: {
                 length: rawResponse.length,
                 preview: rawResponse.substring(0, 300) + (rawResponse.length > 300 ? '...' : ''),
@@ -141,19 +143,19 @@ export default class Logger {
             } : null,
             suggestions: this.generateParsingSuggestions(rawResponse, expectedFormat)
         };
-        const logMessage = `[PARSING_ERROR ${timestamp}] Failed at stage: ${parsingStage}`;
+        var logMessage = "[PARSING_ERROR ".concat(timestamp, "] Failed at stage: ").concat(parsingStage);
         console.error(logMessage, errorDetails);
         this.writeDetailedLogToFile('parsing_errors', errorDetails);
-    }
+    };
     /**
      * ファイル操作エラーの詳細ログ
      */
-    logFileOperationError(operation, filePath, error, fileContext) {
-        const timestamp = new Date().toISOString();
-        const errorDetails = {
+    Logger.prototype.logFileOperationError = function (operation, filePath, error, fileContext) {
+        var timestamp = new Date().toISOString();
+        var errorDetails = {
             type: 'FILE_OPERATION_ERROR',
-            timestamp,
-            operation,
+            timestamp: timestamp,
+            operation: operation,
             fileInfo: {
                 path: filePath,
                 relativePath: this.getRelativePath(filePath),
@@ -170,42 +172,42 @@ export default class Logger {
             context: fileContext,
             recoveryOptions: this.generateFileErrorRecoveryOptions(error, operation)
         };
-        const logMessage = `[FILE_ERROR ${timestamp}] ${operation} failed for ${this.getRelativePath(filePath)}: ${error.message}`;
+        var logMessage = "[FILE_ERROR ".concat(timestamp, "] ").concat(operation, " failed for ").concat(this.getRelativePath(filePath), ": ").concat(error.message);
         console.error(logMessage, errorDetails);
         this.writeDetailedLogToFile('file_errors', errorDetails);
-    }
+    };
     /**
      * パフォーマンス測定の開始
      */
-    startPerformanceTimer(operationName) {
-        const timerId = `${operationName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const startTime = process.hrtime.bigint();
+    Logger.prototype.startPerformanceTimer = function (operationName) {
+        var timerId = "".concat(operationName, "_").concat(Date.now(), "_").concat(Math.random().toString(36).substr(2, 9));
+        var startTime = process.hrtime.bigint();
         if (!this.performanceTimers) {
             this.performanceTimers = new Map();
         }
         this.performanceTimers.set(timerId, {
-            operationName,
-            startTime,
+            operationName: operationName,
+            startTime: startTime,
             memoryStart: process.memoryUsage()
         });
-        this.logInfo(`⏱️ Performance timer started: ${operationName} [${timerId}]`);
+        this.logInfo("\u23F1\uFE0F Performance timer started: ".concat(operationName, " [").concat(timerId, "]"));
         return timerId;
-    }
+    };
     /**
      * パフォーマンス測定の終了とログ記録
      */
-    endPerformanceTimer(timerId) {
+    Logger.prototype.endPerformanceTimer = function (timerId) {
         if (!this.performanceTimers || !this.performanceTimers.has(timerId)) {
-            this.logWarning(`Performance timer not found: ${timerId}`);
+            this.logWarning("Performance timer not found: ".concat(timerId));
             return;
         }
-        const timerData = this.performanceTimers.get(timerId);
-        const endTime = process.hrtime.bigint();
-        const memoryEnd = process.memoryUsage();
-        const duration = Number(endTime - timerData.startTime) / 1000000; // Convert to milliseconds
-        const performanceLog = {
+        var timerData = this.performanceTimers.get(timerId);
+        var endTime = process.hrtime.bigint();
+        var memoryEnd = process.memoryUsage();
+        var duration = Number(endTime - timerData.startTime) / 1000000; // Convert to milliseconds
+        var performanceLog = {
             operationName: timerData.operationName,
-            timerId,
+            timerId: timerId,
             duration: {
                 milliseconds: duration,
                 seconds: duration / 1000
@@ -221,11 +223,11 @@ export default class Logger {
             },
             timestamp: new Date().toISOString()
         };
-        this.logInfo(`⏱️ Performance: ${timerData.operationName} completed in ${duration.toFixed(2)}ms`);
+        this.logInfo("\u23F1\uFE0F Performance: ".concat(timerData.operationName, " completed in ").concat(duration.toFixed(2), "ms"));
         this.writeDetailedLogToFile('performance', performanceLog);
         this.performanceTimers.delete(timerId);
-    }
-    captureSystemState() {
+    };
+    Logger.prototype.captureSystemState = function () {
         return {
             memory: process.memoryUsage(),
             uptime: process.uptime(),
@@ -233,38 +235,38 @@ export default class Logger {
             nodeVersion: process.version,
             timestamp: new Date().toISOString()
         };
-    }
-    analyzeResponseTags(response) {
-        const tags = ['%_Thought_%', '%_Plan_%', '%_Reply Required_%', '%_Modified_%', '%%_Fin_%%'];
-        const found = tags.map(tag => ({
-            tag,
+    };
+    Logger.prototype.analyzeResponseTags = function (response) {
+        var tags = ['%_Thought_%', '%_Plan_%', '%_Reply Required_%', '%_Modified_%', '%%_Fin_%%'];
+        var found = tags.map(function (tag) { return ({
+            tag: tag,
             found: response.includes(tag),
             count: (response.match(new RegExp(tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length
-        }));
+        }); });
         return {
-            validTags: found.filter(t => t.found),
-            invalidTags: found.filter(t => !t.found),
-            totalTags: found.filter(t => t.found).length
+            validTags: found.filter(function (t) { return t.found; }),
+            invalidTags: found.filter(function (t) { return !t.found; }),
+            totalTags: found.filter(function (t) { return t.found; }).length
         };
-    }
-    calculateStringSimilarity(str1, str2) {
-        const longer = str1.length > str2.length ? str1 : str2;
-        const shorter = str1.length > str2.length ? str2 : str1;
+    };
+    Logger.prototype.calculateStringSimilarity = function (str1, str2) {
+        var longer = str1.length > str2.length ? str1 : str2;
+        var shorter = str1.length > str2.length ? str2 : str1;
         if (longer.length === 0)
             return 1.0;
-        const distance = this.levenshteinDistance(longer, shorter);
+        var distance = this.levenshteinDistance(longer, shorter);
         return (longer.length - distance) / longer.length;
-    }
-    levenshteinDistance(str1, str2) {
-        const matrix = [];
-        for (let i = 0; i <= str2.length; i++) {
+    };
+    Logger.prototype.levenshteinDistance = function (str1, str2) {
+        var matrix = [];
+        for (var i = 0; i <= str2.length; i++) {
             matrix[i] = [i];
         }
-        for (let j = 0; j <= str1.length; j++) {
+        for (var j = 0; j <= str1.length; j++) {
             matrix[0][j] = j;
         }
-        for (let i = 1; i <= str2.length; i++) {
-            for (let j = 1; j <= str1.length; j++) {
+        for (var i = 1; i <= str2.length; i++) {
+            for (var j = 1; j <= str1.length; j++) {
                 if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
                     matrix[i][j] = matrix[i - 1][j - 1];
                 }
@@ -274,9 +276,9 @@ export default class Logger {
             }
         }
         return matrix[str2.length][str1.length];
-    }
-    generateParsingSuggestions(response, expectedFormat) {
-        const suggestions = [];
+    };
+    Logger.prototype.generateParsingSuggestions = function (response, expectedFormat) {
+        var suggestions = [];
         if (!response.includes('%_')) {
             suggestions.push('Response does not contain any tag markers (%)');
         }
@@ -287,43 +289,43 @@ export default class Logger {
             suggestions.push('Response seems too short for a valid LLM response');
         }
         return suggestions;
-    }
-    getRelativePath(filePath) {
+    };
+    Logger.prototype.getRelativePath = function (filePath) {
         // TODO: プロジェクトルートからの相対パスを計算
         return filePath.replace('/app/', '');
-    }
-    checkFileExists(filePath) {
+    };
+    Logger.prototype.checkFileExists = function (filePath) {
         try {
             return fs.existsSync(filePath);
         }
-        catch {
+        catch (_a) {
             return false;
         }
-    }
-    getFileSize(filePath) {
+    };
+    Logger.prototype.getFileSize = function (filePath) {
         try {
             return fs.statSync(filePath).size;
         }
-        catch {
+        catch (_a) {
             return null;
         }
-    }
-    checkFilePermissions(filePath) {
+    };
+    Logger.prototype.checkFilePermissions = function (filePath) {
         try {
-            const stats = fs.statSync(filePath);
+            var stats = fs.statSync(filePath);
             return {
                 readable: true, // ファイルが存在すれば読めると仮定
                 writable: true,
                 executable: (stats.mode & parseInt('111', 8)) !== 0
             };
         }
-        catch {
+        catch (_a) {
             return { readable: false, writable: false, executable: false };
         }
-    }
-    generateFileErrorRecoveryOptions(error, operation) {
-        const options = [];
-        const errorCode = error.code;
+    };
+    Logger.prototype.generateFileErrorRecoveryOptions = function (error, operation) {
+        var options = [];
+        var errorCode = error.code;
         switch (errorCode) {
             case 'ENOENT':
                 options.push('Check if the file path is correct');
@@ -337,46 +339,46 @@ export default class Logger {
                 options.push('Path points to a directory, not a file');
                 break;
             default:
-                options.push(`Investigate ${errorCode} error code`);
+                options.push("Investigate ".concat(errorCode, " error code"));
         }
         return options;
-    }
-    writeDetailedLogToFile(category, logData) {
+    };
+    Logger.prototype.writeDetailedLogToFile = function (category, logData) {
         try {
             // ログディレクトリを作成
-            const logDir = `/app/logs/${category}`;
+            var logDir = "/app/logs/".concat(category);
             if (!fs.existsSync(logDir)) {
                 fs.mkdirSync(logDir, { recursive: true });
             }
             // タイムスタンプ付きのファイル名
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const logFile = `${logDir}/${timestamp}.json`;
+            var timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            var logFile = "".concat(logDir, "/").concat(timestamp, ".json");
             // ファイルに詳細ログを書き込み
             fs.writeFileSync(logFile, JSON.stringify(logData, null, 2), 'utf-8');
             // コンソールにも簡易版を出力
-            console.log(`[DETAILED_LOG_${category.toUpperCase()}] Logged to: ${logFile}`);
+            console.log("[DETAILED_LOG_".concat(category.toUpperCase(), "] Logged to: ").concat(logFile));
         }
         catch (error) {
             // ファイル書き込みに失敗した場合はコンソールのみに出力
-            console.log(`[DETAILED_LOG_${category.toUpperCase()}]`, JSON.stringify(logData, null, 2));
+            console.log("[DETAILED_LOG_".concat(category.toUpperCase(), "]"), JSON.stringify(logData, null, 2));
             console.error('Failed to write log to file:', error);
         }
-    }
+    };
     /**
      * 統計情報の自動レポート生成
      */
-    generateDetailedReport() {
-        const metadata = this.experimentMetadata;
-        const interactions = this.interactionLogs;
+    Logger.prototype.generateDetailedReport = function () {
+        var metadata = this.experimentMetadata;
+        var interactions = this.interactionLogs;
         if (!metadata) {
             return { error: 'No experiment metadata available' };
         }
         // エラー統計の計算
-        const errorStats = this.calculateErrorStatistics(interactions);
+        var errorStats = this.calculateErrorStatistics(interactions);
         // パフォーマンス統計の計算  
-        const performanceStats = this.calculatePerformanceStatistics(interactions);
+        var performanceStats = this.calculatePerformanceStatistics(interactions);
         // 成功率の計算
-        const successRate = this.calculateSuccessRate(interactions);
+        var successRate = this.calculateSuccessRate(interactions);
         return {
             summary: {
                 experimentId: metadata.experiment_id,
@@ -384,20 +386,21 @@ export default class Logger {
                 totalTokens: metadata.total_tokens,
                 duration: this.calculateDuration(metadata.start_time, metadata.end_time),
                 status: metadata.status,
-                successRate
+                successRate: successRate
             },
             errorAnalysis: errorStats,
             performanceAnalysis: performanceStats,
             recommendations: this.generateRecommendations(errorStats, performanceStats, successRate),
             generatedAt: new Date().toISOString()
         };
-    }
-    calculateErrorStatistics(interactions) {
-        const errorsByType = {};
-        const errorsByPhase = {};
-        let totalErrors = 0;
-        let recoveredErrors = 0;
-        for (const interaction of interactions) {
+    };
+    Logger.prototype.calculateErrorStatistics = function (interactions) {
+        var errorsByType = {};
+        var errorsByPhase = {};
+        var totalErrors = 0;
+        var recoveredErrors = 0;
+        for (var _i = 0, interactions_1 = interactions; _i < interactions_1.length; _i++) {
+            var interaction = interactions_1[_i];
             // システムアクションからエラーを検出
             if (interaction.system_action.type.includes('ERROR') ||
                 interaction.system_action.details.toLowerCase().includes('error')) {
@@ -416,7 +419,7 @@ export default class Logger {
                     errorsByType['other'] = (errorsByType['other'] || 0) + 1;
                 }
                 // フェーズ別の分類
-                const turn = interaction.turn;
+                var turn = interaction.turn;
                 if (turn <= 3) {
                     errorsByPhase['initial'] = (errorsByPhase['initial'] || 0) + 1;
                 }
@@ -434,13 +437,14 @@ export default class Logger {
             }
         }
         return {
-            totalErrors,
-            errorsByType,
-            errorsByPhase,
+            totalErrors: totalErrors,
+            errorsByType: errorsByType,
+            errorsByPhase: errorsByPhase,
             recoveryRate: totalErrors > 0 ? (recoveredErrors / totalErrors) * 100 : 100
         };
-    }
-    calculatePerformanceStatistics(interactions) {
+    };
+    Logger.prototype.calculatePerformanceStatistics = function (interactions) {
+        var _a, _b;
         if (interactions.length === 0) {
             return {
                 averageResponseTime: 0,
@@ -449,24 +453,25 @@ export default class Logger {
                 turnDistribution: {}
             };
         }
-        let totalTokens = 0;
-        let totalResponseTime = 0;
-        const turnDistribution = {};
-        for (const interaction of interactions) {
+        var totalTokens = 0;
+        var totalResponseTime = 0;
+        var turnDistribution = {};
+        for (var _i = 0, interactions_2 = interactions; _i < interactions_2.length; _i++) {
+            var interaction = interactions_2[_i];
             // トークン使用量の集計
             totalTokens += interaction.llm_response.usage.total;
             // レスポンス時間の推定（これは実際のタイムスタンプから計算すべき）
             // 現在は仮の値として処理
             totalResponseTime += 2000; // 2秒と仮定
             // ターン数の分布
-            const turnRange = Math.floor(interaction.turn / 5) * 5; // 5ターンごとに分類
-            const key = `${turnRange}-${turnRange + 4}`;
+            var turnRange = Math.floor(interaction.turn / 5) * 5; // 5ターンごとに分類
+            var key = "".concat(turnRange, "-").concat(turnRange + 4);
             turnDistribution[key] = (turnDistribution[key] || 0) + 1;
         }
         // 効率性の計算（トークン数に対するタスク完了率）
-        const lastInteraction = interactions[interactions.length - 1];
-        const hasFinTag = lastInteraction?.llm_response?.parsed_content?.has_fin_tag || false;
-        const efficiency = hasFinTag ? (100 / totalTokens) * 1000 : 0; // 1000トークンあたりのスコア
+        var lastInteraction = interactions[interactions.length - 1];
+        var hasFinTag = ((_b = (_a = lastInteraction === null || lastInteraction === void 0 ? void 0 : lastInteraction.llm_response) === null || _a === void 0 ? void 0 : _a.parsed_content) === null || _b === void 0 ? void 0 : _b.has_fin_tag) || false;
+        var efficiency = hasFinTag ? (100 / totalTokens) * 1000 : 0; // 1000トークンあたりのスコア
         return {
             averageResponseTime: totalResponseTime / interactions.length,
             tokenUsageEfficiency: efficiency,
@@ -474,28 +479,29 @@ export default class Logger {
                 estimatedPeakUsage: totalTokens * 0.004, // 1トークン ≈ 4バイトと仮定
                 totalTokensProcessed: totalTokens
             },
-            turnDistribution
+            turnDistribution: turnDistribution
         };
-    }
-    calculateSuccessRate(interactions) {
+    };
+    Logger.prototype.calculateSuccessRate = function (interactions) {
+        var _a, _b;
         if (interactions.length === 0)
             return 0;
         // 最後のインタラクションがFin_tagを持っているかチェック
-        const lastInteraction = interactions[interactions.length - 1];
-        return lastInteraction?.llm_response?.parsed_content?.has_fin_tag ? 100 : 0;
-    }
-    calculateDuration(startTime, endTime) {
-        const start = new Date(startTime);
-        const end = new Date(endTime);
-        const durationMs = end.getTime() - start.getTime();
+        var lastInteraction = interactions[interactions.length - 1];
+        return ((_b = (_a = lastInteraction === null || lastInteraction === void 0 ? void 0 : lastInteraction.llm_response) === null || _a === void 0 ? void 0 : _a.parsed_content) === null || _b === void 0 ? void 0 : _b.has_fin_tag) ? 100 : 0;
+    };
+    Logger.prototype.calculateDuration = function (startTime, endTime) {
+        var start = new Date(startTime);
+        var end = new Date(endTime);
+        var durationMs = end.getTime() - start.getTime();
         return {
             milliseconds: durationMs,
             seconds: durationMs / 1000,
             minutes: durationMs / (1000 * 60)
         };
-    }
-    generateRecommendations(errorStats, performanceStats, successRate) {
-        const recommendations = [];
+    };
+    Logger.prototype.generateRecommendations = function (errorStats, performanceStats, successRate) {
+        var recommendations = [];
         // 成功率に基づく推奨事項
         if (successRate < 100) {
             recommendations.push('Consider improving error handling and recovery mechanisms');
@@ -532,6 +538,7 @@ export default class Logger {
             recommendations.push('Consider running integration tests for comprehensive validation');
         }
         return recommendations;
-    }
-}
-//# sourceMappingURL=logger.js.map
+    };
+    return Logger;
+}());
+exports.default = Logger;

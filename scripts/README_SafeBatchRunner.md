@@ -2,6 +2,18 @@
 
 大量のデータセットで安全にLLMFlowControllerを実行するためのエラーハンドリング強化ラッパーです。
 
+## 📁 ファイル構造と実行方法
+
+```
+/app/
+├── src/modules/llmFlowController.ts   # 開発用TypeScriptソース
+├── dist/js/modules/llmFlowController.js  # 実行用コンパイル済みJS（本バッチランナーが使用）
+└── scripts/safeBatchRunner.js        # 本バッチランナー（dist/js/modules/を参照）
+```
+
+**重要**: バッチランナーは `dist/js/modules/llmFlowController.js` を使用します。
+TypeScriptファイルを変更した場合は `tsc` コマンドでコンパイルしてください。
+
 ## 特徴
 
 - **エラーハンドリング**: 個別のpullRequestで発生した例外をキャッチし、処理を継続
