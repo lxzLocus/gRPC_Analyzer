@@ -34,20 +34,36 @@ cd /app/.docker
 
 ```text
 /app/
-├── scripts/                       # 実行可能スクリプト
-│   ├── run_full_evaluation.sh     # 全ログ評価（推奨）
-│   ├── run_real_llm_evaluation.sh # 学習・テスト用
-│   ├── real_llm_evaluator.py      # メイン評価エンジン
-│   ├── main.py                    # エントリーポイント
-│   ├── evaluation_log_viewer.py   # ログ詳細表示
-│   ├── verification_report.py     # レポート生成
-│   ├── llm_response_viewer.py     # LLM応答詳細表示
-│   ├── detailed_analysis.py       # 詳細分析
-│   ├── full_dataset_evaluation.py # 大規模データセット評価
-│   ├── demo_openai_models.py      # OpenAI接続テスト
-│   ├── verify_single_repo.py      # 単一リポ検証
-│   └── analyze_evaluation_results.py # 評価結果分析
+├── main.py                        # メインエントリーポイント
 ├── src/                           # コアライブラリ
+│   ├── cli/                       # コマンドラインツール
+│   │   ├── real_llm_evaluator.py  # メイン評価エンジン
+│   │   ├── evaluation_log_viewer.py # ログ詳細表示
+│   │   ├── llm_response_viewer.py  # LLM応答詳細表示
+│   │   ├── verification_report.py  # レポート生成
+│   │   ├── verify_single_repo.py   # 単一リポ検証
+│   │   ├── run_full_evaluation.sh  # 全ログ評価（推奨）
+│   │   └── run_real_llm_evaluation.sh # 学習・テスト用
+│   ├── analysis/                  # 分析ツール
+│   │   ├── analyze_evaluation_results.py # 評価結果分析
+│   │   ├── detailed_analysis.py    # 詳細分析
+│   │   ├── full_dataset_evaluation.py # 大規模データセット評価
+│   │   ├── apr_dataset_analyzer.py # APRデータセット分析
+│   │   ├── enhanced_apr_analyzer.py # 拡張APR分析
+│   │   └── task_category_classifier.py # タスク分類
+│   ├── demo/                      # デモンストレーション
+│   │   └── demo_openai_models.py   # OpenAI接続テスト
+│   ├── evaluators/                # 評価器
+│   │   ├── compliance_evaluator.py # システム適合性評価
+│   │   ├── quality_evaluator.py    # 品質評価
+│   │   └── integrated_evaluator.py # 統合評価
+│   ├── llm/                       # LLM統合
+│   │   └── llm_integration.py      # LLM接続・管理
+│   ├── utils/                     # ユーティリティ
+│   │   ├── log_parser.py           # ログ解析
+│   │   ├── log_iterator.py         # ログ反復処理
+│   │   └── template_manager.py     # テンプレート管理
+│   └── tests/                     # テストコード
 │   ├── evaluators/
 │   ├── analyzers/
 │   ├── llm/
@@ -90,17 +106,33 @@ cd /app/.docker
 
 ## ⚙️ 主要コマンド
 
+### 🎯 統合コマンドライン
+
+```bash
+# APR評価実行
+python main.py evaluate --repo boulder --max-logs 3 --provider openai --model gpt-4.1-mini
+
+# 結果分析
+python main.py analyze --input-dir /app/verification_results
+
+# ログ表示
+python main.py view --log-file /app/logs/evaluation.log
+
+# デモ実行
+python main.py demo --model gpt-4.1-mini
+```
+
 ### 🔥 全ログ評価（推奨）
 
 **すべてのAPRログ（86ログ）を評価したい場合**:
 
 ```bash
 # 全ログ一括評価（推奨）
-bash scripts/run_full_evaluation.sh
+bash src/cli/run_full_evaluation.sh
 
 # または個別プロジェクト評価
-python scripts/real_llm_evaluator.py --repo boulder --max-logs 999 --provider openai --model gpt-4.1-mini
-python scripts/real_llm_evaluator.py --repo daos --max-logs 999 --provider openai --model gpt-4.1-mini
+python src/cli/real_llm_evaluator.py --repo boulder --max-logs 999 --provider openai --model gpt-4.1-mini
+python src/cli/real_llm_evaluator.py --repo daos --max-logs 999 --provider openai --model gpt-4.1-mini
 # ...全11プロジェクト
 ```
 

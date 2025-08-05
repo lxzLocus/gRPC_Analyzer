@@ -3,7 +3,7 @@ FROM python:3.12.4
 WORKDIR /app
 
 # 評価システム用requirements.txtをコピー
-COPY .docker/requirements_evaluation.txt requirements.txt
+COPY requirements_evaluation.txt requirements.txt
 
 # システムパッケージとPythonライブラリのインストール
 RUN apt-get update && apt-get install -y \
@@ -16,13 +16,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 評価システム用のディレクトリを作成
-RUN mkdir -p /app/evaluation-results \
-    && mkdir -p /app/evaluation/logs \
-    && mkdir -p /app/evaluation/cache
+RUN mkdir -p /app/results \
+    && mkdir -p /app/logs \
+    && mkdir -p /app/cache
 
 # Pythonパスの設定
 ENV PYTHONPATH=/app
 ENV EVALUATION_MODE=production
 
 # 評価システム実行用のエントリーポイント
-CMD ["python", "-c", "print('Evaluation system ready. Run specific evaluation commands.')"]
+#CMD ["python", "-c", "print('Evaluation system ready. Run: python main.py --help')"]

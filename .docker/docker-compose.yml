@@ -45,7 +45,7 @@ services:
   # ===========================================
   evaluation-system:
     build:
-      context: ../evaluation
+      context: ../
       dockerfile: Dockerfile_evaluation
     container_name: grpc-analyzer-evaluation
     tty: true
