@@ -145,7 +145,7 @@ def generate_verification_report():
     
     print("=" * 60)
     print("✅ 動作検証完了 - システムは正常に動作しています")
-    print("📁 詳細結果: /app/verification_results/")
+    print("📁 詳細結果: /app/output/verification_results/")
     print("🚀 本番環境での利用準備が整いました")
 
 

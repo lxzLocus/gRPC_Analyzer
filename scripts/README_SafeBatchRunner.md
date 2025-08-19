@@ -32,8 +32,8 @@ TypeScriptファイルを変更した場合は `tsc` コマンドでコンパイ
 node scripts/safeBatchRunner.js /app/dataset/test /app/output
 
 # 大量データセットでの実行
-node scripts/safeBatchRunner.js /app/dataset/filtered_commit /app/output
-
+node scripts/safeBatchRunner.js /app/dataset/filtered_protoChanged /app/output
+node --expose-gc scripts/safeBatchRunner.mjs /app/dataset/filtered_protoChanged /app/output
 # カスタムディレクトリでの実行
 node scripts/safeBatchRunner.js /path/to/dataset /path/to/output
 ```

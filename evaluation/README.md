@@ -89,7 +89,8 @@ cd /app/.docker
 ```
 ├── apr-logs/                      # 入力APRログ（86件）
 ├── logs/                          # 評価ログ出力
-├── verification_results/          # 評価結果
+├── output/
+│   └── verification_results/          # 評価結果
 ├── config/                        # 設定ファイル
 ├── evaluation-design/             # 評価設計
 ├── Dockerfile_evaluation          # Docker設定
@@ -113,7 +114,7 @@ cd /app/.docker
 python main.py evaluate --repo boulder --max-logs 3 --provider openai --model gpt-4.1-mini
 
 # 結果分析
-python main.py analyze --input-dir /app/verification_results
+python main.py analyze --input-dir /app/output/verification_results
 
 # ログ表示
 python main.py view --log-file /app/logs/evaluation.log

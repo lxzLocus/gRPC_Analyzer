@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     git \
     curl \
+    bc \
+    jq \
     && pip install --upgrade pip \
     && pip install -r requirements.txt \
     && apt-get clean \

@@ -23,7 +23,7 @@ async def detailed_repository_analysis(repo_name: str = "servantes", max_logs: i
     print("=" * 60)
     
     # 結果保存ディレクトリを作成
-    results_dir = Path("/app/verification_results")
+    results_dir = Path("/app/output/verification_results")
     results_dir.mkdir(exist_ok=True)
     
     # タイムスタンプ付きファイル名
@@ -198,7 +198,7 @@ async def main():
     results = await detailed_repository_analysis(repo_name, max_logs)
     
     print(f"\n✅ 全分析完了")
-    print(f"📁 結果ファイルは /app/verification_results/ に保存されました")
+    print(f"📁 結果ファイルは /app/output/verification_results/ に保存されました")
 
 
 if __name__ == "__main__":

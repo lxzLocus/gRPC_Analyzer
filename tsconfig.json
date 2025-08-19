@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "es2020",
-    "module": "es2020",
+    "module": "esnext",
     "moduleResolution": "node", 
     "sourceMap": true,
     "outDir": "./dist/js/",
@@ -12,8 +12,6 @@
     "strict": true,
     "skipLibCheck": true,
     "lib": ["es2020", "dom"]
-    //すべてのファイルをモジュールと見なしてくれるため，別のファイルに同じ変数名があっても問題ないと判定される
-    //"moduleDetection": "force"
   },
   "include": ["src/**/*"],
   "exclude": ["**/dataset/*", "**/node_modules/*", "/app/dist/*", "/app/docs/*", "scripts/**/*"]

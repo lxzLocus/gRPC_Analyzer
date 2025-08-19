@@ -47,16 +47,16 @@ echo ""
 echo "# servantesリポジトリを5ログまで評価（gpt-4.1使用）"
 echo "python /app/src/cli/real_llm_evaluator.py --repo servantes --max-logs 5 --provider openai --model gpt-4.1"
 echo "💰 コスト効率重視（GPT-3.5 Turbo）:"
-echo "python scripts/real_llm_evaluator.py --repo emojivoto --max-logs 2 --provider openai --model gpt-3.5-turbo"
+echo "python src/cli/real_llm_evaluator.py --repo emojivoto --max-logs 2 --provider openai --model gpt-3.5-turbo"
 echo ""
 echo "🔍 複数リポジトリ評価:"
 for repo in servantes boulder emojivoto; do
-    echo "python scripts/real_llm_evaluator.py --repo $repo --max-logs 2 --provider openai --model gpt-4.1-mini"
+    echo "python src/cli/real_llm_evaluator.py --repo $repo --max-logs 2 --provider openai --model gpt-4.1-mini"
 done
 echo ""
 echo "📈 詳細ログ確認:"
 echo "ls -la /app/logs/"
-echo "python scripts/evaluation_log_viewer.py --latest"
+echo "python src/cli/evaluation_log_viewer.py --latest"
 echo ""
 echo "💡 推奨設定:"
 echo "- テスト段階: --provider mock または --model gpt-4.1-mini --max-logs 2"
@@ -79,13 +79,13 @@ echo ""
 
 if [ -n "$OPENAI_API_KEY" ]; then
     echo "🎯 テスト実行を開始しますか？"
-    echo "実行コマンド: python scripts/real_llm_evaluator.py --repo servantes --max-logs 2 --provider openai --model gpt-4.1-mini"
+    echo "実行コマンド: python src/cli/real_llm_evaluator.py --repo servantes --max-logs 2 --provider openai --model gpt-4.1-mini"
     echo ""
     read -p "実行しますか? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo "🚀 テスト実行開始..."
-        cd /app && python scripts/real_llm_evaluator.py --repo servantes --max-logs 2 --provider openai --model gpt-4.1-mini
+        cd /app && python src/cli/real_llm_evaluator.py --repo servantes --max-logs 2 --provider openai --model gpt-4.1-mini
     else
         echo "⏹️ 実行をキャンセルしました"
     fi

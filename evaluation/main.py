@@ -13,7 +13,7 @@ Commands:
 
 Examples:
     python main.py evaluate --repo boulder --max-logs 3
-    python main.py analyze --input-dir /app/verification_results
+    python main.py analyze --input-dir /app/output/verification_results
     python main.py view --log-file /app/logs/evaluation.log
     python main.py demo --model gpt-4.1-mini
 """
@@ -40,7 +40,7 @@ def main():
     
     # analyze コマンド
     analyze_parser = subparsers.add_parser('analyze', help='結果の分析を実行')
-    analyze_parser.add_argument('--input-dir', '-i', default='/app/verification_results', help='入力ディレクトリ')
+    analyze_parser.add_argument('--input-dir', '-i', default='/app/output/verification_results', help='入力ディレクトリ')
     analyze_parser.add_argument('--output-file', '-o', help='出力ファイル')
     
     # view コマンド

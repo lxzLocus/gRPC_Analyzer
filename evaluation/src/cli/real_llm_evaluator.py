@@ -328,7 +328,9 @@ async def run_real_llm_evaluation(repository: str = "servantes", max_logs: int =
         
         # 結果を保存
         timestamp = logger.timestamp
-        output_file = f"/app/verification_results/real_llm_analysis_{repository}_{timestamp}.json"
+        output_dir = Path("/app/output/verification_results")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_file = output_dir / f"real_llm_analysis_{repository}_{timestamp}.json"
         
         output_data = {
             f"Real_{llm_provider.upper()}_Analysis": result

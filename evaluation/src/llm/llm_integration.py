@@ -62,16 +62,25 @@ class OpenAIProvider(BaseLLMProvider):
                 from openai import AsyncOpenAI
                 client = AsyncOpenAI(api_key=self.api_key)
                 
-                response = await client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[
+                # GPT-5の場合はサポートされていないパラメータを除外
+                request_params = {
+                    "model": self.model_name,
+                    "messages": [
                         {"role": "system", "content": "You are a helpful AI assistant specializing in code analysis and evaluation. You must respond with valid JSON only."},
                         {"role": "user", "content": prompt}
                     ],
-                    max_tokens=kwargs.get("max_tokens", 4000),
-                    temperature=kwargs.get("temperature", 0.1),
-                    response_format={"type": "json_object"}
-                )
+                    "response_format": {"type": "json_object"}
+                }
+                
+                # GPT-5以外の場合のみmax_tokensとtemperatureを設定
+                if not self.model_name.startswith("gpt-5"):
+                    request_params["max_tokens"] = kwargs.get("max_tokens", 4000)
+                    request_params["temperature"] = kwargs.get("temperature", 0.1)
+                    print(f"🔧 {self.model_name}: max_tokens={request_params['max_tokens']}, temperature={request_params['temperature']} を設定")
+                else:
+                    print(f"🔧 {self.model_name}: GPT-5モデルのためmax_tokens・temperatureを無効化")
+                
+                response = await client.chat.completions.create(**request_params)
                 
                 return LLMResponse(
                     content=response.choices[0].message.content,
@@ -179,6 +188,14 @@ class MockLLMProvider(BaseLLMProvider):
     async def generate(self, prompt: str, **kwargs) -> LLMResponse:
         """モック応答を生成"""
         
+        # GPT-5モデルの場合の処理ログ（MockでもOpenAIと同じ動作を模擬）
+        if self.model_name.startswith("gpt-5"):
+            print(f"🔧 {self.model_name}: GPT-5モデルのためmax_tokens・temperatureを無効化 (Mock)")
+        else:
+            max_tokens = kwargs.get('max_tokens', 4000)
+            temperature = kwargs.get('temperature', 0.1)
+            print(f"🔧 {self.model_name}: max_tokens={max_tokens}, temperature={temperature} を設定 (Mock)")
+        
         # 簡単な遅延をシミュレート
         await asyncio.sleep(0.1)
         
@@ -270,7 +287,8 @@ class LLMEvaluationManager:
         print(f"📝 プロンプト長: {len(prompt):,}文字")
         
         start_time = time.time()
-        response = await self.provider.generate(prompt)
+        # max_tokensパラメータを渡すように修正
+        response = await self.provider.generate(prompt, max_tokens=4000)
         end_time = time.time()
         
         if response.success:

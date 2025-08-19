@@ -24,7 +24,7 @@ class EvaluationLogViewer:
         
         # 各種ログディレクトリ
         self.log_locations = {
-            "verification": self.workspace_path / "verification_results",
+            "verification": self.workspace_path / "output" / "verification_results",
             "logs": self.workspace_path / "logs", 
             "llm_evaluation": self.workspace_path / "logs",  # ログ場所を統一
             "apr_output": self.workspace_path / "apr-output",
@@ -237,8 +237,7 @@ class EvaluationLogViewer:
             elif diff < 0:
                 trend = "📉"  
             else:
-                trend = "➡️"
-            
+                trend = "➡️"                python src/cli/real_llm_evaluator.py --repo boulder --max-logs 1 --provider mock --model gpt-5
             print(f"  {metric_name}: {val1:.3f} → {val2:.3f} {trend} ({diff:+.3f})")
 
 

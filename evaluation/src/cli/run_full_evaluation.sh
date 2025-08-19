@@ -26,7 +26,7 @@ else
     echo ""
     echo "💡 評価モードを選択してください:"
     echo "1. Mock LLM（テスト用・高速・無料）"
-    echo "2. OpenAI gpt-4.1-mini（高品質・低コスト）"
+    echo "2. OpenAI gpt-5"
     echo "3. OpenAI gpt-4.1（最高品質・高コスト）"
     echo ""
     read -p "選択 (1-3, デフォルト:1): " -n 1 -r
@@ -35,7 +35,7 @@ else
     case $REPLY in
         2)
             PROVIDER="openai"
-            MODEL="gpt-4.1-mini"
+            MODEL="gpt-5"
             ;;
         3)
             PROVIDER="openai"
@@ -145,7 +145,7 @@ for PROJECT in ${PROJECTS}; do
     PROJECT_START=$(date +%s)
     
     # 評価実行
-    if cd /app && python scripts/real_llm_evaluator.py --repo "${PROJECT}" --max-logs 999 --provider "${PROVIDER}" --model "${MODEL}"; then
+    if cd /app && python src/cli/real_llm_evaluator.py --repo "${PROJECT}" --max-logs 999 --provider "${PROVIDER}" --model "${MODEL}"; then
         PROJECT_END=$(date +%s)
         PROJECT_TIME=$((PROJECT_END - PROJECT_START))
         
@@ -159,7 +159,7 @@ for PROJECT in ${PROJECTS}; do
         mkdir -p "${PROJECT_DETAILED_DIR}"
         
         # 評価結果ファイルを整理してコピー
-        LATEST_RESULT=$(ls -t /app/verification_results/real_llm_analysis_${PROJECT}_*.json 2>/dev/null | head -1)
+        LATEST_RESULT=$(ls -t /app/output/verification_results/real_llm_analysis_${PROJECT}_*.json 2>/dev/null | head -1)
         if [ -n "${LATEST_RESULT}" ]; then
             # ファイル名から詳細情報を抽出してリネーム
             RESULT_BASENAME=$(basename "${LATEST_RESULT}")
