@@ -88,7 +88,7 @@ services:
         target: /app
       # データセット（読み取り専用）
       - type: bind
-        source: F:/Workspace/gRPC_Analyzer/dataset
+        source: E:/Workspace/gRPC_Analyzer/dataset
         target: /app/dataset
         read_only: true
       # APRログ（読み取り専用）

@@ -302,7 +302,9 @@ class SafeBatchRunner {
             /502|503|504/i,
             /JSON.*parse/i,
             /SyntaxError/i,
-            /unexpected/i
+            /unexpected/i,
+            /APIConnectionTimeoutError/i,  // OpenAIタイムアウトエラーを追加
+            /request.*timed.*out/i         // 一般的なタイムアウトメッセージ
         ];
 
         const nonRetryablePatterns = [

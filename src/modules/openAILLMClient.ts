@@ -33,7 +33,7 @@ export class OpenAILLMClient implements LLMClient {
             
             this.client = new OpenAI({
                 apiKey: apiKey,
-                timeout: this.config.get('llm.timeout', 30000)
+                timeout: this.config.get('llm.timeout', 30000) // 元の30秒に戻す
             });
             
             this.isInitialized = true;
@@ -67,11 +67,19 @@ export class OpenAILLMClient implements LLMClient {
             
             console.log(`🚀 OpenAI request: model=${model}, maxTokens=${maxTokens}`);
 
-            const response = await this.client.chat.completions.create({
+            // タイムアウト付きのAPI呼び出し
+            const apiTimeout = this.config.get('llm.timeout', 30000);
+            const apiCall = this.client.chat.completions.create({
                 model: model,
                 messages: request.messages,
                 max_completion_tokens: maxTokens
             });
+
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error(`OpenAI API timeout after ${apiTimeout}ms`)), apiTimeout)
+            );
+
+            const response = await Promise.race([apiCall, timeoutPromise]);
 
             const content = response.choices[0]?.message?.content || '';
             const usage = response.usage;
@@ -79,16 +87,13 @@ export class OpenAILLMClient implements LLMClient {
             console.log(`✅ OpenAI response: ${content.length} chars, usage: ${usage?.total_tokens || 0} tokens`);
 
             return {
-                content,
-                usage: usage ? {
-                    promptTokens: usage.prompt_tokens,
-                    completionTokens: usage.completion_tokens,
-                    totalTokens: usage.total_tokens
-                } : undefined,
-                model: response.model,
-                finishReason: response.choices[0]?.finish_reason || 'unknown'
+                content: content,
+                usage: {
+                    promptTokens: usage?.prompt_tokens || 0,
+                    completionTokens: usage?.completion_tokens || 0,
+                    totalTokens: usage?.total_tokens || 0
+                }
             };
-
         } catch (error) {
             console.error('❌ OpenAI API error:', error);
             throw error;
