@@ -130,7 +130,7 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                         console.log(`  📄 最新ログファイル: ${latestLogFile}`);
                         
                         // APRログの解析（LLMリクエストなし）
-                        const aprLogData = await aprLogParser.parseLogEntry(aprLogRelativePath);
+                        const aprLogData = await aprLogParser.parseAPRLog(aprLogRelativePath);
                         
                         if (aprLogData && aprLogData.turns && aprLogData.turns.length > 0) {
                             stats.aprParseSuccess++;
@@ -164,40 +164,8 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                                     affectedFiles: filePaths
                                 };
                                 
-                                // LLM評価を実行（修正が存在する場合のみ）
-                                if (finalMods.lastModification.diff && finalMods.lastModification.diff.trim().length > 0) {
-                                    console.log(`  🤖 LLM評価を開始...`);
-                                    try {
-                                        const llmEvaluation = await aprLogParser.evaluateWithLLM(
-                                            "", // codeContext - 空文字列を渡す（必要に応じて調整）
-                                            "", // groundTruthDiff - 空文字列を渡す
-                                            finalMods.lastModification.diff, // agentGeneratedDiff
-                                            aprLogData.turns.map(turn => turn.content).join('\n\n') // agentThoughtProcess
-                                        );
-                                        
-                                        if (llmEvaluation && llmEvaluation.success) {
-                                            console.log(`  ✅ LLM評価完了: ${llmEvaluation.summary.overall_assessment}`);
-                                            console.log(`    - 正確性: ${llmEvaluation.summary.is_correct ? '正しい' : '不正確'}`);
-                                            console.log(`    - 妥当性: ${llmEvaluation.summary.is_plausible ? '妥当' : '妥当でない'}`);
-                                            console.log(`    - セマンティック等価性: ${llmEvaluation.summary.semantic_equivalence_level}`);
-                                            console.log(`    - 適用ルール数: ${llmEvaluation.summary.rules_count}`);
-                                            
-                                            // LLM評価結果をfinalModInfoに追加
-                                            finalModInfo.llmEvaluation = llmEvaluation.summary;
-                                        } else {
-                                            console.log(`  ⚠️ LLM評価に失敗しました`);
-                                            finalModInfo.llmEvaluation = null;
-                                        }
-                                    } catch (llmError) {
-                                        console.error(`  ❌ LLM評価エラー:`, llmError.message);
-                                        finalModInfo.llmEvaluation = { error: llmError.message };
-                                    }
-                                } else {
-                                    console.log(`  ⏩ LLM評価をスキップ（修正内容なし）`);
-                                    finalModInfo.llmEvaluation = { skipped: "no_modifications" };
-                                }
-                            } else {
-                                console.log(`  ℹ️ 最終修正なし（最後に実行された修正が見つかりませんでした）`);
+                                // LLM評価をスキップ
+                                console.log(`  🤖 LLM評価はスキップされました（統計収集モード）`);
                             }
                             
                             // 成功したマッチングを記録
@@ -309,27 +277,7 @@ async function datasetLoop(datasetDir, aprOutputPath) {
         
         // 最終修正情報を持つマッチングの数
         const withFinalMod = stats.matchedPairs.filter(pair => pair.finalModification !== null).length;
-        const withLLMEval = stats.matchedPairs.filter(pair => pair.finalModification && pair.finalModification.llmEvaluation && !pair.finalModification.llmEvaluation.error).length;
         console.log(`  🎯 最終修正情報あり: ${withFinalMod}/${stats.matchedPairs.length} (${(withFinalMod/stats.matchedPairs.length*100).toFixed(1)}%)`);
-        console.log(`  🤖 LLM評価成功: ${withLLMEval}/${stats.matchedPairs.length} (${(withLLMEval/stats.matchedPairs.length*100).toFixed(1)}%)`);
-        
-        // LLM評価結果の集計
-        if (withLLMEval > 0) {
-            const correctCount = stats.matchedPairs.filter(pair => 
-                pair.finalModification && 
-                pair.finalModification.llmEvaluation && 
-                pair.finalModification.llmEvaluation.is_correct
-            ).length;
-            const plausibleCount = stats.matchedPairs.filter(pair => 
-                pair.finalModification && 
-                pair.finalModification.llmEvaluation && 
-                pair.finalModification.llmEvaluation.is_plausible
-            ).length;
-            
-            console.log(`  ✅ LLM評価結果:`)
-            console.log(`    - 正確な修正: ${correctCount}/${withLLMEval} (${(correctCount/withLLMEval*100).toFixed(1)}%)`);
-            console.log(`    - 妥当な修正: ${plausibleCount}/${withLLMEval} (${(plausibleCount/withLLMEval*100).toFixed(1)}%)`);
-        }
     }
     
     // エラーの詳細表示（最初の5件）
@@ -366,9 +314,6 @@ async function datasetLoop(datasetDir, aprOutputPath) {
             console.log(`     ログファイル: ${pair.latestLogFile} (${pair.logFiles.length} ファイル中)`);
             if (pair.finalModification) {
                 console.log(`     最終修正: Turn ${pair.finalModification.turn}, ${pair.finalModification.affectedFiles.length} ファイル`);
-                if (pair.finalModification.llmEvaluation && !pair.finalModification.llmEvaluation.error) {
-                    console.log(`     LLM評価: ${pair.finalModification.llmEvaluation.overall_assessment} (正確性: ${pair.finalModification.llmEvaluation.is_correct ? 'Yes' : 'No'})`);
-                }
             }
         });
         if (stats.matchedPairs.length > 3) {

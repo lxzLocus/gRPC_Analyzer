@@ -79,30 +79,22 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                         .map(dirent => path.join(pullRequestPath, dirent.name))[0];
                 }
 
+
                 //APRログのパスの組み立て
                 const aprLogRelativePath = path.join(aprOutputPath, path.relative(datasetDir, pullRequestPath));
 
+                //console.log(`📂 APRログパス: ${aprLogRelativePath}`);
+                
                 // APRログの存在確認
                 let aprLogExists = false;
                 let aprLogAccessible = false;
-                let aprLogFiles = [];
-                
                 try {
                     const aprLogStats = await fs.stat(aprLogRelativePath);
                     if (aprLogStats.isDirectory()) {
-                        // ディレクトリ内の.logファイルを探す
-                        const files = await fs.readdir(aprLogRelativePath);
-                        aprLogFiles = files.filter(file => file.endsWith('.log'));
-                        
-                        if (aprLogFiles.length > 0) {
-                            aprLogExists = true;
-                            aprLogAccessible = true;
-                            stats.aprLogFound++;
-                            console.log(`  ✅ APRログ発見: ${aprLogRelativePath} (${aprLogFiles.length} ファイル)`);
-                        } else {
-                            stats.aprLogNotFound++;
-                            console.log(`  ⚠️ APRログディレクトリは存在するが.logファイルなし: ${aprLogRelativePath}`);
-                        }
+                        aprLogExists = true;
+                        aprLogAccessible = true;
+                        stats.aprLogFound++;
+                        console.log(`  ✅ APRログ発見: ${aprLogRelativePath}`);
                     } else {
                         stats.aprLogNotFound++;
                         console.log(`  ❌ APRログが存在しません（ディレクトリではない）: ${aprLogRelativePath}`);
@@ -119,20 +111,14 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                 }
 
                 // APRログが存在する場合のみ解析を試行
-                if (aprLogExists && aprLogAccessible && aprLogFiles.length > 0) {
+                if (aprLogExists && aprLogAccessible) {
                     try {
-                        console.log(`  🔍 APRログ解析を開始: ${entryId} (${aprLogFiles.length} ログファイル)`);
-                        
-                        // 最新のログファイルを選択（ファイル名でソート）
-                        const latestLogFile = aprLogFiles.sort().pop();
-                        const logFilePath = path.join(aprLogRelativePath, latestLogFile);
-                        
-                        console.log(`  📄 最新ログファイル: ${latestLogFile}`);
+                        console.log(`  🔍 APRログ解析を開始: ${entryId}`);
                         
                         // APRログの解析（LLMリクエストなし）
-                        const aprLogData = await aprLogParser.parseLogEntry(aprLogRelativePath);
+                        const aprLogData = await aprLogParser.parseAPRLog(aprLogRelativePath);
                         
-                        if (aprLogData && aprLogData.turns && aprLogData.turns.length > 0) {
+                        if (aprLogData) {
                             stats.aprParseSuccess++;
                             console.log(`  ✅ APRログ解析成功:`);
                             console.log(`    - 対話ターン数: ${aprLogData.turns.length}`);
@@ -163,49 +149,12 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                                     diffLines: finalMods.lastModification.diff.split('\n').length,
                                     affectedFiles: filePaths
                                 };
-                                
-                                // LLM評価を実行（修正が存在する場合のみ）
-                                if (finalMods.lastModification.diff && finalMods.lastModification.diff.trim().length > 0) {
-                                    console.log(`  🤖 LLM評価を開始...`);
-                                    try {
-                                        const llmEvaluation = await aprLogParser.evaluateWithLLM(
-                                            "", // codeContext - 空文字列を渡す（必要に応じて調整）
-                                            "", // groundTruthDiff - 空文字列を渡す
-                                            finalMods.lastModification.diff, // agentGeneratedDiff
-                                            aprLogData.turns.map(turn => turn.content).join('\n\n') // agentThoughtProcess
-                                        );
-                                        
-                                        if (llmEvaluation && llmEvaluation.success) {
-                                            console.log(`  ✅ LLM評価完了: ${llmEvaluation.summary.overall_assessment}`);
-                                            console.log(`    - 正確性: ${llmEvaluation.summary.is_correct ? '正しい' : '不正確'}`);
-                                            console.log(`    - 妥当性: ${llmEvaluation.summary.is_plausible ? '妥当' : '妥当でない'}`);
-                                            console.log(`    - セマンティック等価性: ${llmEvaluation.summary.semantic_equivalence_level}`);
-                                            console.log(`    - 適用ルール数: ${llmEvaluation.summary.rules_count}`);
-                                            
-                                            // LLM評価結果をfinalModInfoに追加
-                                            finalModInfo.llmEvaluation = llmEvaluation.summary;
-                                        } else {
-                                            console.log(`  ⚠️ LLM評価に失敗しました`);
-                                            finalModInfo.llmEvaluation = null;
-                                        }
-                                    } catch (llmError) {
-                                        console.error(`  ❌ LLM評価エラー:`, llmError.message);
-                                        finalModInfo.llmEvaluation = { error: llmError.message };
-                                    }
-                                } else {
-                                    console.log(`  ⏩ LLM評価をスキップ（修正内容なし）`);
-                                    finalModInfo.llmEvaluation = { skipped: "no_modifications" };
-                                }
-                            } else {
-                                console.log(`  ℹ️ 最終修正なし（最後に実行された修正が見つかりませんでした）`);
                             }
                             
                             // 成功したマッチングを記録
                             stats.matchedPairs.push({
                                 datasetEntry: entryId,
                                 aprLogPath: aprLogRelativePath,
-                                logFiles: aprLogFiles,
-                                latestLogFile: latestLogFile,
                                 aprLogData: {
                                     turns: aprLogData.turns.length,
                                     totalTokens: aprLogData.totalTokens,
@@ -218,12 +167,12 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                             
                         } else {
                             stats.aprParseFailure++;
-                            console.log(`  ❌ APRログの解析に失敗: ${aprLogRelativePath} (空のデータまたは無効な形式)`);
+                            console.log(`  ❌ APRログの解析に失敗: ${aprLogRelativePath}`);
                             
                             stats.unmatchedEntries.push({
                                 datasetEntry: entryId,
                                 aprLogPath: aprLogRelativePath,
-                                reason: 'APRログ解析失敗（空のデータまたは無効な形式）'
+                                reason: 'APRログ解析失敗'
                             });
                         }
                         
@@ -245,14 +194,11 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                             aprLogPath: aprLogRelativePath,
                             reason: 'APRログディレクトリが存在しない'
                         });
-                    } else if (aprLogFiles.length === 0) {
-                        stats.unmatchedEntries.push({
-                            datasetEntry: entryId,
-                            aprLogPath: aprLogRelativePath,
-                            reason: 'APRログファイル（.log）が存在しない'
-                        });
                     }
                 }
+
+                //ログの取得と，修正パッチの対象の取得
+
             }
         }
     }
@@ -283,7 +229,7 @@ async function datasetLoop(datasetDir, aprOutputPath) {
         console.log(`  🔍 発見済みAPRログからの解析成功率: ${parseSuccessFromFound}% (${stats.aprParseSuccess}/${stats.aprLogFound})`);
     }
     
-    console.log('\n🔍 詳細内訳:');
+    console.log('\n� 詳細内訳:');
     console.log(`  🟢 完全マッチング済み: ${stats.matchedPairs.length} ペア`);
     console.log(`  🟡 未マッチング: ${stats.unmatchedEntries.length} エントリー`);
     console.log(`  🔴 エラー発生: ${stats.errorEntries.length} エントリー`);
@@ -309,27 +255,7 @@ async function datasetLoop(datasetDir, aprOutputPath) {
         
         // 最終修正情報を持つマッチングの数
         const withFinalMod = stats.matchedPairs.filter(pair => pair.finalModification !== null).length;
-        const withLLMEval = stats.matchedPairs.filter(pair => pair.finalModification && pair.finalModification.llmEvaluation && !pair.finalModification.llmEvaluation.error).length;
         console.log(`  🎯 最終修正情報あり: ${withFinalMod}/${stats.matchedPairs.length} (${(withFinalMod/stats.matchedPairs.length*100).toFixed(1)}%)`);
-        console.log(`  🤖 LLM評価成功: ${withLLMEval}/${stats.matchedPairs.length} (${(withLLMEval/stats.matchedPairs.length*100).toFixed(1)}%)`);
-        
-        // LLM評価結果の集計
-        if (withLLMEval > 0) {
-            const correctCount = stats.matchedPairs.filter(pair => 
-                pair.finalModification && 
-                pair.finalModification.llmEvaluation && 
-                pair.finalModification.llmEvaluation.is_correct
-            ).length;
-            const plausibleCount = stats.matchedPairs.filter(pair => 
-                pair.finalModification && 
-                pair.finalModification.llmEvaluation && 
-                pair.finalModification.llmEvaluation.is_plausible
-            ).length;
-            
-            console.log(`  ✅ LLM評価結果:`)
-            console.log(`    - 正確な修正: ${correctCount}/${withLLMEval} (${(correctCount/withLLMEval*100).toFixed(1)}%)`);
-            console.log(`    - 妥当な修正: ${plausibleCount}/${withLLMEval} (${(plausibleCount/withLLMEval*100).toFixed(1)}%)`);
-        }
     }
     
     // エラーの詳細表示（最初の5件）
@@ -363,12 +289,8 @@ async function datasetLoop(datasetDir, aprOutputPath) {
         stats.matchedPairs.slice(0, 3).forEach((pair, index) => {
             console.log(`  ${index + 1}. ${pair.datasetEntry}`);
             console.log(`     ターン数: ${pair.aprLogData.turns}, トークン: ${pair.aprLogData.totalTokens}, 修正: ${pair.aprLogData.modifications}`);
-            console.log(`     ログファイル: ${pair.latestLogFile} (${pair.logFiles.length} ファイル中)`);
             if (pair.finalModification) {
                 console.log(`     最終修正: Turn ${pair.finalModification.turn}, ${pair.finalModification.affectedFiles.length} ファイル`);
-                if (pair.finalModification.llmEvaluation && !pair.finalModification.llmEvaluation.error) {
-                    console.log(`     LLM評価: ${pair.finalModification.llmEvaluation.overall_assessment} (正確性: ${pair.finalModification.llmEvaluation.is_correct ? 'Yes' : 'No'})`);
-                }
             }
         });
         if (stats.matchedPairs.length > 3) {
@@ -383,10 +305,11 @@ async function datasetLoop(datasetDir, aprOutputPath) {
     return stats;
 }
 
+
 //個別テスト
 if (import.meta.url === `file://${process.argv[1]}`) {
     const datasetPath = "/app/dataset/filtered_fewChanged";
-    const aprOutputPath = "/app/log";  // /app/logが/app/apr-logsに相当
+    const aprOutputPath = "/app/apr-logs";
 
     console.log('🚀 APRログとデータセットのマッチング分析を開始');
     console.log(`📂 データセット: ${datasetPath}`);
@@ -405,14 +328,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (stats.aprParseFailure > 0) {
                 console.log(`⚠️ ${stats.aprParseFailure} 件のAPRログで解析エラーが発生`);
             }
-            
-            // 要約情報
-            console.log('\n📋 最終サマリー:');
-            console.log(`   総エントリー: ${stats.totalDatasetEntries}`);
-            console.log(`   APRログ発見: ${stats.aprLogFound} (発見率: ${((stats.aprLogFound/stats.totalDatasetEntries)*100).toFixed(1)}%)`);
-            console.log(`   解析成功: ${stats.aprParseSuccess} (成功率: ${((stats.aprParseSuccess/stats.totalDatasetEntries)*100).toFixed(1)}%)`);
-            console.log(`   解析失敗: ${stats.aprParseFailure}`);
-            console.log(`   エラー: ${stats.errorEntries.length}`);
         })
         .catch(err => {
             console.error("❌ マッチング分析中にエラーが発生:", err);
@@ -442,4 +357,34 @@ function extractFilePathsFromDiff(diffText) {
     }
     // 重複除去
     return [...new Set(filePaths)];
+}
+
+// LLMによる評価を実行する関数（スキップ版）
+async function performLLMEvaluation(aprLogParser, filePaths, agentGeneratedDiff, aprLogData) {
+    console.log('  🤖 LLM評価はスキップされました（統計収集モード）');
+    return { success: true, skipped: true };
+}
+
+// APRログからエージェントの思考プロセスを抽出（簡易版）
+function extractThoughtProcessFromAPRLog(aprLogData) {
+// APRログからエージェントの思考プロセスを抽出（簡易版）
+function extractThoughtProcessFromAPRLog(aprLogData) {
+    if (!aprLogData || !aprLogData.turns) {
+        return '(No thought process available)';
+    }
+    
+    // 最初の100文字のみ
+    const lastAssistantTurn = aprLogData.turns.filter(t => t.role === 'assistant').pop();
+    if (lastAssistantTurn) {
+        return lastAssistantTurn.content.substring(0, 100) + '...';
+    }
+    
+    return '(No clear thought process identified)';
+}
+
+// LLMによる評価関数（旧実装 - 下位互換のために残す）
+async function evaluateWithLLM(filePaths, diffText) {
+    console.log('⚠️  旧evaluateWithLLM関数が呼び出されました。新しいperformLLMEvaluation関数の使用を推奨します。');
+    console.log('LLM評価: 対象ファイル:', filePaths);
+    return true;
 }
