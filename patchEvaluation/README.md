@@ -44,12 +44,7 @@ if (result.success) {
 }
 ```
 
-#### 2. 実行例
-```bash
-# デモンストレーションの実行
-cd /app/patchEvaluation
-node src/evaluateWithLLMExample.js
-```
+
 
 ### 評価レベル
 - **IDENTICAL**: 完全に同一
@@ -63,7 +58,7 @@ node src/evaluateWithLLMExample.js
 
 ## 概要
 
-このモジュールは`/app/src`内のLLM対話・解析機能を`/app/patchEvaluation/src/`にコピーして、APRログの解析に特化した機能を提供します。
+このモジュールはAPRログの解析とLLMベースのパッチ品質評価を提供します。
 
 ## 主要コンポーネント
 
@@ -91,47 +86,10 @@ node src/evaluateWithLLMExample.js
 
 ## 使用方法
 
-### 基本的な使用例
-
-```javascript
-import APRLogParser from './aprLogParser.js';
-
-const parser = new APRLogParser();
-
-// 単一APRログの解析
-const dialogueData = await parser.parseAPRLog('/app/apr-logs/project/issue123');
-
-if (dialogueData) {
-    console.log(`対話ターン数: ${dialogueData.turns.length}`);
-    console.log(`総トークン数: ${dialogueData.totalTokens}`);
-    console.log(`修正回数: ${dialogueData.modificationHistory.length}`);
-    
-    // 差分分析
-    const diffAnalysis = parser.analyzeDifferences(dialogueData);
-    console.log(`影響ファイル数: ${diffAnalysis.affectedFiles.length}`);
-}
-```
-
-### premergeとmergeの比較
-
-```javascript
-// premergeとmergeの比較分析
-const comparison = await parser.comparePremergeAndMerge(
-    '/app/apr-logs/project/issue123_premerge',
-    '/app/apr-logs/project/issue123_merge'
-);
-
-if (comparison && comparison.differences) {
-    console.log(`ターン数差: ${comparison.differences.turnCountDiff}`);
-    console.log(`トークン使用量差: ${comparison.differences.tokenUsageDiff}`);
-    console.log(`修正回数差: ${comparison.differences.modificationCountDiff}`);
-}
-```
-
 ### Controllerでの統合使用
 
 ```javascript
-// Controller.jsでの使用例
+// Controller.jsでの実際の使用例
 import APRLogParser from './aprLogParser.js';
 
 const aprLogParser = new APRLogParser();
@@ -141,13 +99,21 @@ for (const pullRequestTitle of titleDirs) {
     const aprLogPath = path.join(aprOutputPath, path.relative(datasetDir, pullRequestPath));
     
     // APRログ解析
-    const aprLogData = await aprLogParser.parseAPRLog(aprLogPath);
+    const aprLogData = await aprLogParser.parseLogEntry(aprLogPath);
     
     if (aprLogData) {
         const diffAnalysis = aprLogParser.analyzeDifferences(aprLogData);
         const finalMods = aprLogParser.extractFinalModifications(aprLogData);
         
-        // 結果の処理...
+        // LLM評価の実行
+        if (finalMods.lastModification) {
+            const llmEvaluation = await aprLogParser.evaluateWithLLM(
+                "",
+                "",
+                finalMods.lastModification.diff,
+                aprLogData.turns.map(turn => turn.content).join('\n\n')
+            );
+        }
     }
 }
 ```
@@ -253,44 +219,40 @@ for (const pullRequestTitle of titleDirs) {
 
 ## 実行方法
 
-### テスト実行
+### メイン実行
 
 ```bash
-# 使用例の実行
-node /app/patchEvaluation/src/aprLogParserExample.js
-
-# Controllerの実行
-node /app/patchEvaluation/src/Controller.js
-```
-
-### Docker環境での実行
-
-```bash
-# patch-evaluationコンテナ内で実行
-docker exec -it patch-evaluation node /app/src/Controller.js
+# データセット分析の実行
+node /app/src/Controller.js
 ```
 
 ## 注意事項
 
-- `/app/patchEvaluation`は別コンテナで`/app`として動作しています
-- `/app/src`からのモジュールインポートはできないため、必要な機能をすべてコピーしています
-- OpenAI/Gemini APIキーが設定されている場合、実際のLLM機能も使用可能です
-- ログファイルは読み取り専用でマウントされています
+- OpenAI/Gemini APIキーが環境変数に設定されている必要があります
+- APRログファイルは`.log`拡張子のJSONファイルです
+- 大容量ログファイルの解析には時間がかかる場合があります
 
 ## ログ出力
 
 解析時には詳細なログが出力されます：
 
 ```
-🔍 APRログを解析中: /app/apr-logs/project/issue123
-📄 発見されたログファイル: processing_summary_2025-01-01.json
-📖 解析対象ログファイル: processing_summary_2025-01-01.json
-✅ LLM対話データ抽出完了:
-  - 対話ターン数: 5
-  - 総トークン数: 15000
-  - 要求ファイル数: 12
-  - 修正回数: 3
-  - ステータス: completed
+[1] Processing: project/pullrequest/issue123
+  ✅ APRログ発見: /app/apr-logs/project/pullrequest/issue123 (1 ファイル)
+  � APRログ解析を開始: project/pullrequest/issue123 (1 ログファイル)
+  � 最新ログファイル: processing_summary_2025-08-19.log
+  ✅ APRログ解析成功:
+    - 対話ターン数: 5
+    - 総トークン数: 15000
+    - 修正回数: 3
+  🎯 最終修正 (Turn 5):
+    - タイムスタンプ: 2025-08-19T05:00:05.924Z
+    - 修正行数: 45
+    - 影響ファイルパス: ['src/main.go', 'api/service.proto']
+  🤖 LLM評価を開始...
+  ✅ LLM評価完了: CORRECT
+    - 正確性: 正しい
+    - 妥当性: 妥当
 ```
 
 ## 拡張性
