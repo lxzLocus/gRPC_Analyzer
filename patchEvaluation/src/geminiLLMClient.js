@@ -26,11 +26,9 @@ export class GeminiLLMClient extends LLMClient {
     async initializeClient(apiKey) {
         try {
             // 動的importを使用してES modules対応
-            const { GoogleGenAI } = await import('@google/generative-ai');
+            const { GoogleGenerativeAI } = await import('@google/generative-ai');
             
-            this.client = new GoogleGenAI({ 
-                apiKey: apiKey 
-            });
+            this.client = new GoogleGenerativeAI(apiKey);
             
             this.isInitialized = true;
             console.log('✅ Gemini client initialized successfully');

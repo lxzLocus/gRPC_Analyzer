@@ -1,7 +1,6 @@
-import fs from "fs";
-import path from "path";
-import { datasetLoop } from './Controller.js';
 import { config as dotenvConfig } from 'dotenv';
+
+import { datasetLoop } from '../src/Controller/Controller.js';
 
 // 環境変数の読み込み
 dotenvConfig({ path: '/app/.env' });

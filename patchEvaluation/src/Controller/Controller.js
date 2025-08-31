@@ -193,20 +193,36 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                             // 最終修正内容の抽出
                             const finalMods = aprLogParser.extractFinalModifications(aprLogData);
                             let finalModInfo = null;
+                            let aprDiffFiles = []; // APRログのdiffから抽出したファイルパスリスト
+                            let groundTruthDiff = null; // premergeとmergeの実際のdiff
+                            
                             if (finalMods.lastModification) {
                                 console.log(`  🎯 最終修正 (Turn ${finalMods.lastModification.turn}):`);
                                 console.log(`    - タイムスタンプ: ${finalMods.lastModification.timestamp}`);
                                 console.log(`    - 修正行数: ${finalMods.lastModification.diff.split('\n').length}`);
                                 
                                 // diffからファイルパスリストを抽出
-                                const filePaths = extractFilePathsFromDiff(finalMods.lastModification.diff);
-                                console.log(`    - 影響ファイルパス:`, filePaths);
+                                aprDiffFiles = extractFilePathsFromDiff(finalMods.lastModification.diff);
+                                console.log(`    - 影響ファイルパス (APRログ):`, aprDiffFiles);
+                                
+                                // APRログで特定されたファイルについて、premergeとmergeの実際のdiffを作成
+                                if (premergePath && mergePath && aprDiffFiles.length > 0) {
+                                    console.log(`  📊 Ground Truth Diff作成開始 (${aprDiffFiles.length} ファイル)`);
+                                    groundTruthDiff = await createGroundTruthDiff(premergePath, mergePath, aprDiffFiles);
+                                    
+                                    if (groundTruthDiff) {
+                                        const diffLines = groundTruthDiff.split('\n').length;
+                                        console.log(`    ✅ Ground Truth Diff作成完了: ${diffLines} 行`);
+                                    } else {
+                                        console.log(`    ⚠️ Ground Truth Diff作成失敗`);
+                                    }
+                                }
                                 
                                 finalModInfo = {
                                     turn: finalMods.lastModification.turn,
                                     timestamp: finalMods.lastModification.timestamp,
                                     diffLines: finalMods.lastModification.diff.split('\n').length,
-                                    affectedFiles: filePaths
+                                    affectedFiles: aprDiffFiles // extractFilePathsFromDiffの結果を使用
                                 };
                                 
                                 // LLM評価を実行（修正が存在する場合のみ）
@@ -253,7 +269,9 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                                 latestLogFile: latestLogFile,
                                 premergePath: premergePath,
                                 mergePath: mergePath,
-                                changedFiles: changedFiles, // 変更ファイルリストを追加
+                                changedFiles: changedFiles, // データセット比較による変更ファイルリスト
+                                aprDiffFiles: aprDiffFiles, // APRログのdiffから抽出したファイルパスリスト
+                                groundTruthDiff: groundTruthDiff, // premergeとmergeの実際のdiff
                                 aprLogData: {
                                     turns: aprLogData.turns.length,
                                     totalTokens: aprLogData.totalTokens,
@@ -271,6 +289,10 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                             stats.unmatchedEntries.push({
                                 datasetEntry: entryId,
                                 aprLogPath: aprLogRelativePath,
+                                premergePath: premergePath,
+                                mergePath: mergePath,
+                                changedFiles: changedFiles,
+                                aprDiffFiles: [], // APRログ解析失敗時は空配列
                                 reason: 'APRログ解析失敗（空のデータまたは無効な形式）'
                             });
                         }
@@ -282,6 +304,10 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                         stats.errorEntries.push({
                             datasetEntry: entryId,
                             aprLogPath: aprLogRelativePath,
+                            premergePath: premergePath,
+                            mergePath: mergePath,
+                            changedFiles: changedFiles,
+                            aprDiffFiles: [], // エラー時は空配列
                             error: `解析エラー: ${parseError.message}`
                         });
                     }
@@ -291,12 +317,20 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                         stats.unmatchedEntries.push({
                             datasetEntry: entryId,
                             aprLogPath: aprLogRelativePath,
+                            premergePath: premergePath,
+                            mergePath: mergePath,
+                            changedFiles: changedFiles,
+                            aprDiffFiles: [], // APRログなし時は空配列
                             reason: 'APRログディレクトリが存在しない'
                         });
                     } else if (aprLogFiles.length === 0) {
                         stats.unmatchedEntries.push({
                             datasetEntry: entryId,
                             aprLogPath: aprLogRelativePath,
+                            premergePath: premergePath,
+                            mergePath: mergePath,
+                            changedFiles: changedFiles,
+                            aprDiffFiles: [], // APRログなし時は空配列
                             reason: 'APRログファイル（.log）が存在しない'
                         });
                     }
@@ -345,27 +379,32 @@ async function datasetLoop(datasetDir, aprOutputPath) {
             const totalMods = stats.matchedPairs.reduce((sum, pair) => sum + pair.aprLogData.modifications, 0);
             const totalAffectedFiles = stats.matchedPairs.reduce((sum, pair) => sum + pair.aprLogData.affectedFiles, 0);
             const totalChangedFiles = stats.matchedPairs.reduce((sum, pair) => sum + (pair.changedFiles ? pair.changedFiles.length : 0), 0);
+            const totalAprDiffFiles = stats.matchedPairs.reduce((sum, pair) => sum + (pair.aprDiffFiles ? pair.aprDiffFiles.length : 0), 0);
             
             const avgTurns = totalTurns / stats.matchedPairs.length;
             const avgTokens = totalTokens / stats.matchedPairs.length;
             const avgMods = totalMods / stats.matchedPairs.length;
             const avgAffectedFiles = totalAffectedFiles / stats.matchedPairs.length;
             const avgChangedFiles = totalChangedFiles / stats.matchedPairs.length;
+            const avgAprDiffFiles = totalAprDiffFiles / stats.matchedPairs.length;
             
             console.log(`  💬 平均対話ターン数: ${avgTurns.toFixed(1)} (合計: ${totalTurns})`);
             console.log(`  🔤 平均トークン数: ${avgTokens.toFixed(0)} (合計: ${totalTokens})`);
             console.log(`  🔧 平均修正回数: ${avgMods.toFixed(1)} (合計: ${totalMods})`);
             console.log(`  📁 平均影響ファイル数 (APRログ): ${avgAffectedFiles.toFixed(1)} (合計: ${totalAffectedFiles})`);
             console.log(`  📝 平均変更ファイル数 (データセット): ${avgChangedFiles.toFixed(1)} (合計: ${totalChangedFiles})`);
+            console.log(`  🎯 平均APR差分ファイル数: ${avgAprDiffFiles.toFixed(1)} (合計: ${totalAprDiffFiles})`);
             
             // パス情報の統計
             const withPremergePath = stats.matchedPairs.filter(pair => pair.premergePath).length;
             const withMergePath = stats.matchedPairs.filter(pair => pair.mergePath).length;
             const withChangedFiles = stats.matchedPairs.filter(pair => pair.changedFiles && pair.changedFiles.length > 0).length;
+            const withAprDiffFiles = stats.matchedPairs.filter(pair => pair.aprDiffFiles && pair.aprDiffFiles.length > 0).length;
             
             console.log(`  📂 premergePathあり: ${withPremergePath}/${stats.matchedPairs.length} (${(withPremergePath/stats.matchedPairs.length*100).toFixed(1)}%)`);
             console.log(`  📂 mergePathあり: ${withMergePath}/${stats.matchedPairs.length} (${(withMergePath/stats.matchedPairs.length*100).toFixed(1)}%)`);
-            console.log(`  📝 変更ファイル検出: ${withChangedFiles}/${stats.matchedPairs.length} (${(withChangedFiles/stats.matchedPairs.length*100).toFixed(1)}%)`);
+            console.log(`  📝 変更ファイル検出 (データセット): ${withChangedFiles}/${stats.matchedPairs.length} (${(withChangedFiles/stats.matchedPairs.length*100).toFixed(1)}%)`);
+            console.log(`  🎯 APR差分ファイル検出: ${withAprDiffFiles}/${stats.matchedPairs.length} (${(withAprDiffFiles/stats.matchedPairs.length*100).toFixed(1)}%)`);
             
             // 最終修正情報を持つマッチングの数
             const withFinalMod = stats.matchedPairs.filter(pair => pair.finalModification !== null).length;
@@ -428,6 +467,13 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                     console.log(`     📝 データセット変更: ${pair.changedFiles.length} ファイル (${pair.changedFiles.slice(0, 3).join(', ')}${pair.changedFiles.length > 3 ? '...' : ''})`);
                 } else {
                     console.log(`     📝 データセット変更: 検出されず`);
+                }
+                
+                // APR差分ファイル情報を追加
+                if (pair.aprDiffFiles && pair.aprDiffFiles.length > 0) {
+                    console.log(`     🎯 APR差分ファイル: ${pair.aprDiffFiles.length} ファイル (${pair.aprDiffFiles.slice(0, 3).join(', ')}${pair.aprDiffFiles.length > 3 ? '...' : ''})`);
+                } else {
+                    console.log(`     🎯 APR差分ファイル: 検出されず`);
                 }
                 
                 if (pair.finalModification) {
@@ -582,6 +628,77 @@ async function compareDirectoriesForChanges(dir1, dir2) {
     }
     
     return changedFiles;
+}
+
+// APRログで特定されたファイルについて、premergeとmergeの実際のdiffを作成
+async function createGroundTruthDiff(premergePath, mergePath, targetFiles) {
+    try {
+        const { execSync } = await import('child_process');
+        let combinedDiff = '';
+        
+        for (const filePath of targetFiles) {
+            try {
+                const premergeFile = path.join(premergePath, filePath);
+                const mergeFile = path.join(mergePath, filePath);
+                
+                // ファイルの存在確認
+                const [premergeExists, mergeExists] = await Promise.allSettled([
+                    fs.access(premergeFile),
+                    fs.access(mergeFile)
+                ]);
+                
+                if (premergeExists.status === 'fulfilled' && mergeExists.status === 'fulfilled') {
+                    // 両方のファイルが存在する場合、diffを作成
+                    const diffCommand = `diff -u "${premergeFile}" "${mergeFile}" || true`;
+                    const diffOutput = execSync(diffCommand, { encoding: 'utf8', stdio: 'pipe' });
+                    
+                    if (diffOutput.trim()) {
+                        // diffヘッダーを統一フォーマットに変更
+                        const formattedDiff = diffOutput
+                            .replace(/^--- (.+)$/gm, `--- a/${filePath}`)
+                            .replace(/^\+\+\+ (.+)$/gm, `+++ b/${filePath}`);
+                        
+                        combinedDiff += `diff --git a/${filePath} b/${filePath}\n${formattedDiff}\n`;
+                    }
+                } else if (premergeExists.status === 'rejected' && mergeExists.status === 'fulfilled') {
+                    // ファイルが新規追加された場合
+                    const content = await fs.readFile(mergeFile, 'utf8');
+                    const lines = content.split('\n');
+                    combinedDiff += `diff --git a/${filePath} b/${filePath}\n`;
+                    combinedDiff += `new file mode 100644\n`;
+                    combinedDiff += `index 0000000..1234567\n`;
+                    combinedDiff += `--- /dev/null\n`;
+                    combinedDiff += `+++ b/${filePath}\n`;
+                    combinedDiff += `@@ -0,0 +1,${lines.length} @@\n`;
+                    lines.forEach(line => {
+                        combinedDiff += `+${line}\n`;
+                    });
+                } else if (premergeExists.status === 'fulfilled' && mergeExists.status === 'rejected') {
+                    // ファイルが削除された場合
+                    const content = await fs.readFile(premergeFile, 'utf8');
+                    const lines = content.split('\n');
+                    combinedDiff += `diff --git a/${filePath} b/${filePath}\n`;
+                    combinedDiff += `deleted file mode 100644\n`;
+                    combinedDiff += `index 1234567..0000000\n`;
+                    combinedDiff += `--- a/${filePath}\n`;
+                    combinedDiff += `+++ /dev/null\n`;
+                    combinedDiff += `@@ -1,${lines.length} +0,0 @@\n`;
+                    lines.forEach(line => {
+                        combinedDiff += `-${line}\n`;
+                    });
+                }
+            } catch (fileError) {
+                console.error(`    ⚠️ ファイル差分作成エラー (${filePath}): ${fileError.message}`);
+                // 個別ファイルのエラーは継続
+            }
+        }
+        
+        return combinedDiff.trim() || null;
+        
+    } catch (error) {
+        console.error(`  Ground Truth Diff作成エラー:`, error.message);
+        return null;
+    }
 }
 
 export { datasetLoop, extractFilePathsFromDiff };
