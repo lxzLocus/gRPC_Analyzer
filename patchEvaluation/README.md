@@ -74,7 +74,7 @@ if (result.success) {
 - JSONフォーマット解析
 - ファイル要求の抽出
 
-### 3. LLMClientFactory (`llmClientFactory.js`)
+### 3. LLMClientController (`LLMClientController.js`)
 - OpenAI/Gemini LLMクライアントの生成
 - プロバイダー自動選択
 - 設定管理

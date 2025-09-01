@@ -3,22 +3,22 @@
  * 設定に基づいて適切なLLMクライアントを生成
  */
 
-import Config from './config.js';
-import OpenAILLMClient from './openAILLMClient.js';
-import GeminiLLMClient from './geminiLLMClient.js';
+import Config from '../Config/config.js';
+import OpenAILLMClient from '../Repository/openAILLMClient.js';
+import GeminiLLMClient from '../Repository/geminiLLMClient.js';
 
 export const LLMProvider = {
     OPENAI: 'openai',
     GEMINI: 'gemini'
 };
 
-export class LLMClientFactory {
+export class LLMClientController {
     static create(config, provider) {
         // プロバイダーの決定（優先順位: 引数 > 設定 > デフォルト）
         const selectedProvider = provider || 
                                 config.get('llm.provider', 'openai');
 
-        console.log(`🏭 LLMClientFactory: Creating ${selectedProvider} client`);
+        console.log(`🏭 LLMClientController: Creating ${selectedProvider} client`);
 
         switch (selectedProvider) {
             case LLMProvider.OPENAI:
@@ -66,4 +66,4 @@ export class LLMClientFactory {
     }
 }
 
-export default LLMClientFactory;
+export default LLMClientController;

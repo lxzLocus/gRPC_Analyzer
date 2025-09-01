@@ -7,8 +7,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import MessageHandler from './messageHandler.js';
-import LLMClientFactory from './llmClientFactory.js';
-import Config from './config.js';
+import LLMClientController from './Controller/LLMClientController.js';
+import Config from './Config/config.js';
 
 class APRLogParser {
     constructor() {
@@ -640,7 +640,7 @@ class APRLogParser {
             const evalConfig = config || new Config('/app/patchEvaluation');
             
             // LLMクライアントの作成
-            const llmClient = LLMClientFactory.create(evalConfig);
+            const llmClient = LLMClientController.create(evalConfig);
             
             // プロンプトテンプレートの読み込み
             const promptTemplate = await this.loadEvaluationPrompt();

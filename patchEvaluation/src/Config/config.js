@@ -5,7 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { DEFAULT_CONFIG } from './types.js';
+import { DEFAULT_CONFIG } from '../types.js';
 
 /**
  * Configuration class for managing file paths and prompt templates.

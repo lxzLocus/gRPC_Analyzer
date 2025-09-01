@@ -1,10 +1,56 @@
 import fs from 'fs/promises';
 import path from 'path';
-import APRLogParser from '../src/aprLogParser.js';
 import { config as dotenvConfig } from 'dotenv';
+
+
+import APRLogParser from '../aprLogParser.js';
+import getChangedFiles from '../GenerateFIleChanged.js';
 
 // 環境変数の読み込み
 dotenvConfig({ path: '/app/.env' });
+
+
+const promptTemplatePath = "/app/prompt/00_evaluationPrompt.txt";
+
+
+//個別テスト
+if (import.meta.url === `file://${process.argv[1]}`) {
+    const datasetPath = "/app/dataset/filtered_fewChanged";
+    const aprOutputPath = "/app/apr-logs";  // 正しいAPRログパスに修正
+
+    console.log('🚀 APRログとデータセットのマッチング分析を開始');
+    console.log(`📂 データセット: ${datasetPath}`);
+    console.log(`📁 APRログ: ${aprOutputPath}`);
+    console.log('=============================================\n');
+
+    datasetLoop(datasetPath, aprOutputPath)
+        .then((stats) => {
+            console.log('\n🎉 分析が正常に完了しました！');
+            console.log(`✅ ${stats.aprParseSuccess}/${stats.totalDatasetEntries} のマッチングペアが成功`);
+
+            // 簡易サマリー
+            if (stats.aprParseSuccess > 0) {
+                console.log(`📊 成功率: ${(stats.aprParseSuccess / stats.totalDatasetEntries * 100).toFixed(1)}%`);
+            }
+            if (stats.aprParseFailure > 0) {
+                console.log(`⚠️ ${stats.aprParseFailure} 件のAPRログで解析エラーが発生`);
+            }
+
+            // 要約情報
+            console.log('\n📋 最終サマリー:');
+            console.log(`   総エントリー: ${stats.totalDatasetEntries}`);
+            console.log(`   APRログ発見: ${stats.aprLogFound} (発見率: ${((stats.aprLogFound / stats.totalDatasetEntries) * 100).toFixed(1)}%)`);
+            console.log(`   解析成功: ${stats.aprParseSuccess} (成功率: ${((stats.aprParseSuccess / stats.totalDatasetEntries) * 100).toFixed(1)}%)`);
+            console.log(`   解析失敗: ${stats.aprParseFailure}`);
+            console.log(`   エラー: ${stats.errorEntries.length}`);
+        })
+        .catch(err => {
+            console.error("❌ マッチング分析中にエラーが発生:", err);
+            console.error("スタックトレース:", err.stack);
+        });
+}
+
+
 
 async function datasetLoop(datasetDir, aprOutputPath) {
     const aprLogParser = new APRLogParser();
@@ -26,10 +72,10 @@ async function datasetLoop(datasetDir, aprOutputPath) {
         .filter(dirent => dirent.isDirectory())
         .map(dirent => dirent.name);
 
-    console.log(`🔍 データセット分析開始: ${projectDirs.length} プロジェクト`);
-    console.log(`📂 データセットディレクトリ: ${datasetDir}`);
-    console.log(`📁 APRログディレクトリ: ${aprOutputPath}`);
-    console.log('================================================');
+    // console.log(`🔍 データセット分析開始: ${projectDirs.length} プロジェクト`);
+    // console.log(`📂 データセットディレクトリ: ${datasetDir}`);
+    // console.log(`📁 APRログディレクトリ: ${aprOutputPath}`);
+    // console.log('================================================');
 
     // forEach を for...of に変更
     for (const projectName of projectDirs) {
@@ -71,7 +117,6 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                     .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('premerge'))
                     .map(dirent => path.join(pullRequestPath, dirent.name))[0];
 
-                // 優先度: commit_snapshot_ > merge_
                 // 先に"commit_snapshot_"で始まるサブディレクトリを探す
                 let mergePath = pullRequestContents
                     .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('commit_snapshot_'))
@@ -86,35 +131,10 @@ async function datasetLoop(datasetDir, aprOutputPath) {
 
                 // premergePathとmergePathの比較による変更ファイルリストの作成
                 let changedFiles = [];
-                let diffOutput = null;
                 
                 if (premergePath && mergePath) {
                     try {
-                        console.log(`  🔍 差分解析を開始: premerge vs ${mergePath.includes('commit_snapshot_') ? 'commit_snapshot' : 'merge'}`);
-                        
-                        // git diffを使用して変更されたファイルを取得
-                        const { execSync } = await import('child_process');
-                        
-                        // --name-onlyオプションで変更されたファイル名のみを取得
-                        const diffCommand = `cd "${premergePath}" && git diff --name-only "${mergePath}"`;
-                        
-                        try {
-                            diffOutput = execSync(diffCommand, { encoding: 'utf8', stdio: 'pipe' });
-                            changedFiles = diffOutput.trim().split('\n').filter(file => file.length > 0);
-                            
-                            console.log(`  ✅ 変更ファイル検出: ${changedFiles.length} ファイル`);
-                            if (changedFiles.length > 0) {
-                                console.log(`    📁 変更ファイル:`, changedFiles.slice(0, 5)); // 最初の5つを表示
-                                if (changedFiles.length > 5) {
-                                    console.log(`    ... 他 ${changedFiles.length - 5} ファイル`);
-                                }
-                            }
-                        } catch (gitError) {
-                            // git diffが失敗した場合、ファイル比較による代替手段
-                            console.log(`  ⚠️ git diff失敗、ファイル比較で代替: ${gitError.message}`);
-                            changedFiles = await compareDirectoriesForChanges(premergePath, mergePath);
-                            console.log(`  ✅ ファイル比較完了: ${changedFiles.length} ファイル変更検出`);
-                        }
+                        changedFiles = await getChangedFiles(premergePath, mergePath, fileExtension);
                     } catch (error) {
                         console.error(`  ❌ 差分解析エラー:`, error.message);
                         changedFiles = [];
@@ -122,6 +142,8 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                 } else {
                     if (!premergePath) console.log(`  ⚠️ premergePathが見つかりません`);
                     if (!mergePath) console.log(`  ⚠️ mergePath (commit_snapshot/merge) が見つかりません`);
+
+                    continue;
                 }
 
                 //APRログのパスの組み立て
@@ -172,7 +194,7 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                         const latestLogFile = aprLogFiles.sort().pop();
                         const logFilePath = path.join(aprLogRelativePath, latestLogFile);
                         
-                        console.log(`  📄 最新ログファイル: ${latestLogFile}`);
+                        // console.log(`  📄 最新ログファイル: ${latestLogFile}`);
                         
                         // APRログの解析（LLMリクエストなし）
                         const aprLogData = await aprLogParser.parseLogEntry(aprLogRelativePath);
@@ -180,9 +202,9 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                         if (aprLogData && aprLogData.turns && aprLogData.turns.length > 0) {
                             stats.aprParseSuccess++;
                             console.log(`  ✅ APRログ解析成功:`);
-                            console.log(`    - 対話ターン数: ${aprLogData.turns.length}`);
-                            console.log(`    - 総トークン数: ${aprLogData.totalTokens}`);
-                            console.log(`    - 修正回数: ${aprLogData.modificationHistory.length}`);
+                            // console.log(`    - 対話ターン数: ${aprLogData.turns.length}`);
+                            // console.log(`    - 総トークン数: ${aprLogData.totalTokens}`);
+                            // console.log(`    - 修正回数: ${aprLogData.modificationHistory.length}`);
                             
                             // 差分分析
                             const diffAnalysis = aprLogParser.analyzeDifferences(aprLogData);
@@ -289,7 +311,119 @@ async function datasetLoop(datasetDir, aprOutputPath) {
                             stats.unmatchedEntries.push({
                                 datasetEntry: entryId,
                                 aprLogPath: aprLogRelativePath,
-                                premergePath: premergePath,
+                                premergePath: premergePath,                                // TemplateCompilerを使用したLLM評価処理
+                                if (finalMods.lastModification.diff && finalMods.lastModification.diff.trim().length > 0) {
+                                    console.log(`  🤖 TemplateCompilerを使用してLLM評価を開始...`);
+                                    try {
+                                        // TemplateCompilerのインスタンス作成
+                                        const { TemplateRenderer } = await import('../Service/TemplateCompiler.js');
+                                        const promptTemplatePath = "/app/prompt/00_evaluationPrompt.txt";
+                                        const templateString = await fs.readFile(promptTemplatePath, 'utf-8');
+                                        const evaluationPrompt = new TemplateRenderer(templateString);
+                                        
+                                        // テンプレートに渡すコンテキストデータの準備
+                                        const templateContext = {
+                                            code_context: generateCodeContext(premergePath, mergePath, aprDiffFiles),
+                                            ground_truth_diff: groundTruthDiff || "差分情報が利用できません",
+                                            agent_generated_diff: finalMods.lastModification.diff,
+                                            agent_thought_process: aprLogData.turns.map(turn => 
+                                                `Turn ${turn.turn}: ${turn.content}`
+                                            ).join('\n\n')
+                                        };
+                                        
+                                        // テンプレートレンダリング
+                                        const renderedPrompt = evaluationPrompt.render(templateContext);
+                                        console.log(`  📝 プロンプト生成完了 (${renderedPrompt.length} 文字)`);
+                                        
+                                        // LLMクライアントでの評価実行
+                                        const { LLMClientFactory } = await import('../llmClientFactory.js');
+                                        const llmClient = LLMClientFactory.createClient('openai'); // または 'gemini'
+                                        
+                                        const llmResponse = await llmClient.generateResponse(renderedPrompt, {
+                                            temperature: 0.1,
+                                            max_tokens: 2000
+                                        });
+                                        
+                                        if (llmResponse && llmResponse.success) {
+                                            // LLM応答の解析
+                                            const evaluationResult = parseEvaluationResponse(llmResponse.content);
+                                            
+                                            console.log(`  ✅ TemplateCompiler LLM評価完了: ${evaluationResult.overall_assessment}`);
+                                            console.log(`    - 正確性: ${evaluationResult.is_correct ? '正しい' : '不正確'}`);
+                                            console.log(`    - 妥当性: ${evaluationResult.is_plausible ? '妥当' : '妥当でない'}`);
+                                            
+                                            // 評価結果をfinalModInfoに追加
+                                            finalModInfo.llmEvaluation = {
+                                                ...evaluationResult,
+                                                templateUsed: true,
+                                                promptLength: renderedPrompt.length
+                                            };
+                                        } else {
+                                            console.log(`  ⚠️ LLM評価に失敗しました`);
+                                            finalModInfo.llmEvaluation = { error: "LLM response failed" };
+                                        }
+                                        
+                                    } catch (templateError) {
+                                        console.error(`  ❌ TemplateCompiler LLM評価エラー:`, templateError.message);
+                                        finalModInfo.llmEvaluation = { error: templateError.message, templateUsed: false };
+                                    }
+                                } else {
+                                    console.log(`  ⏩ LLM評価をスキップ（修正内容なし）`);
+                                    finalModInfo.llmEvaluation = { skipped: "no_modifications" };
+                                }                                // コードコンテキスト生成ヘルパー関数
+                                function generateCodeContext(premergePath, mergePath, aprDiffFiles) {
+                                    if (!aprDiffFiles || aprDiffFiles.length === 0) {
+                                        return "変更対象ファイルの情報が利用できません";
+                                    }
+                                    
+                                    return `変更対象ファイル (${aprDiffFiles.length}ファイル):
+                                ${aprDiffFiles.map(file => `- ${file}`).join('\n')}
+                                
+                                プロジェクトパス:
+                                - premerge: ${premergePath}
+                                - merge: ${mergePath}`;
+                                }
+                                
+                                // LLM評価レスポンス解析ヘルパー関数
+                                function parseEvaluationResponse(responseContent) {
+                                    try {
+                                        // JSON形式の場合
+                                        if (responseContent.trim().startsWith('{')) {
+                                            return JSON.parse(responseContent);
+                                        }
+                                        
+                                        // テキスト形式の場合の簡易パース
+                                        const result = {
+                                            overall_assessment: "解析中",
+                                            is_correct: false,
+                                            is_plausible: false,
+                                            semantic_equivalence_level: "unknown"
+                                        };
+                                        
+                                        // 正確性判定
+                                        if (responseContent.toLowerCase().includes('correct') || 
+                                            responseContent.includes('正しい') || 
+                                            responseContent.includes('適切')) {
+                                            result.is_correct = true;
+                                        }
+                                        
+                                        // 妥当性判定
+                                        if (responseContent.toLowerCase().includes('plausible') || 
+                                            responseContent.includes('妥当') || 
+                                            responseContent.includes('合理的')) {
+                                            result.is_plausible = true;
+                                        }
+                                        
+                                        return result;
+                                    } catch (error) {
+                                        return {
+                                            overall_assessment: "解析エラー",
+                                            is_correct: false,
+                                            is_plausible: false,
+                                            parse_error: error.message
+                                        };
+                                    }
+                                }
                                 mergePath: mergePath,
                                 changedFiles: changedFiles,
                                 aprDiffFiles: [], // APRログ解析失敗時は空配列
@@ -493,42 +627,6 @@ async function datasetLoop(datasetDir, aprOutputPath) {
     return stats;
 }
 
-//個別テスト
-if (import.meta.url === `file://${process.argv[1]}`) {
-    const datasetPath = "/app/dataset/filtered_fewChanged";
-    const aprOutputPath = "/app/apr-logs";  // 正しいAPRログパスに修正
-
-    console.log('🚀 APRログとデータセットのマッチング分析を開始');
-    console.log(`📂 データセット: ${datasetPath}`);
-    console.log(`📁 APRログ: ${aprOutputPath}`);
-    console.log('=============================================\n');
-
-    datasetLoop(datasetPath, aprOutputPath)
-        .then((stats) => {
-            console.log('\n🎉 分析が正常に完了しました！');
-            console.log(`✅ ${stats.aprParseSuccess}/${stats.totalDatasetEntries} のマッチングペアが成功`);
-            
-            // 簡易サマリー
-            if (stats.aprParseSuccess > 0) {
-                console.log(`📊 成功率: ${(stats.aprParseSuccess/stats.totalDatasetEntries*100).toFixed(1)}%`);
-            }
-            if (stats.aprParseFailure > 0) {
-                console.log(`⚠️ ${stats.aprParseFailure} 件のAPRログで解析エラーが発生`);
-            }
-            
-            // 要約情報
-            console.log('\n📋 最終サマリー:');
-            console.log(`   総エントリー: ${stats.totalDatasetEntries}`);
-            console.log(`   APRログ発見: ${stats.aprLogFound} (発見率: ${((stats.aprLogFound/stats.totalDatasetEntries)*100).toFixed(1)}%)`);
-            console.log(`   解析成功: ${stats.aprParseSuccess} (成功率: ${((stats.aprParseSuccess/stats.totalDatasetEntries)*100).toFixed(1)}%)`);
-            console.log(`   解析失敗: ${stats.aprParseFailure}`);
-            console.log(`   エラー: ${stats.errorEntries.length}`);
-        })
-        .catch(err => {
-            console.error("❌ マッチング分析中にエラーが発生:", err);
-            console.error("スタックトレース:", err.stack);
-        });
-}
 
 // diffからファイルパスリストを抽出する関数
 function extractFilePathsFromDiff(diffText) {
