@@ -1,0 +1,248 @@
+import fs from 'fs/promises';
+import path from 'path';
+import getChangedFiles, { getChangedF    /**
+     * 変更されたファイルのパス一覧を取得
+     * @param {string} premergePath - premergeディレクトリのパス
+     * @param {string} mergePath - mergeディレクトリのパス
+     * @param {string} fileExtension - 対象ファイル拡張子（オプション）
+     * @returns {Promise<string[]>} 変更されたファイルパスの配列
+     */
+    async getChangedFiles(premergePath, mergePath, fileExtension = null) {
+        if (!premergePath || !mergePath) {
+            return [];
+        }
+
+        try {
+            return await getChangedFiles(premergePath, mergePath, fileExtension);
+        } catch (error) {
+            console.error(`差分解析エラー: ${error.message}`);
+            return [];
+        }
+    }
+
+    /**
+     * 変更されたファイルのパス一覧とdiffを同時に取得
+     * @param {string} premergePath - premergeディレクトリのパス
+     * @param {string} mergePath - mergeディレクトリのパス
+     * @param {string} fileExtension - 対象ファイル拡張子（オプション）
+     * @returns {Promise<Object>} { changedFiles: string[], groundTruthDiff: string }
+     */
+    async getChangedFilesWithDiff(premergePath, mergePath, fileExtension = null) {
+        if (!premergePath || !mergePath) {
+            return {
+                changedFiles: [],
+                groundTruthDiff: ''
+            };
+        }
+
+        try {
+            return await getChangedFilesWithDiff(premergePath, mergePath, fileExtension);
+        } catch (error) {
+            console.error(`差分解析エラー: ${error.message}`);
+            return {
+                changedFiles: [],
+                groundTruthDiff: ''
+            };
+        }
+    } '../GenerateFIleChanged.js';
+
+/**
+ * データセットファイルシステムへのアクセスを担当するRepositoryクラス
+ */
+export class DatasetRepository {
+    /**
+     * データセットディレクトリ内のプロジェクト一覧を取得
+     * @param {string} datasetDir - データセットディレクトリのパス
+     * @returns {Promise<string[]>} プロジェクト名の配列
+     */
+    async getProjectDirectories(datasetDir) {
+        try {
+            const entries = await fs.readdir(datasetDir, { withFileTypes: true });
+            return entries
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => dirent.name);
+        } catch (error) {
+            throw new Error(`プロジェクトディレクトリ取得エラー: ${error.message}`);
+        }
+    }
+
+    /**
+     * プロジェクト内のカテゴリディレクトリ一覧を取得
+     * @param {string} projectPath - プロジェクトディレクトリのパス
+     * @returns {Promise<string[]>} カテゴリ名の配列
+     */
+    async getCategoryDirectories(projectPath) {
+        try {
+            const entries = await fs.readdir(projectPath, { withFileTypes: true });
+            return entries
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => dirent.name);
+        } catch (error) {
+            throw new Error(`カテゴリディレクトリ取得エラー: ${error.message}`);
+        }
+    }
+
+    /**
+     * カテゴリ内のタイトルディレクトリ一覧を取得
+     * @param {string} categoryPath - カテゴリディレクトリのパス
+     * @returns {Promise<string[]>} タイトル名の配列
+     */
+    async getTitleDirectories(categoryPath) {
+        try {
+            const entries = await fs.readdir(categoryPath, { withFileTypes: true });
+            return entries
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => dirent.name);
+        } catch (error) {
+            throw new Error(`タイトルディレクトリ取得エラー: ${error.message}`);
+        }
+    }
+
+    /**
+     * プルリクエストディレクトリの内容を取得し、premergeとmergeパスを特定
+     * @param {string} pullRequestPath - プルリクエストディレクトリのパス
+     * @returns {Promise<Object>} premergePathとmergePathを含むオブジェクト
+     */
+    async getPullRequestPaths(pullRequestPath) {
+        try {
+            const entries = await fs.readdir(pullRequestPath, { withFileTypes: true });
+            
+            // premergeパスを取得
+            const premergePath = entries
+                .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('premerge'))
+                .map(dirent => path.join(pullRequestPath, dirent.name))[0];
+
+            // 先に"commit_snapshot_"で始まるサブディレクトリを探す
+            let mergePath = entries
+                .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('commit_snapshot_'))
+                .map(dirent => path.join(pullRequestPath, dirent.name))[0];
+            
+            // "commit_snapshot_"がなければ"merge_"を探す
+            if (!mergePath) {
+                mergePath = entries
+                    .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('merge'))
+                    .map(dirent => path.join(pullRequestPath, dirent.name))[0];
+            }
+
+            return {
+                premergePath,
+                mergePath,
+                hasValidPaths: Boolean(premergePath && mergePath)
+            };
+        } catch (error) {
+            throw new Error(`プルリクエストパス取得エラー: ${error.message}`);
+        }
+    }
+
+    /**
+     * 変更されたファイルのリストを取得
+     * @param {string} premergePath - premergeディレクトリのパス
+     * @param {string} mergePath - mergeディレクトリのパス
+     * @param {string} fileExtension - 対象ファイル拡張子（オプション）
+     * @returns {Promise<string[]>} 変更されたファイルのパス配列
+     */
+    async getChangedFiles(premergePath, mergePath, fileExtension = null) {
+        if (!premergePath || !mergePath) {
+            return [];
+        }
+
+        try {
+            return await getChangedFiles(premergePath, mergePath, fileExtension);
+        } catch (error) {
+            console.error(`差分解析エラー: ${error.message}`);
+            return [];
+        }
+    }
+
+    /**
+     * APRログディレクトリのパスを構築
+     * @param {string} aprOutputPath - APRログルートパス
+     * @param {string} datasetDir - データセットディレクトリのパス
+     * @param {string} pullRequestPath - プルリクエストディレクトリのパス
+     * @returns {string} APRログの相対パス
+     */
+    buildAPRLogPath(aprOutputPath, datasetDir, pullRequestPath) {
+        return path.join(aprOutputPath, path.relative(datasetDir, pullRequestPath));
+    }
+
+    /**
+     * ディレクトリ比較による変更ファイル検出の代替関数
+     * @param {string} dir1 - 比較元ディレクトリ
+     * @param {string} dir2 - 比較先ディレクトリ
+     * @returns {Promise<string[]>} 変更されたファイルの配列
+     */
+    async compareDirectoriesForChanges(dir1, dir2) {
+        const changedFiles = [];
+        
+        try {
+            // 両ディレクトリのファイル一覧を再帰的に取得
+            const getFilesRecursively = async (dirPath, basePath = '') => {
+                const files = [];
+                try {
+                    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+                    
+                    for (const entry of entries) {
+                        const fullPath = path.join(dirPath, entry.name);
+                        const relativePath = path.join(basePath, entry.name);
+                        
+                        if (entry.isDirectory()) {
+                            // .gitディレクトリは除外
+                            if (entry.name !== '.git') {
+                                files.push(...await getFilesRecursively(fullPath, relativePath));
+                            }
+                        } else if (entry.isFile()) {
+                            files.push(relativePath);
+                        }
+                    }
+                } catch (error) {
+                    // ディレクトリアクセスエラーは無視
+                }
+                return files;
+            };
+            
+            const [files1, files2] = await Promise.all([
+                getFilesRecursively(dir1),
+                getFilesRecursively(dir2)
+            ]);
+            
+            const allFiles = new Set([...files1, ...files2]);
+            
+            for (const filePath of allFiles) {
+                const file1Path = path.join(dir1, filePath);
+                const file2Path = path.join(dir2, filePath);
+                
+                try {
+                    const [stat1, stat2] = await Promise.allSettled([
+                        fs.stat(file1Path),
+                        fs.stat(file2Path)
+                    ]);
+                    
+                    // ファイルの存在状況をチェック
+                    const exists1 = stat1.status === 'fulfilled';
+                    const exists2 = stat2.status === 'fulfilled';
+                    
+                    if (!exists1 || !exists2) {
+                        // ファイルが片方にしか存在しない（追加/削除）
+                        changedFiles.push(filePath);
+                    } else {
+                        // 両方に存在する場合、サイズまたは変更時刻で比較
+                        const size1 = stat1.value.size;
+                        const size2 = stat2.value.size;
+                        const mtime1 = stat1.value.mtime.getTime();
+                        const mtime2 = stat2.value.mtime.getTime();
+                        
+                        if (size1 !== size2 || Math.abs(mtime1 - mtime2) > 1000) { // 1秒の誤差を許容
+                            changedFiles.push(filePath);
+                        }
+                    }
+                } catch (error) {
+                    // ファイル比較エラーは無視
+                }
+            }
+        } catch (error) {
+            console.error(`ディレクトリ比較エラー: ${error.message}`);
+        }
+        
+        return changedFiles;
+    }
+}

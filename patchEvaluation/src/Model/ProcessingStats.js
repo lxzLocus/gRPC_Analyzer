@@ -1,0 +1,174 @@
+/**
+ * 処理統計情報を管理するモデルクラス
+ */
+export class ProcessingStats {
+    constructor() {
+        this.totalDatasetEntries = 0;
+        this.aprLogFound = 0;
+        this.aprLogNotFound = 0;
+        this.aprLogAccessError = 0;
+        this.aprParseSuccess = 0;
+        this.aprParseFailure = 0;
+        this.matchedPairs = [];
+        this.unmatchedEntries = [];
+        this.errorEntries = [];
+    }
+
+    /**
+     * APRログが発見された際の統計更新
+     */
+    incrementAprLogFound() {
+        this.aprLogFound++;
+    }
+
+    /**
+     * APRログが見つからなかった際の統計更新
+     */
+    incrementAprLogNotFound() {
+        this.aprLogNotFound++;
+    }
+
+    /**
+     * APRログアクセスエラーの統計更新
+     */
+    incrementAprLogAccessError() {
+        this.aprLogAccessError++;
+    }
+
+    /**
+     * APRログ解析成功の統計更新
+     */
+    incrementAprParseSuccess() {
+        this.aprParseSuccess++;
+    }
+
+    /**
+     * APRログ解析失敗の統計更新
+     */
+    incrementAprParseFailure() {
+        this.aprParseFailure++;
+    }
+
+    /**
+     * データセットエントリー数をインクリメント
+     */
+    incrementTotalEntries() {
+        this.totalDatasetEntries++;
+    }
+
+    /**
+     * 成功したマッチングペアを追加
+     */
+    addMatchedPair(pair) {
+        this.matchedPairs.push(pair);
+    }
+
+    /**
+     * 未マッチングエントリーを追加
+     */
+    addUnmatchedEntry(entry) {
+        this.unmatchedEntries.push(entry);
+    }
+
+    /**
+     * エラーエントリーを追加
+     */
+    addErrorEntry(entry) {
+        this.errorEntries.push(entry);
+    }
+
+    /**
+     * 成功率を計算
+     */
+    calculateSuccessRate() {
+        return this.totalDatasetEntries > 0 
+            ? (this.aprParseSuccess / this.totalDatasetEntries * 100).toFixed(1) 
+            : 0;
+    }
+
+    /**
+     * APRログ発見率を計算
+     */
+    calculateAprFoundRate() {
+        return this.totalDatasetEntries > 0 
+            ? (this.aprLogFound / this.totalDatasetEntries * 100).toFixed(1) 
+            : 0;
+    }
+
+    /**
+     * 発見済みAPRログからの解析成功率を計算
+     */
+    calculateParseSuccessFromFound() {
+        return this.aprLogFound > 0 
+            ? (this.aprParseSuccess / this.aprLogFound * 100).toFixed(1) 
+            : 0;
+    }
+
+    /**
+     * 詳細統計を計算
+     */
+    calculateDetailedStats() {
+        if (this.matchedPairs.length === 0) return null;
+
+        const totalTurns = this.matchedPairs.reduce((sum, pair) => sum + pair.aprLogData.turns, 0);
+        const totalTokens = this.matchedPairs.reduce((sum, pair) => sum + pair.aprLogData.totalTokens, 0);
+        const totalMods = this.matchedPairs.reduce((sum, pair) => sum + pair.aprLogData.modifications, 0);
+        const totalAffectedFiles = this.matchedPairs.reduce((sum, pair) => sum + pair.aprLogData.affectedFiles, 0);
+        const totalChangedFiles = this.matchedPairs.reduce((sum, pair) => sum + (pair.changedFiles ? pair.changedFiles.length : 0), 0);
+        const totalAprDiffFiles = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprDiffFiles ? pair.aprDiffFiles.length : 0), 0);
+
+        return {
+            averages: {
+                turns: totalTurns / this.matchedPairs.length,
+                tokens: totalTokens / this.matchedPairs.length,
+                modifications: totalMods / this.matchedPairs.length,
+                affectedFiles: totalAffectedFiles / this.matchedPairs.length,
+                changedFiles: totalChangedFiles / this.matchedPairs.length,
+                aprDiffFiles: totalAprDiffFiles / this.matchedPairs.length
+            },
+            totals: {
+                turns: totalTurns,
+                tokens: totalTokens,
+                modifications: totalMods,
+                affectedFiles: totalAffectedFiles,
+                changedFiles: totalChangedFiles,
+                aprDiffFiles: totalAprDiffFiles
+            }
+        };
+    }
+
+    /**
+     * LLM評価統計を計算
+     */
+    calculateLLMEvaluationStats() {
+        const withFinalMod = this.matchedPairs.filter(pair => pair.finalModification !== null).length;
+        const withLLMEval = this.matchedPairs.filter(pair => 
+            pair.finalModification && 
+            pair.finalModification.llmEvaluation && 
+            !pair.finalModification.llmEvaluation.error
+        ).length;
+
+        if (withLLMEval === 0) return null;
+
+        const correctCount = this.matchedPairs.filter(pair => 
+            pair.finalModification && 
+            pair.finalModification.llmEvaluation && 
+            pair.finalModification.llmEvaluation.is_correct
+        ).length;
+
+        const plausibleCount = this.matchedPairs.filter(pair => 
+            pair.finalModification && 
+            pair.finalModification.llmEvaluation && 
+            pair.finalModification.llmEvaluation.is_plausible
+        ).length;
+
+        return {
+            withFinalMod,
+            withLLMEval,
+            correctCount,
+            plausibleCount,
+            correctRate: (correctCount / withLLMEval * 100).toFixed(1),
+            plausibleRate: (plausibleCount / withLLMEval * 100).toFixed(1)
+        };
+    }
+}
