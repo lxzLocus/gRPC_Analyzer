@@ -127,7 +127,7 @@ export class LLMEvaluationService {
             // テンプレートに渡すコンテキストデータの準備
             const templateContext = {
                 code_context: await this.generateCodeContext(groundTruthDiff, premergePath),
-                ground_truth_diff: groundTruthDiff || "差分情報が利用できません",
+                ground_truth_diff: groundTruthDiff || "No ground truth diff available",
                 agent_generated_diff: agentGeneratedDiff,
                 agent_thought_process: agentThoughtProcess
             };

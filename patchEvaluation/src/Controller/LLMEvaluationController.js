@@ -253,7 +253,7 @@ export class LLMEvaluationController {
      */
     extractThoughtProcess(aprLogData) {
         if (!aprLogData.turns || aprLogData.turns.length === 0) {
-            return "思考プロセスの情報がありません";
+            return "No thought process information available";
         }
 
         return aprLogData.turns.map(turn => {

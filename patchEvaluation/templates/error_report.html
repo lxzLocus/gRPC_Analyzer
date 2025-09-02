@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>エラーレポート</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            min-height: 100vh;
+        }
+        .container { 
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .title { 
+            font-size: 3em;
+            margin: 0;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .error-count { 
+            font-size: 1.2em;
+            margin: 15px 0 0 0;
+            opacity: 0.9;
+            font-weight: 300;
+        }
+        .content { padding: 40px 30px; }
+        
+        .section { 
+            margin: 40px 0;
+            background: #fef2f2;
+            border-radius: 12px;
+            padding: 30px;
+            border-left: 5px solid #dc2626;
+        }
+        .section-title { 
+            color: #1f2937;
+            font-size: 1.8em;
+            margin: 0 0 25px 0;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .error-type-grid { 
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 25px 0;
+        }
+        .error-type-card { 
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border-left: 5px solid #dc2626;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .error-type-card:hover { 
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        .error-type-name { 
+            font-weight: 700;
+            color: #7f1d1d;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+        .error-type-count { 
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #dc2626;
+            margin: 10px 0;
+        }
+        .error-type-percentage {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+        
+        .error-list { 
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            max-height: 600px;
+            overflow-y: auto;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .error-item { 
+            margin: 15px 0;
+            padding: 20px;
+            background: #fef2f2;
+            border-radius: 8px;
+            border-left: 4px solid #dc2626;
+            transition: background-color 0.3s ease;
+        }
+        .error-item:hover {
+            background: #fecaca;
+        }
+        .error-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .error-entry { 
+            font-weight: 700;
+            color: #1f2937;
+            font-size: 1em;
+        }
+        .error-number {
+            background: #dc2626;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        .error-message { 
+            color: #374151;
+            margin: 10px 0;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 0.9em;
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #f3f4f6;
+            word-break: break-word;
+        }
+        .error-path { 
+            color: #6b7280;
+            font-size: 0.85em;
+            font-family: monospace;
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .frequency-list {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .frequency-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .frequency-item:last-child {
+            border-bottom: none;
+        }
+        .frequency-message {
+            flex: 1;
+            margin-right: 15px;
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #374151;
+        }
+        .frequency-count {
+            background: #dc2626;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+            min-width: 40px;
+            text-align: center;
+        }
+        
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 25px 0;
+        }
+        .summary-stat {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .summary-value {
+            font-size: 2em;
+            font-weight: 700;
+            color: #dc2626;
+            margin-bottom: 8px;
+        }
+        .summary-label {
+            color: #6b7280;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        
+        .footer { 
+            background: #f9fafb;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        .timestamp { 
+            color: #6b7280;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        .footer-links a {
+            color: #dc2626;
+            text-decoration: none;
+            margin: 0 15px;
+            font-size: 0.9em;
+        }
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+        
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .content { padding: 20px 15px; }
+            .title { font-size: 2.2em; }
+            .error-type-grid { grid-template-columns: 1fr; }
+            .error-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">❌ エラーレポート</h1>
+            <p class="error-count" data-total-errors="{{totalErrors}}">総エラー数: {{totalErrors}} 件</p>
+        </div>
+
+        <div class="content">
+            <!-- エラー概要統計 -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span>📊</span>
+                    エラー概要統計
+                </h2>
+                <div class="summary-stats">
+                    <div class="summary-stat">
+                        <div class="summary-value">{{totalErrors}}</div>
+                        <div class="summary-label">総エラー数</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="summary-value">{{errorsByTypeCount}}</div>
+                        <div class="summary-label">エラータイプ数</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="summary-value">{{uniqueErrorMessages}}</div>
+                        <div class="summary-label">ユニークエラー数</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="summary-value">{{mostFrequentErrorCount}}</div>
+                        <div class="summary-label">最頻出エラー数</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- エラータイプ別集計 -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span>🏷️</span>
+                    エラータイプ別集計
+                </h2>
+                <div class="error-type-grid">
+                    {{#each errorsByType}}
+                    <div class="error-type-card" data-count="{{this}}">
+                        <div class="error-type-name">{{@key}}</div>
+                        <div class="error-type-count">{{this}}</div>
+                        <div class="error-type-percentage">-</div>
+                    </div>
+                    {{/each}}
+                </div>
+            </div>
+
+            <!-- 頻出エラーメッセージ -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span>🔢</span>
+                    頻出エラーメッセージ（上位20件）
+                </h2>
+                <div class="frequency-list">
+                    {{#each errorsByFrequency}}
+                    <div class="frequency-item">
+                        <div class="frequency-message">{{this.[0]}}</div>
+                        <div class="frequency-count">{{this.[1]}}</div>
+                    </div>
+                    {{/each}}
+                </div>
+            </div>
+
+            <!-- 最近のエラー詳細 -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span>🔍</span>
+                    最近のエラー詳細
+                </h2>
+                <div class="error-list">
+                    {{#each recentErrors}}
+                    <div class="error-item">
+                        <div class="error-header">
+                            <div class="error-entry">{{datasetEntry}}</div>
+                            <div class="error-number">#{{@index}}</div>
+                        </div>
+                        <div class="error-message">{{error}}</div>
+                        <div class="error-path">パス: {{aprLogPath}}</div>
+                    </div>
+                    {{/each}}
+                </div>
+            </div>
+
+            <!-- エラー分析サマリー -->
+            {{#if errorAnalysis}}
+            <div class="section">
+                <h2 class="section-title">
+                    <span>📈</span>
+                    エラー分析サマリー
+                </h2>
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <h3 style="color: #1f2937; margin-top: 0;">主要な問題領域</h3>
+                    <ul style="color: #374151; line-height: 1.6;">
+                        {{#each errorAnalysis.topIssues}}
+                        <li>{{this}}</li>
+                        {{/each}}
+                    </ul>
+                    
+                    {{#if errorAnalysis.recommendations}}
+                    <h3 style="color: #1f2937;">推奨対策</h3>
+                    <ul style="color: #374151; line-height: 1.6;">
+                        {{#each errorAnalysis.recommendations}}
+                        <li>{{this}}</li>
+                        {{/each}}
+                    </ul>
+                    {{/if}}
+                </div>
+            </div>
+            {{/if}}
+        </div>
+
+        <div class="footer">
+            <div class="timestamp">レポート生成日時: {{timestamp}}</div>
+            <div class="footer-links">
+                <a href="#" onclick="window.print()">📄 印刷</a>
+                <a href="{{jsonDataPath}}" target="_blank">📊 JSONデータ</a>
+                <a href="#" onclick="location.reload()">🔄 更新</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // エラータイプ割合（リンター警告回避のためdata属性から参照）
+        document.addEventListener('DOMContentLoaded', function() {
+            const totalHolder = document.querySelector('.error-count');
+            const totalErrorsAttr = totalHolder ? totalHolder.getAttribute('data-total-errors') : null;
+            const totalErrors = totalErrorsAttr ? parseInt(totalErrorsAttr, 10) : 0;
+            const typeCards = document.querySelectorAll('.error-type-card');
+            typeCards.forEach(card => {
+                const cntAttr = card.getAttribute('data-count');
+                const count = cntAttr ? parseInt(cntAttr, 10) : 0;
+                const percentageElement = card.querySelector('.error-type-percentage');
+                const percentage = totalErrors > 0 ? ((count / totalErrors) * 100).toFixed(1) : '0.0';
+                if (percentageElement) percentageElement.textContent = `${percentage}% of total errors`;
+            });
+        });
+    </script>
+</body>
+</html>

@@ -120,6 +120,8 @@ class Config {
             this.outputDir,
             this.getConfigValue('paths.logsDir', '/app/logs'),
             this.getConfigValue('paths.backupDir', '/app/backups'),
+            path.join(this.outputDir, 'reports'),
+            path.join(this.outputDir, 'reports', 'assets'),
             path.join(this.getConfigValue('paths.logsDir', '/app/logs'), 'performance'),
             path.join(this.getConfigValue('paths.logsDir', '/app/logs'), 'diff_errors'),
             path.join(this.getConfigValue('paths.logsDir', '/app/logs'), 'parsing_errors'),

@@ -1,14 +1,113 @@
 # APRログパーサー
 
-LLMとの対話でAPRのログをパースし、premergeとmergeの差分を取得するモジュールです。また、LLMを使用したパッチ品質の自動評価機能も提供します。
+LLMとの対話でAPRのログをパースし、premergeとmergeの差分を取得するモジュールです。また、LLMを使用したパッチ品質の自動評価機能と、視覚的で分かりやすいHTMLレポート生成機能も提供します。
 
-## 🆕 新機能: LLMベースのパッチ評価 (evaluateWithLLM)
+## 🆕 新機能: HTMLレポート生成システム
+
+### 概要
+APRログ分析結果を視覚的で分かりやすいHTMLレポートとして出力する機能を追加しました。統計データ、エラー詳細、個別エントリー分析結果を美しいWebページ形式で参照できます。
+
+### 機能特徴
+- **📊 統計レポート**: 分析結果の全体統計をグラフィカルに表示
+- **❌ エラーレポート**: エラーの分類と頻度分析
+- **📝 詳細レポート**: 個別エントリーの詳細分析結果
+- **📋 サマリーレポート**: 生成されたレポートの一覧とナビゲーション
+- **📱 レスポンシブデザイン**: モバイル対応の美しいUI
+- **📄 印刷対応**: PDF生成や印刷に最適化されたスタイル
+- **🔗 JSONデータ併用出力**: HTMLと同時にJSONファイルも生成
+
+### 自動生成されるレポート
+1. **統計レポート** (`statistics_report_*.html`)
+   - 総エントリー数と成功率
+   - ステップ1完了率（APRログ構造解析＋差分抽出）
+   - 評価パイプライン成功率（ステップ1＋LLM品質評価）
+   - プログレスバーとメトリクス表示
+
+2. **エラーレポート** (`error_report_*.html`)
+   - エラータイプ別分類
+   - 頻出エラーメッセージ
+   - 最近のエラー詳細
+   - エラー分析とトラブルシューティング
+
+3. **エントリー詳細レポート** (`entry_detail_*.html`)
+   - 個別エントリーの詳細情報
+   - APRログ解析結果
+   - LLM評価結果
+   - Ground Truth Diff表示
+
+### 使用方法
+
+#### 1. 自動生成（推奨）
+```bash
+# 通常の分析実行時に自動生成
+node script/MainScript.js
+
+# レポート生成オプション付きで実行
+node script/MainScript.js
+# デフォルトで統計とエラーレポートが生成されます
+```
+
+#### 2. 専用スクリプトでの生成
+```bash
+# 基本的な統計とエラーレポート生成
+node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs
+
+# 統計レポートのみ生成
+node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs --stats-only
+
+# エラーレポートのみ生成
+node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs --errors-only
+
+# 詳細レポート付きで生成（最大10件）
+node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs --with-details
+
+# ヘルプ表示
+node script/GenerateHTMLReport.js --help
+```
+
+#### 3. プログラム内での使用
+```javascript
+import { DatasetAnalysisController } from './src/Controller/DatasetAnalysisController.js';
+
+const controller = new DatasetAnalysisController();
+
+// HTMLレポート生成オプション付きで分析実行
+const stats = await controller.executeAnalysis(datasetDir, aprOutputPath, {
+    generateHTMLReport: true,       // HTMLレポート生成
+    generateErrorReport: true,      // エラーレポート生成
+    generateDetailReports: false    // 詳細レポート生成
+});
+
+// または、個別にレポート生成
+const statsReport = await controller.generateStatisticsHTMLReport();
+const errorReport = await controller.generateErrorHTMLReport();
+```
+
+### 出力先
+- **HTMLファイル**: `/app/output/reports/`
+- **JSONデータ**: `/app/output/reports/` (HTML と同時生成)
+- **レポート一覧**: `/app/output/reports/index.json`
+
+### 生成例
+```
+📊 HTMLレポート生成完了!
+🆔 セッションID: analysis_2024-01-15T10-30-45-000Z_abc123
+📄 生成レポート数: 3
+📋 サマリーページ: file:///app/output/reports/report_summary_analysis_2024-01-15T10-30-45-000Z_abc123.html
+
+生成されたレポート:
+✅ 統計レポート: statistics_report_2024-01-15T10-30-45-000Z.html
+❌ エラーレポート: error_report_2024-01-15T10-30-45-000Z.html
+📝 エントリー詳細: entry_detail_project_issue123_2024-01-15T10-30-45-000Z.html
+```
+
+## 🆕 LLMベースのパッチ評価 (evaluateWithLLM)
 
 ### 概要
 `evaluateWithLLM`メソッドは、LLMを使用してAutomated Program Repair (APR)で生成されたパッチの品質を評価します。R0-R15の意味的等価性ルールに基づいて、パッチの妥当性と正確性を分析します。
 
 ### 機能特徴
-- **プロンプトテンプレート**: `/app/patchEvaluation/prompt/00_evaluationPrompt.txt`を使用
+- **プロンプトテンプレート**: `/app/prompt/00_evaluationPrompt.txt`を使用
 - **意味的等価性評価**: R0-R15ルールに基づく体系的な評価
 - **二段階評価**:
   - **妥当性評価** (Plausibility): パッチがコンテキストに適しているか
@@ -44,8 +143,6 @@ if (result.success) {
 }
 ```
 
-
-
 ### 評価レベル
 - **IDENTICAL**: 完全に同一
 - **SEMANTICALLY_EQUIVALENT**: 意味的に等価
@@ -79,7 +176,12 @@ if (result.success) {
 - プロバイダー自動選択
 - 設定管理
 
-### 4. 型定義とユーティリティ
+### 4. HTMLReportController (`HTMLReportController.js`)
+- HTMLレポート生成制御
+- 統計、エラー、詳細レポートの管理
+- レポートサマリー生成
+
+### 5. 型定義とユーティリティ
 - `types.js`: 共通型定義とヘルパー関数
 - `config.js`: 設定管理
 - `llmClient.js`: LLMクライアント基底クラス

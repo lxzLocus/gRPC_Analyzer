@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>エントリー詳細: {{entryId}}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            min-height: 100vh;
+        }
+        .container { 
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 30px;
+        }
+        .title { 
+            font-size: 2.5em;
+            margin: 0;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .entry-id { 
+            font-size: 1.1em;
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-family: monospace;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 12px;
+            border-radius: 6px;
+            display: inline-block;
+        }
+        .content { padding: 30px; }
+        
+        .section { 
+            margin: 30px 0;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 25px;
+            border-left: 4px solid #4f46e5;
+        }
+        .section-title { 
+            color: #1e293b;
+            font-size: 1.5em;
+            margin: 0 0 20px 0;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .info-grid { 
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        .info-card { 
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border-left: 3px solid #4f46e5;
+        }
+        .info-label { 
+            font-weight: 600;
+            color: #64748b;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .info-value { 
+            color: #1e293b;
+            font-size: 1.1em;
+            word-break: break-all;
+        }
+        
+        .file-list { 
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .file-item { 
+            background: white;
+            margin: 8px 0;
+            padding: 12px 15px;
+            border-radius: 6px;
+            border-left: 3px solid #10b981;
+            font-family: monospace;
+            font-size: 0.9em;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .code-block { 
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .code-block pre { margin: 0; }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-success { background: #dcfce7; color: #166534; }
+        .status-error { background: #fef2f2; color: #dc2626; }
+        .status-warning { background: #fef3c7; color: #d97706; }
+        
+        .evaluation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .evaluation-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .evaluation-score {
+            font-size: 2em;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .evaluation-label {
+            color: #64748b;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+        
+        .footer { 
+            background: #f1f5f9;
+            padding: 20px 30px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+        }
+        .timestamp { 
+            color: #64748b;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        .footer-links a {
+            color: #4f46e5;
+            text-decoration: none;
+            margin: 0 15px;
+            font-size: 0.9em;
+        }
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+        
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .content { padding: 20px 15px; }
+            .title { font-size: 2em; }
+            .info-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">📝 エントリー詳細レポート</h1>
+            <div class="entry-id">ID: {{entryId}}</div>
+        </div>
+
+        <div class="content">
+            <!-- 基本情報 -->
+            <div class="section">
+                <h2 class="section-title">📊 基本情報</h2>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-label">データセットエントリー</div>
+                        <div class="info-value">{{datasetEntry}}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">APRログパス</div>
+                        <div class="info-value">{{aprLogPath}}</div>
+                    </div>
+                    {{#if logFiles}}
+                    <div class="info-card">
+                        <div class="info-label">ログファイル数</div>
+                        <div class="info-value">{{logFiles.length}}</div>
+                    </div>
+                    {{/if}}
+                    {{#if latestLogFile}}
+                    <div class="info-card">
+                        <div class="info-label">最新ログファイル</div>
+                        <div class="info-value">{{latestLogFile}}</div>
+                    </div>
+                    {{/if}}
+                </div>
+            </div>
+
+            <!-- APRログ解析結果 -->
+            {{#if aprLogData}}
+            <div class="section">
+                <h2 class="section-title">🔍 APRログ解析結果</h2>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-label">対話ターン数</div>
+                        <div class="info-value">{{aprLogData.turns}}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">総トークン数</div>
+                        <div class="info-value">{{aprLogData.totalTokens}}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">修正回数</div>
+                        <div class="info-value">{{aprLogData.modifications}}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">影響ファイル数</div>
+                        <div class="info-value">{{aprLogData.affectedFiles}}</div>
+                    </div>
+                </div>
+            </div>
+            {{/if}}
+
+            <!-- 変更ファイル（データセット） -->
+            {{#if changedFiles}}
+            <div class="section">
+                <h2 class="section-title">📁 変更ファイル（データセット）</h2>
+                <ul class="file-list">
+                    {{#each changedFiles}}
+                    <li class="file-item">{{this}}</li>
+                    {{/each}}
+                </ul>
+            </div>
+            {{/if}}
+
+            <!-- APR差分ファイル -->
+            {{#if aprDiffFiles}}
+            <div class="section">
+                <h2 class="section-title">🎯 APR差分ファイル</h2>
+                <ul class="file-list">
+                    {{#each aprDiffFiles}}
+                    <li class="file-item">{{this}}</li>
+                    {{/each}}
+                </ul>
+            </div>
+            {{/if}}
+
+            <!-- Ground Truth Diff -->
+            {{#if groundTruthDiff}}
+            <div class="section">
+                <h2 class="section-title">📊 Ground Truth Diff</h2>
+                <div class="code-block">
+                    <pre>{{groundTruthDiff}}</pre>
+                </div>
+            </div>
+            {{/if}}
+
+            <!-- LLM評価結果 -->
+            {{#if llmEvaluation}}
+            <div class="section">
+                <h2 class="section-title">🤖 LLM評価結果</h2>
+                <div class="evaluation-grid">
+                    <div class="evaluation-card">
+                        <div class="evaluation-score">
+                            {{#if llmEvaluation.is_correct}}
+                            <span style="color: #10b981;">✅</span>
+                            {{else}}
+                            <span style="color: #ef4444;">❌</span>
+                            {{/if}}
+                        </div>
+                        <div class="evaluation-label">正確性</div>
+                    </div>
+                    <div class="evaluation-card">
+                        <div class="evaluation-score">
+                            {{#if llmEvaluation.is_plausible}}
+                            <span style="color: #10b981;">✅</span>
+                            {{else}}
+                            <span style="color: #ef4444;">❌</span>
+                            {{/if}}
+                        </div>
+                        <div class="evaluation-label">妥当性</div>
+                    </div>
+                </div>
+                <div style="margin-top: 20px;">
+                    <div class="info-card">
+                        <div class="info-label">総合評価</div>
+                        <div class="info-value">
+                            <span class="status-badge {{#if llmEvaluation.is_correct}}status-success{{else}}status-error{{/if}}">
+                                {{llmEvaluation.overall_assessment}}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {{/if}}
+
+            <!-- 最終修正情報 -->
+            {{#if finalModification}}
+            <div class="section">
+                <h2 class="section-title">🔧 最終修正情報</h2>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-label">修正ターン</div>
+                        <div class="info-value">Turn {{finalModification.turn}}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">タイムスタンプ</div>
+                        <div class="info-value">{{finalModification.timestamp}}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">修正行数</div>
+                        <div class="info-value">{{finalModification.diffLines}}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">影響ファイル数</div>
+                        <div class="info-value">{{finalModification.affectedFiles.length}}</div>
+                    </div>
+                </div>
+            </div>
+            {{/if}}
+        </div>
+
+        <div class="footer">
+            <div class="timestamp">レポート生成日時: {{timestamp}}</div>
+            <div class="footer-links">
+                <a href="#" onclick="window.print()">📄 印刷</a>
+                <a href="{{jsonDataPath}}" target="_blank">📊 JSONデータ</a>
+                <a href="#" onclick="history.back()">← 戻る</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

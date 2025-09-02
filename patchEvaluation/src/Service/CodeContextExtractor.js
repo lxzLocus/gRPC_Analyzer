@@ -15,7 +15,7 @@ export class CodeContextExtractor {
      */
     async extractCodeContext(groundTruthDiff, premergePath) {
         if (!groundTruthDiff || !premergePath) {
-            return "コードコンテキストの抽出に必要な情報が不足しています";
+            return "Insufficient information for code context extraction";
         }
 
         try {
@@ -36,7 +36,7 @@ export class CodeContextExtractor {
 
         } catch (error) {
             console.error(`コードコンテキスト抽出エラー: ${error.message}`);
-            return `コードコンテキストの抽出中にエラーが発生しました: ${error.message}`;
+            return `Error occurred during code context extraction: ${error.message}`;
         }
     }
 
@@ -166,7 +166,7 @@ export class CodeContextExtractor {
      */
     formatCodeContext(codeSnippets) {
         if (codeSnippets.length === 0) {
-            return "変更箇所周辺のコードコンテキストが見つかりませんでした";
+            return "No code context found around the changed areas";
         }
 
         const formattedSnippets = codeSnippets.map(fileSnippet => {

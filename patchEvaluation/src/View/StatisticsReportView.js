@@ -38,8 +38,10 @@ export class StatisticsReportView {
         console.log(`  ✅ APRログ発見数: ${stats.aprLogFound}`);
         console.log(`  ❌ APRログ未発見数: ${stats.aprLogNotFound}`);
         console.log(`  ⚠️  APRログアクセスエラー数: ${stats.aprLogAccessError}`);
-        console.log(`  🎯 APRログ解析成功数: ${stats.aprParseSuccess}`);
-        console.log(`  💥 APRログ解析失敗数: ${stats.aprParseFailure}`);
+        console.log(`  🎯 ステップ1完了数（APRログ構造解析＋差分抽出）: ${stats.aprParseSuccess}`);
+        console.log(`  💥 ステップ1失敗数: ${stats.aprParseFailure}`);
+        console.log(`  🚀 評価パイプライン成功数（ステップ1＋LLM品質評価）: ${stats.evaluationPipelineSuccess}`);
+        console.log(`  ❌ 評価パイプライン失敗数: ${stats.evaluationPipelineFailure}`);
     }
 
     /**
@@ -49,10 +51,20 @@ export class StatisticsReportView {
     showSuccessRates(stats) {
         console.log('\n📊 成功率:');
         console.log(`  🎯 APRログ発見率: ${stats.calculateAprFoundRate()}% (${stats.aprLogFound}/${stats.totalDatasetEntries})`);
-        console.log(`  ✅ 解析成功率: ${stats.calculateSuccessRate()}% (${stats.aprParseSuccess}/${stats.totalDatasetEntries})`);
+        console.log(`  ✅ ステップ1完了率（APRログ構造解析＋差分抽出）: ${stats.calculateStep1CompletionRate()}% (${stats.aprParseSuccess}/${stats.totalDatasetEntries})`);
+        console.log(`  🚀 評価パイプライン成功率（ステップ1＋LLM品質評価）: ${stats.calculateEvaluationPipelineSuccessRate()}% (${stats.evaluationPipelineSuccess}/${stats.totalDatasetEntries})`);
         
         if (stats.aprLogFound > 0) {
-            console.log(`  🔍 発見済みAPRログからの解析成功率: ${stats.calculateParseSuccessFromFound()}% (${stats.aprParseSuccess}/${stats.aprLogFound})`);
+            console.log(`  🔍 発見済みAPRログからのステップ1完了率: ${stats.calculateParseSuccessFromFound()}% (${stats.aprParseSuccess}/${stats.aprLogFound})`);
+        }
+        
+        // 評価パイプラインの詳細統計
+        const pipelineTotal = stats.evaluationPipelineSuccess + stats.evaluationPipelineFailure;
+        if (pipelineTotal > 0) {
+            const pipelineSuccessFromStep1 = stats.aprParseSuccess > 0 
+                ? (stats.evaluationPipelineSuccess / stats.aprParseSuccess * 100).toFixed(1)
+                : 0;
+            console.log(`  📈 ステップ1からのLLM評価成功率: ${pipelineSuccessFromStep1}% (${stats.evaluationPipelineSuccess}/${stats.aprParseSuccess})`);
         }
     }
 
@@ -215,8 +227,12 @@ export class StatisticsReportView {
         console.log('\n📋 最終サマリー:');
         console.log(`   総エントリー: ${stats.totalDatasetEntries}`);
         console.log(`   APRログ発見: ${stats.aprLogFound} (発見率: ${stats.calculateAprFoundRate()}%)`);
-        console.log(`   解析成功: ${stats.aprParseSuccess} (成功率: ${stats.calculateSuccessRate()}%)`);
-        console.log(`   解析失敗: ${stats.aprParseFailure}`);
-        console.log(`   エラー: ${stats.errorEntries.length}`);
+        console.log(`   ステップ1完了（APRログ構造解析＋差分抽出）: ${stats.aprParseSuccess} (完了率: ${stats.calculateStep1CompletionRate()}%)`);
+        console.log(`   評価パイプライン成功（ステップ1＋LLM品質評価）: ${stats.evaluationPipelineSuccess} (成功率: ${stats.calculateEvaluationPipelineSuccessRate()}%)`);
+        
+        const llmStats = stats.calculateLLMEvaluationStats();
+        if (llmStats) {
+            console.log(`   LLM品質評価結果: 正確性 ${llmStats.correctRate}%, 妥当性 ${llmStats.plausibleRate}%`);
+        }
     }
 }

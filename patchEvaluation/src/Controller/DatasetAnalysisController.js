@@ -5,12 +5,14 @@ import { LLMEvaluationService } from '../Service/LLMEvaluationService.js';
 import { ProcessingStats } from '../Model/ProcessingStats.js';
 import { ConsoleView } from '../View/ConsoleView.js';
 import { StatisticsReportView } from '../View/StatisticsReportView.js';
+import { HTMLReportController } from './HTMLReportController.js';
+import Config from '../Config/config.js';
 
 /**
  * データセット解析のメイン制御を行うControllerクラス
  */
 export class DatasetAnalysisController {
-    constructor() {
+    constructor(configPath = '/app/config/config.json') {
         // Repository層
         this.datasetRepository = new DatasetRepository();
         
@@ -22,6 +24,10 @@ export class DatasetAnalysisController {
         this.consoleView = new ConsoleView();
         this.statisticsReportView = new StatisticsReportView();
         
+        // HTMLレポート生成
+        this.config = new Config(null, configPath);
+        this.htmlReportController = new HTMLReportController(this.config);
+        
         // Model
         this.stats = new ProcessingStats();
     }
@@ -30,9 +36,19 @@ export class DatasetAnalysisController {
      * データセット解析のメイン実行メソッド
      * @param {string} datasetDir - データセットディレクトリのパス
      * @param {string} aprOutputPath - APRログディレクトリのパス
+     * @param {Object} options - 実行オプション
+     * @param {boolean} options.generateHTMLReport - HTMLレポート生成の有無 (default: true)
+     * @param {boolean} options.generateErrorReport - エラーレポート生成の有無 (default: true)
+     * @param {boolean} options.generateDetailReports - 詳細レポート生成の有無 (default: false)
      * @returns {Promise<Object>} 解析結果の統計情報
      */
-    async executeAnalysis(datasetDir, aprOutputPath) {
+    async executeAnalysis(datasetDir, aprOutputPath, options = {}) {
+        const {
+            generateHTMLReport = true,
+            generateErrorReport = true,
+            generateDetailReports = false
+        } = options;
+        
         this.consoleView.showAnalysisStart(datasetDir, aprOutputPath);
 
         try {
@@ -46,6 +62,12 @@ export class DatasetAnalysisController {
 
             // 統計レポートの表示
             this.statisticsReportView.showStatisticsReport(this.stats);
+            
+            // HTMLレポート生成
+            if (generateHTMLReport) {
+                const htmlReportResult = await this.generateHTMLReports(generateErrorReport, generateDetailReports);
+                this.stats.htmlReportResult = htmlReportResult;
+            }
             
             return this.stats;
 
@@ -277,6 +299,8 @@ export class DatasetAnalysisController {
             );
         } else {
             this.consoleView.showNoFinalModification();
+            // 最終修正なしの場合も評価パイプライン完了とみなす（スキップケース）
+            this.stats.incrementEvaluationPipelineSuccess();
         }
 
         // 成功したマッチングを記録
@@ -396,14 +420,13 @@ export class DatasetAnalysisController {
                 agentThoughtProcess: aprLogData.turns.map(turn => {
                     let turnContent = `Turn ${turn.turnNumber}:`;
                     if (turn.thought) {
-                        turnContent += `\n思考: ${turn.thought}`;
+                        turnContent += `\nThought: ${turn.thought}`;
                     }
                     if (turn.plan) {
-                        turnContent += `\n計画: ${turn.plan}`;
+                        turnContent += `\nPlan: ${turn.plan}`;
                     }
                     if (turn.commentText) {
-
-                        
+                        turnContent += `\nComment: ${turn.commentText}`;
                     }
                     return turnContent;
                 }).join('\n\n')
@@ -415,14 +438,23 @@ export class DatasetAnalysisController {
                 this.consoleView.showPromptGenerated(evaluationResult.result.promptLength || 0);
                 this.consoleView.showLLMEvaluationSuccess(evaluationResult.result);
                 finalModInfo.llmEvaluation = evaluationResult.result;
+                
+                // 評価パイプライン成功（ステップ1+2完了）
+                this.stats.incrementEvaluationPipelineSuccess();
             } else {
                 this.consoleView.showLLMEvaluationFailure();
                 finalModInfo.llmEvaluation = { error: evaluationResult.error };
+                
+                // 評価パイプライン失敗
+                this.stats.incrementEvaluationPipelineFailure();
             }
 
         } catch (error) {
             this.consoleView.showLLMEvaluationError(error.message);
             finalModInfo.llmEvaluation = { error: error.message, templateUsed: false };
+            
+            // 評価パイプライン失敗
+            this.stats.incrementEvaluationPipelineFailure();
         }
     }
 
@@ -591,5 +623,138 @@ export class DatasetAnalysisController {
             aprDiffFiles: [],
             error: `解析エラー: ${errorMessage}`
         });
+    }
+
+    /**
+     * HTMLレポート生成
+     * @param {boolean} generateErrorReport - エラーレポート生成の有無
+     * @param {boolean} generateDetailReports - 詳細レポート生成の有無
+     * @returns {Promise<Object>} レポート生成結果
+     */
+    async generateHTMLReports(generateErrorReport = true, generateDetailReports = false) {
+        console.log('\n🚀 HTMLレポート生成を開始...');
+        
+        try {
+            const reportResults = [];
+            
+            // 統計レポート生成
+            const statsReport = await this.htmlReportController.generateStatisticsReport(this.stats);
+            reportResults.push(statsReport);
+            
+            // エラーレポート生成（エラーがある場合のみ）
+            if (generateErrorReport && this.stats.errorEntries.length > 0) {
+                const errorReport = await this.htmlReportController.generateErrorReport(this.stats.errorEntries);
+                reportResults.push(errorReport);
+            }
+            
+            // 詳細レポート生成（成功したマッチングペアの上位件数）
+            if (generateDetailReports && this.stats.matchedPairs.length > 0) {
+                const detailCount = Math.min(this.stats.matchedPairs.length, 10); // 最大10件
+                console.log(`📝 エントリー詳細レポートを${detailCount}件生成中...`);
+                
+                for (let i = 0; i < detailCount; i++) {
+                    const pair = this.stats.matchedPairs[i];
+                    const detailReport = await this.htmlReportController.generateEntryDetailReport(pair);
+                    reportResults.push(detailReport);
+                }
+            }
+            
+            // レポートサマリー生成
+            const summaryResult = {
+                sessionId: this.generateSessionId(),
+                timestamp: new Date().toISOString(),
+                reports: reportResults
+            };
+            
+            const summaryPath = await this.htmlReportController.generateReportSummary(summaryResult);
+            
+            console.log('\n🎉 HTMLレポート生成完了!');
+            console.log(`📊 生成されたレポート数: ${reportResults.length}`);
+            console.log(`📋 サマリーレポート: ${summaryPath}`);
+            console.log(`🔗 ブラウザで開く: file://${summaryPath}`);
+            
+            return {
+                success: true,
+                sessionId: summaryResult.sessionId,
+                summaryPath,
+                reports: reportResults,
+                totalReports: reportResults.length
+            };
+            
+        } catch (error) {
+            console.error(`❌ HTMLレポート生成エラー: ${error.message}`);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * セッションID生成
+     * @returns {string} ユニークなセッションID
+     */
+    generateSessionId() {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const random = Math.random().toString(36).substring(2, 8);
+        return `analysis_${timestamp}_${random}`;
+    }
+
+    /**
+     * HTMLレポート単体生成（統計のみ）
+     * @returns {Promise<Object>} レポート生成結果
+     */
+    async generateStatisticsHTMLReport() {
+        console.log('\n📊 統計HTMLレポートを生成中...');
+        
+        try {
+            const statsReport = await this.htmlReportController.generateStatisticsReport(this.stats);
+            
+            console.log('✅ 統計HTMLレポート生成完了!');
+            console.log(`📊 レポートパス: ${statsReport.htmlPath}`);
+            console.log(`🔗 ブラウザで開く: file://${statsReport.htmlPath}`);
+            
+            return statsReport;
+            
+        } catch (error) {
+            console.error(`❌ 統計HTMLレポート生成エラー: ${error.message}`);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    /**
+     * エラーHTMLレポート単体生成
+     * @returns {Promise<Object>} レポート生成結果
+     */
+    async generateErrorHTMLReport() {
+        if (this.stats.errorEntries.length === 0) {
+            console.log('ℹ️ エラーが発生していないため、エラーレポートの生成をスキップします。');
+            return {
+                success: false,
+                reason: 'No errors to report'
+            };
+        }
+        
+        console.log('\n❌ エラーHTMLレポートを生成中...');
+        
+        try {
+            const errorReport = await this.htmlReportController.generateErrorReport(this.stats.errorEntries);
+            
+            console.log('✅ エラーHTMLレポート生成完了!');
+            console.log(`📊 レポートパス: ${errorReport.htmlPath}`);
+            console.log(`🔗 ブラウザで開く: file://${errorReport.htmlPath}`);
+            
+            return errorReport;
+            
+        } catch (error) {
+            console.error(`❌ エラーHTMLレポート生成エラー: ${error.message}`);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     }
 }

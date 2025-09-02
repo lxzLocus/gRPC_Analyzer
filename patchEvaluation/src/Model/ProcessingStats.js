@@ -7,8 +7,10 @@ export class ProcessingStats {
         this.aprLogFound = 0;
         this.aprLogNotFound = 0;
         this.aprLogAccessError = 0;
-        this.aprParseSuccess = 0;
+        this.aprParseSuccess = 0;  // ステップ1完了数（旧: 解析成功）
         this.aprParseFailure = 0;
+        this.evaluationPipelineSuccess = 0; // 評価パイプライン成功数（ステップ1+2完了）
+        this.evaluationPipelineFailure = 0; // 評価パイプライン失敗数
         this.matchedPairs = [];
         this.unmatchedEntries = [];
         this.errorEntries = [];
@@ -50,6 +52,20 @@ export class ProcessingStats {
     }
 
     /**
+     * 評価パイプライン成功の統計更新（ステップ1+2完了）
+     */
+    incrementEvaluationPipelineSuccess() {
+        this.evaluationPipelineSuccess++;
+    }
+
+    /**
+     * 評価パイプライン失敗の統計更新
+     */
+    incrementEvaluationPipelineFailure() {
+        this.evaluationPipelineFailure++;
+    }
+
+    /**
      * データセットエントリー数をインクリメント
      */
     incrementTotalEntries() {
@@ -78,12 +94,30 @@ export class ProcessingStats {
     }
 
     /**
-     * 成功率を計算
+     * ステップ1完了率を計算（APRログ構造解析＋差分抽出）
+     * APRログが品質評価を開始できる基準を満たしている割合
      */
-    calculateSuccessRate() {
+    calculateStep1CompletionRate() {
         return this.totalDatasetEntries > 0 
             ? (this.aprParseSuccess / this.totalDatasetEntries * 100).toFixed(1) 
             : 0;
+    }
+
+    /**
+     * 評価パイプライン成功率を計算（ステップ1＋LLM品質評価）
+     * ステップ1・2を通じて評価システム全体が技術的エラーなく完了した割合
+     */
+    calculateEvaluationPipelineSuccessRate() {
+        return this.totalDatasetEntries > 0 
+            ? (this.evaluationPipelineSuccess / this.totalDatasetEntries * 100).toFixed(1) 
+            : 0;
+    }
+
+    /**
+     * 成功率を計算（後方互換性のため残存）
+     */
+    calculateSuccessRate() {
+        return this.calculateStep1CompletionRate();
     }
 
     /**

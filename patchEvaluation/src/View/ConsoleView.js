@@ -77,10 +77,10 @@ export class ConsoleView {
     }
 
     /**
-     * APRログ解析成功メッセージの表示
+     * APRログ構造解析成功メッセージの表示（ステップ1完了）
      */
     showAPRLogAnalysisSuccess() {
-        console.log(`  ✅ APRログ解析成功:`);
+        console.log(`  ✅ ステップ1完了（APRログ構造解析＋差分抽出）:`);
     }
 
     /**
