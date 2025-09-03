@@ -13,10 +13,10 @@ export class OpenAILLMClient extends LLMClient {
         this.isInitialized = false;
         
         // 環境変数から APIキーを取得
-        const finalApiKey = apiKey || process.env.OPENAI_TOKEN || process.env.OPENAI_API_KEY || '';
+        const finalApiKey = apiKey || process.env.OPENAI_API_KEY || '';
         
         console.log(`🔑 OpenAILLMClient: Using API key length: ${finalApiKey.length}`);
-        console.log(`🔑 Available env vars: OPENAI_TOKEN=${!!process.env.OPENAI_TOKEN}, OPENAI_API_KEY=${!!process.env.OPENAI_API_KEY}`);
+        console.log(`🔑 Available env vars: OPENAI_API_KEY=${!!process.env.OPENAI_API_KEY}`);
         console.log(`🤖 OpenAILLMClient: Using model: ${this.config.get('llm.model', 'gpt-4.1')}`);
         
         // OpenAIクライアントの初期化を非同期で行う

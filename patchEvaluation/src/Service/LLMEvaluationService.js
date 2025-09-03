@@ -1,6 +1,9 @@
 import fs from 'fs/promises';
 import { TemplateRenderer } from './TemplateCompiler.js';
 import { CodeContextExtractor } from './CodeContextExtractor.js';
+import { LLMClientController } from '../Controller/LLMClientController.js';
+import { createLLMRequest } from '../Repository/llmClient.js';
+import Config from '../Config/config.js';
 
 /**
  * LLM評価処理を担当するサービスクラス
@@ -27,12 +30,12 @@ export class LLMEvaluationService {
 
     /**
      * LLMクライアントの初期化
-     * @param {string} clientType - 'openai' または 'gemini'
+     * @param {Config} config - Config インスタンス
      */
-    async initializeLLMClient(clientType = 'openai') {
+    async initializeLLMClient(config) {
         try {
-            const { LLMClientFactory } = await import('../llmClientFactory.js');
-            this.llmClient = LLMClientFactory.createClient(clientType);
+            this.llmClient = LLMClientController.create(config);
+            await this.llmClient.waitForInitialization();
         } catch (error) {
             throw new Error(`LLMクライアント初期化エラー: ${error.message}`);
         }
@@ -121,7 +124,8 @@ export class LLMEvaluationService {
                 await this.initializeTemplate("/app/prompt/00_evaluationPrompt.txt");
             }
             if (!this.llmClient) {
-                await this.initializeLLMClient('openai');
+                const config = new Config();
+                await this.initializeLLMClient(config);
             }
 
             // テンプレートに渡すコンテキストデータの準備
@@ -135,13 +139,18 @@ export class LLMEvaluationService {
             // テンプレートレンダリング
             const renderedPrompt = this.templateRenderer.render(templateContext);
             
-            // LLMクライアントでの評価実行
-            const llmResponse = await this.llmClient.generateResponse(renderedPrompt, {
+            // LLMリクエストを作成
+            const llmRequest = createLLMRequest([
+                { role: 'user', content: renderedPrompt }
+            ], {
                 temperature: 0.1,
-                max_tokens: 2000
+                maxTokens: 2000
             });
             
-            if (llmResponse && llmResponse.success) {
+            // LLMクライアントでの評価実行
+            const llmResponse = await this.llmClient.generateContent(llmRequest);
+            
+            if (llmResponse && llmResponse.content) {
                 // LLM応答の解析
                 const evaluationResult = this.parseEvaluationResponse(llmResponse.content);
                 

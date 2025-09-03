@@ -44,7 +44,7 @@ export class LLMClientController {
      * プロバイダーの自動選択（APIキーの有無で判定）
      */
     static autoSelectProvider(config) {
-        const hasOpenAIKey = !!(process.env.OPENAI_TOKEN || process.env.OPENAI_API_KEY);
+        const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
         const hasGeminiKey = !!process.env.GEMINI_API_KEY;
 
         console.log(`🔍 Auto-selecting provider: OpenAI=${hasOpenAIKey}, Gemini=${hasGeminiKey}`);

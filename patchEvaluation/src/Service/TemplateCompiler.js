@@ -1,5 +1,4 @@
-import * as fs from 'fs';
-import * as path from 'path';
+
 import handlebars from 'handlebars';
 
 class TemplateRenderer {
