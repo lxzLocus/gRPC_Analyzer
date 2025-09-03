@@ -12,7 +12,7 @@ export const DEFAULT_CONFIG = {
     },
     llm: { 
         provider: 'openai', 
-        model: 'gpt-4.1', 
+        model: 'gpt-5', 
         maxTokens: 4000, 
         temperature: 0.1, 
         timeout: 30000
@@ -33,3 +33,16 @@ export const DEFAULT_CONFIG = {
         backupDir: '/app/backups' 
     }
 };
+
+/**
+ * 必要なファイル情報オブジェクトを作成
+ * @param {string} type - ファイルタイプ ('FILE_CONTENT' または 'DIRECTORY_LISTING')
+ * @param {string} path - ファイルパス
+ * @returns {Object} ファイル情報オブジェクト
+ */
+export function createRequiredFileInfo(type, path) {
+    return {
+        type: type,
+        path: path
+    };
+}

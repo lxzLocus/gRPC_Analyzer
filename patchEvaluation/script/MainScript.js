@@ -11,11 +11,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         "/app/dataset/filtered_fewChanged",     // 少数変更ファイル
         "/app/dataset/filtered_confirmed",     // 確認済み
         "/app/dataset/filtered_commit",        // コミット履歴
-        "/app/dataset/filtered_protoChanged"   // プロトコル変更
+        "/app/dataset/filtered_protoChanged",   // プロトコル変更
+        "/app/dataset/test_fewChanged"
     ];
     
     // 現在選択されているデータセット
-    const selectedDataset = availableDatasets[0]; // filtered_fewChanged を選択
+    const selectedDataset = availableDatasets[4]; // test_fewChanged を選択
     const aprOutputPath = "/app/apr-logs";
 
     // HTMLレポート生成オプション

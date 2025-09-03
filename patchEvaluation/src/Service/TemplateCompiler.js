@@ -29,3 +29,5 @@ class TemplateRenderer {
         });
     }
 }
+
+export { TemplateRenderer };

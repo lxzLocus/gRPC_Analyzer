@@ -17,7 +17,7 @@ export class OpenAILLMClient extends LLMClient {
         
         console.log(`🔑 OpenAILLMClient: Using API key length: ${finalApiKey.length}`);
         console.log(`🔑 Available env vars: OPENAI_API_KEY=${!!process.env.OPENAI_API_KEY}`);
-        console.log(`🤖 OpenAILLMClient: Using model: ${this.config.get('llm.model', 'gpt-4.1')}`);
+        console.log(`🤖 OpenAILLMClient: Using model: ${this.config.get('llm.model', 'gpt-5')}`);
         
         // OpenAIクライアントの初期化を非同期で行う
         this.initPromise = this.initializeClient(finalApiKey);

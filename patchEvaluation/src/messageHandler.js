@@ -3,7 +3,7 @@
  * LLMとの会話とレスポンス解析を担当
  */
 
-import { createLLMParsed, createRequiredFileInfo } from './types.js';
+import { createRequiredFileInfo } from './types.js';
 
 class MessageHandler {
     constructor() {

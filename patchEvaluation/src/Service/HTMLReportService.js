@@ -11,8 +11,34 @@ export class HTMLReportService {
         this.reportsDir = path.join(config.outputDir, 'reports');
         this.templateDir = path.join('/app', 'templates');
         this.assetsDir = path.join(this.reportsDir, 'assets');
+        this.outputBaseDir = config.outputDir; // 階層化出力用のベースディレクトリ
         
         this.initializeDirectories();
+    }
+
+    /**
+     * エントリーIDから階層化パスを生成
+     * @param {string} entryId - データセットエントリーID (例: "pravega/pullrequest/Issue_3758-_Fix_typo_in_controller_API_call_name")
+     * @returns {Object} パス情報 { projectName, type, entryName, outputDir }
+     */
+    parseEntryPath(entryId) {
+        const parts = entryId.split('/');
+        if (parts.length >= 3) {
+            const projectName = parts[0];
+            const type = parts[1]; // "pullrequest" or "issue"
+            const entryName = parts.slice(2).join('/');
+            const outputDir = path.join(this.outputBaseDir, projectName, type, entryName);
+            
+            return { projectName, type, entryName, outputDir };
+        }
+        
+        // フォールバック: 従来の構造
+        return {
+            projectName: 'unknown',
+            type: 'unknown', 
+            entryName: entryId.replace(/[/\\:*?"<>|]/g, '_'),
+            outputDir: this.reportsDir
+        };
     }
 
     /**
@@ -31,7 +57,7 @@ export class HTMLReportService {
     }
 
     /**
-     * 統計レポートのHTML生成
+     * 統計レポート生成（全体評価結果を /output 直下に出力）
      * @param {Object} stats - ProcessingStats オブジェクト
      * @param {string} timestamp - レポート生成時刻
      * @returns {Promise<string>} 生成されたHTMLファイルのパス
@@ -40,6 +66,7 @@ export class HTMLReportService {
         const reportData = {
             timestamp,
             stats: this.extractStatsData(stats),
+            averageStats: this.calculateAverageStats(stats), // パフォーマンス統計を追加
             successfulMatches: stats.matchedPairs.slice(0, 10), // 最初の10件を表示
             errorEntries: stats.errorEntries.slice(0, 20), // 最初の20件を表示
             unmatchedEntries: stats.unmatchedEntries.slice(0, 15) // 最初の15件を表示
@@ -47,23 +74,24 @@ export class HTMLReportService {
 
         const htmlContent = await this.renderStatisticsTemplate(reportData);
         const fileName = `statistics_report_${timestamp.replace(/[:.]/g, '-')}.html`;
-        const filePath = path.join(this.reportsDir, fileName);
+        // 全体評価結果は /output 直下に出力
+        const filePath = path.join(this.outputBaseDir, fileName);
         
+        // /output ディレクトリが存在することを確認
+        await fs.mkdir(this.outputBaseDir, { recursive: true });
         await fs.writeFile(filePath, htmlContent, 'utf-8');
         
-        // JSON版も同時に出力
+        // JSON版も同時に出力（/output 直下）
         const jsonFileName = `statistics_data_${timestamp.replace(/[:.]/g, '-')}.json`;
-        const jsonFilePath = path.join(this.reportsDir, jsonFileName);
+        const jsonFilePath = path.join(this.outputBaseDir, jsonFileName);
         await fs.writeFile(jsonFilePath, JSON.stringify(reportData, null, 2), 'utf-8');
         
         console.log(`📊 HTMLレポート生成完了: ${filePath}`);
         console.log(`📊 JSONデータ出力完了: ${jsonFilePath}`);
         
         return filePath;
-    }
-
-    /**
-     * 個別エントリーの詳細レポート生成
+    }    /**
+     * 個別エントリーの詳細レポート生成（階層化されたディレクトリに出力）
      * @param {Object} matchedPair - マッチングペアデータ
      * @param {string} timestamp - レポート生成時刻
      * @returns {Promise<string>} 生成されたHTMLファイルのパス
@@ -75,18 +103,27 @@ export class HTMLReportService {
             ...matchedPair
         };
 
+        // 階層化パスを取得
+        const pathInfo = this.parseEntryPath(matchedPair.datasetEntry);
+        
+        // 階層化ディレクトリを作成
+        await fs.mkdir(pathInfo.outputDir, { recursive: true });
+
         const htmlContent = await this.renderEntryDetailTemplate(reportData);
-        const fileName = `entry_detail_${matchedPair.datasetEntry.replace(/[/\\:*?"<>|]/g, '_')}_${timestamp.replace(/[:.]/g, '-')}.html`;
-        const filePath = path.join(this.reportsDir, fileName);
+        const fileName = `entry_detail_${timestamp.replace(/[:.]/g, '-')}.html`;
+        const filePath = path.join(pathInfo.outputDir, fileName);
         
         await fs.writeFile(filePath, htmlContent, 'utf-8');
         
         // JSON版も同時に出力
-        const jsonFileName = `entry_data_${matchedPair.datasetEntry.replace(/[/\\:*?"<>|]/g, '_')}_${timestamp.replace(/[:.]/g, '-')}.json`;
-        const jsonFilePath = path.join(this.reportsDir, jsonFileName);
+        const jsonFileName = `entry_data_${timestamp.replace(/[:.]/g, '-')}.json`;
+        const jsonFilePath = path.join(pathInfo.outputDir, jsonFileName);
         await fs.writeFile(jsonFilePath, JSON.stringify(reportData, null, 2), 'utf-8');
         
         console.log(`📝 エントリー詳細レポート生成完了: ${filePath}`);
+        console.log(`   プロジェクト: ${pathInfo.projectName}`);
+        console.log(`   タイプ: ${pathInfo.type}`);
+        console.log(`   エントリー: ${pathInfo.entryName}`);
         
         return filePath;
     }
@@ -151,6 +188,36 @@ export class HTMLReportService {
             matchedPairsCount: stats.matchedPairs.length,
             unmatchedEntriesCount: stats.unmatchedEntries.length,
             errorEntriesCount: stats.errorEntries.length
+        };
+    }
+
+    /**
+     * パフォーマンス統計の平均値を計算
+     * @param {Object} stats - ProcessingStats オブジェクト
+     * @returns {Object|null} 平均パフォーマンス統計
+     */
+    calculateAverageStats(stats) {
+        if (!stats.matchedPairs || stats.matchedPairs.length === 0) {
+            return null;
+        }
+
+        const totals = stats.matchedPairs.reduce((acc, pair) => {
+            const aprLogData = pair.aprLogData || {};
+            return {
+                turns: acc.turns + (aprLogData.turns || 0),
+                tokens: acc.tokens + (aprLogData.totalTokens || 0),
+                modifications: acc.modifications + (aprLogData.modifications || 0),
+                affectedFiles: acc.affectedFiles + (aprLogData.affectedFiles || 0)
+            };
+        }, { turns: 0, tokens: 0, modifications: 0, affectedFiles: 0 });
+
+        const count = stats.matchedPairs.length;
+        
+        return {
+            turns: Math.round(totals.turns / count * 10) / 10, // 小数点第1位まで
+            tokens: Math.round(totals.tokens / count),
+            modifications: Math.round(totals.modifications / count * 10) / 10,
+            affectedFiles: Math.round(totals.affectedFiles / count * 10) / 10
         };
     }
 
@@ -261,9 +328,17 @@ export class HTMLReportService {
     processTemplate(template, data) {
         let result = template;
         
-        // {{key}} 形式の変数を置換
-        result = result.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-            return this.getNestedValue(data, key) || '';
+        // {{#if condition}} ... {{/if}} 形式の条件付きブロック処理
+        result = result.replace(/\{\{#if ([\w.]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, conditionKey, content) => {
+            const conditionValue = this.getNestedValue(data, conditionKey);
+            // 条件が真値（存在する、空でない、0でない、falseでない）の場合のみ内容を表示
+            return conditionValue && conditionValue !== false && conditionValue !== 0 ? this.processTemplate(content, data) : '';
+        });
+        
+        // {{key}} や {{key.subkey}} 形式の変数を置換（ドット記法対応）
+        result = result.replace(/\{\{([\w.]+)\}\}/g, (match, key) => {
+            const value = this.getNestedValue(data, key);
+            return value !== null && value !== undefined ? value : '';
         });
         
         // {{#each array}} ... {{/each}} 形式のループ処理

@@ -354,31 +354,31 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td><span style="color: #10b981;">🟢</span> 完全マッチング済み</td>
+                            <td><span style="color: #10b981;">🟢</span> <span style="color: #6b7280;">完全マッチング済み</span></td>
                             <td>{{stats.matchedPairsCount}}</td>
                             <td>{{stats.step1CompletionRate}}%</td>
                             <td>APRログとデータセットが正常にマッチングされたペア</td>
                         </tr>
                         <tr>
-                            <td><span style="color: #f59e0b;">🟡</span> 未マッチング</td>
+                            <td><span style="color: #f59e0b;">🟡</span> <span style="color: #6b7280;">未マッチング</span></td>
                             <td>{{stats.unmatchedEntriesCount}}</td>
                             <td>{{unmatchedRate}}%</td>
                             <td>マッチング処理が完了していないエントリー</td>
                         </tr>
                         <tr>
-                            <td><span style="color: #ef4444;">🔴</span> エラー発生</td>
+                            <td><span style="color: #ef4444;">🔴</span> <span style="color: #6b7280;">エラー発生</span></td>
                             <td>{{stats.errorEntriesCount}}</td>
                             <td>{{errorRate}}%</td>
                             <td>処理中にエラーが発生したエントリー</td>
                         </tr>
                         <tr>
-                            <td><span style="color: #3b82f6;">✅</span> ステップ1完了数</td>
+                            <td><span style="color: #3b82f6;">✅</span> <span style="color: #6b7280;">ステップ1完了数</span></td>
                             <td>{{stats.aprParseSuccess}}</td>
                             <td>{{stats.step1CompletionRate}}%</td>
                             <td>APRログ構造解析と差分抽出が完了したエントリー</td>
                         </tr>
                         <tr>
-                            <td><span style="color: #8b5cf6;">🚀</span> 評価パイプライン成功数</td>
+                            <td><span style="color: #8b5cf6;">🚀</span> <span style="color: #6b7280;">評価パイプライン成功数</span></td>
                             <td>{{stats.evaluationPipelineSuccess}}</td>
                             <td>{{stats.evaluationPipelineSuccessRate}}%</td>
                             <td>ステップ1完了後、LLM評価まで成功したエントリー</td>

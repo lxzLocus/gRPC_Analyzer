@@ -116,7 +116,7 @@ export class DatasetAnalysisController {
         
         try {
             // `{dataset}/{projectName}/{pullrequest or issue}/{title}`
-            const titleDirs = await this.datasetRepository.getTitleDirectories(categoryPath);
+            const titleDirs = await this.datasetRepository.getPullRequestDirectories(categoryPath);
             
             for (const pullRequestTitle of titleDirs) {
                 await this.processPullRequest(

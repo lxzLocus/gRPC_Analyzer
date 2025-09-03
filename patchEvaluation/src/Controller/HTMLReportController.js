@@ -2,6 +2,7 @@
  * HTMLレポート生成コントローラー
  * 統計データとエラー情報をHTMLレポートとして出力
  */
+import path from 'path';
 import { HTMLReportService } from '../Service/HTMLReportService.js';
 
 export class HTMLReportController {
@@ -200,14 +201,17 @@ export class HTMLReportController {
     }
 
     /**
-     * レポートサマリーHTML生成
+     * レポートサマリーHTML生成（/output 直下に出力）
      * @param {Object} reportResults - レポート生成結果
      * @returns {Promise<string>} サマリーHTMLファイルのパス
      */
     async generateReportSummary(reportResults) {
         const summaryHTML = this.buildSummaryHTML(reportResults);
-        const summaryPath = `${this.htmlReportService.reportsDir}/report_summary_${reportResults.sessionId.replace(/[:.]/g, '-')}.html`;
+        // 全体サマリーは /output 直下に出力
+        const summaryPath = path.join(this.htmlReportService.outputBaseDir, `report_summary_${reportResults.sessionId.replace(/[:.]/g, '-')}.html`);
         
+        // /output ディレクトリが存在することを確認
+        await import('fs/promises').then(fs => fs.mkdir(this.htmlReportService.outputBaseDir, { recursive: true }));
         await import('fs/promises').then(fs => fs.writeFile(summaryPath, summaryHTML, 'utf-8'));
         
         console.log(`📋 レポートサマリー生成完了: ${summaryPath}`);
