@@ -26,19 +26,25 @@ interface ExternalConfig {
         debugMode: boolean;
         logLevel: string;
     };
-    llm: {
+    llm?: {
         provider?: string;
-        model: string;
-        maxTokens: number;
-        temperature: number;
-        timeout: number;
-        retryAttempts: number;
+        model?: string;
+        maxTokens?: number;
+        temperature?: number;
+        timeout?: number;
+        retryAttempts?: number;
+    };
+    openai?: {
+        model?: string;
+        maxTokens?: number;
+        temperature?: number;
+        timeout?: number;
     };
     gemini?: {
-        model: string;
-        maxTokens: number;
-        temperature: number;
-        timeout: number;
+        model?: string;
+        maxTokens?: number;
+        temperature?: number;
+        timeout?: number;
     };
     fileOperations: {
         maxFileSize: number;
@@ -169,23 +175,71 @@ class Config {
         if (process.env.LOG_LEVEL) {
             this.externalConfig.system.logLevel = process.env.LOG_LEVEL;
         }
+        
+        // LLM設定は環境変数で完全管理
         if (process.env.LLM_PROVIDER) {
+            if (!this.externalConfig.llm) {
+                this.externalConfig.llm = {};
+            }
             this.externalConfig.llm.provider = process.env.LLM_PROVIDER;
         }
-        if (process.env.OPENAI_MODEL) {
-            this.externalConfig.llm.model = process.env.OPENAI_MODEL;
+        if (process.env.LLM_MAX_TOKENS) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            this.externalConfig.llm.maxTokens = parseInt(process.env.LLM_MAX_TOKENS);
         }
+        if (process.env.LLM_TEMPERATURE) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            this.externalConfig.llm.temperature = parseFloat(process.env.LLM_TEMPERATURE);
+        }
+        if (process.env.LLM_TIMEOUT) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            this.externalConfig.llm.timeout = parseInt(process.env.LLM_TIMEOUT);
+        }
+        if (process.env.LLM_RETRY_ATTEMPTS) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            this.externalConfig.llm.retryAttempts = parseInt(process.env.LLM_RETRY_ATTEMPTS);
+        }
+        
+        // OpenAI設定
+        if (process.env.OPENAI_MODEL) {
+            if (!this.externalConfig.openai) {
+                this.externalConfig.openai = {};
+            }
+            this.externalConfig.openai.model = process.env.OPENAI_MODEL;
+        }
+        if (process.env.OPENAI_MAX_TOKENS) {
+            if (!this.externalConfig.openai) this.externalConfig.openai = {};
+            this.externalConfig.openai.maxTokens = parseInt(process.env.OPENAI_MAX_TOKENS);
+        }
+        if (process.env.OPENAI_TEMPERATURE) {
+            if (!this.externalConfig.openai) this.externalConfig.openai = {};
+            this.externalConfig.openai.temperature = parseFloat(process.env.OPENAI_TEMPERATURE);
+        }
+        if (process.env.OPENAI_TIMEOUT) {
+            if (!this.externalConfig.openai) this.externalConfig.openai = {};
+            this.externalConfig.openai.timeout = parseInt(process.env.OPENAI_TIMEOUT);
+        }
+        
+        // Gemini設定
         if (process.env.GEMINI_MODEL) {
             if (!this.externalConfig.gemini) {
-                this.externalConfig.gemini = {
-                    model: 'gemini-2.5-pro',
-                    maxTokens: 4000,
-                    temperature: 0.1,
-                    timeout: 30000
-                };
+                this.externalConfig.gemini = {};
             }
             this.externalConfig.gemini.model = process.env.GEMINI_MODEL;
         }
+        if (process.env.GEMINI_MAX_TOKENS) {
+            if (!this.externalConfig.gemini) this.externalConfig.gemini = {};
+            this.externalConfig.gemini.maxTokens = parseInt(process.env.GEMINI_MAX_TOKENS);
+        }
+        if (process.env.GEMINI_TEMPERATURE) {
+            if (!this.externalConfig.gemini) this.externalConfig.gemini = {};
+            this.externalConfig.gemini.temperature = parseFloat(process.env.GEMINI_TEMPERATURE);
+        }
+        if (process.env.GEMINI_TIMEOUT) {
+            if (!this.externalConfig.gemini) this.externalConfig.gemini = {};
+            this.externalConfig.gemini.timeout = parseInt(process.env.GEMINI_TIMEOUT);
+        }
+        
         if (process.env.MAX_FILE_SIZE) {
             this.externalConfig.fileOperations.maxFileSize = parseInt(process.env.MAX_FILE_SIZE);
         }

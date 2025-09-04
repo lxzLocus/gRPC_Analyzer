@@ -20,7 +20,7 @@ export class OpenAILLMClient implements LLMClient {
         
         console.log(`🔑 OpenAILLMClient: Using API key length: ${finalApiKey.length}`);
         console.log(`🔑 Available env vars: OPENAI_API_KEY=${!!process.env.OPENAI_API_KEY}`);
-        console.log(`🤖 OpenAILLMClient: Using model: ${this.config.get('llm.model', 'gpt-4.1')}`);
+        console.log(`🤖 OpenAILLMClient: Using model: ${this.config.get('openai.model', process.env.OPENAI_MODEL || 'gpt-4.1')}`);
         
         // OpenAIクライアントの初期化を非同期で行う
         this.initPromise = this.initializeClient(finalApiKey);
@@ -62,7 +62,7 @@ export class OpenAILLMClient implements LLMClient {
         }
 
         try {
-            const model = request.model || this.config.get('llm.model', 'gpt-4.1');
+            const model = request.model || this.config.get('openai.model', process.env.OPENAI_MODEL || 'gpt-4.1');
             const maxTokens = request.maxTokens || this.config.get('llm.maxTokens', 4000);
             
             console.log(`🚀 OpenAI request: model=${model}, maxTokens=${maxTokens}`);
