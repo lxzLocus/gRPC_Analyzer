@@ -254,7 +254,7 @@ async function main() {
     const config = new Config(datasetDir);
     const fileManager = new FileManager(config);
     const messageHandler = new MessageHandler();
-    const openAIClient = new OpenAIClient(process.env.OPENAI_TOKEN || '');
+    const openAIClient = new OpenAIClient(process.env.OPENAI_API_KEY || '');
     const logger = new Logger();
 
     const startTime = new Date().toISOString();

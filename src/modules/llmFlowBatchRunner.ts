@@ -3,10 +3,6 @@ import path from 'path';
 import { config } from 'dotenv';
 import LLMFlowController from './llmFlowController.js';
 
-// 既存の環境変数をクリア（他の設定が残っている場合）
-delete process.env.OPENAI_TOKEN;
-delete process.env.OPENAI_API_KEY;
-
 // .envファイルを読み込み
 config({ path: path.join(process.cwd(), '.env') });
 

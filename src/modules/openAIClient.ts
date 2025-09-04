@@ -15,7 +15,7 @@ class OpenAIClient {
     constructor(config: Config, apiKey?: string) {
         this.config = config;
         
-        console.log(`🔑 OPENAI_TOKEN length: ${(process.env.OPENAI_TOKEN || '').length}`);
+        console.log(`🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
         console.log(`🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
         console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
         console.log(`� DEBUG_MODE: ${process.env.DEBUG_MODE || 'undefined'}`);

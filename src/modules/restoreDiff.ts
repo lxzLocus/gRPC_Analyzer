@@ -2,11 +2,13 @@ import fs from 'fs';
 import path from 'path';
 
 class RestoreDiff {
-    constructor(sourceCodePath) {
+    private sourceCodePath: string;
+    
+    constructor(sourceCodePath: string) {
         this.sourceCodePath = sourceCodePath;
     }
 
-    applyDiff(diffOutput) {
+    applyDiff(diffOutput: string): string {
         if (!diffOutput || typeof diffOutput !== 'string' || diffOutput.trim().length === 0) {
             console.error('Invalid diff input: empty or non-string');
             return '';
@@ -16,9 +18,9 @@ class RestoreDiff {
         console.log(`🔧 Source path: ${this.sourceCodePath}`);
         
         const lines = diffOutput.split('\n');
-        let currentFile = null;
-        let relativePath = null;
-        let fileLines = [];
+        let currentFile: string | null = null;
+        let relativePath: string | null = null;
+        let fileLines: string[] = [];
         let inHunk = false;
         let hunkIndex = 0;
         let result = ''; // すべての修正内容を文字列型でまとめる
@@ -50,7 +52,7 @@ class RestoreDiff {
                             fileLines = content.split('\n');
                             console.log(`✅ File read successfully: ${fileLines.length} lines`);
                         } catch (readError) {
-                            console.error(`❌ Failed to read file ${currentFile}:`, readError.message);
+                            console.error(`❌ Failed to read file ${currentFile}:`, (readError as Error).message);
                             fileLines = [];
                             errorCount++;
                         }
@@ -91,7 +93,7 @@ class RestoreDiff {
                     }
                 }
             } catch (lineError) {
-                console.error(`❌ Error processing line ${lineNumber}: "${line}"`, lineError.message);
+                console.error(`❌ Error processing line ${lineNumber}: "${line}"`, (lineError as Error).message);
                 errorCount++;
             }
         });

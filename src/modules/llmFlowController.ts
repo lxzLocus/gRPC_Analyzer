@@ -85,7 +85,7 @@ class LLMFlowController {
         // デバッグ情報：環境変数の確認
         console.log(`🔧 LLMFlowController initialized with path: ${pullRequestPath}`);
         console.log(`� [NEW VERSION 2025-07-31] LLMFlowController loaded`);
-        console.log(`�🔑 OPENAI_TOKEN length: ${(process.env.OPENAI_TOKEN || '').length}`);
+        console.log(`�🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
         console.log(`🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
         console.log(`🔑 GEMINI_API_KEY length: ${(process.env.GEMINI_API_KEY || '').length}`);
         console.log(`🤖 LLM_PROVIDER: ${process.env.LLM_PROVIDER || 'undefined'}`);
