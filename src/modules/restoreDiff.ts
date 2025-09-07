@@ -17,6 +17,13 @@ class RestoreDiff {
         console.log(`🔧 RestoreDiff: Processing diff with ${diffOutput.length} characters`);
         console.log(`🔧 Source path: ${this.sourceCodePath}`);
         
+        // デバッグ: diffの最初の10行を出力
+        const firstLines = diffOutput.split('\n').slice(0, 10);
+        console.log(`🔍 First 10 lines of diff:`);
+        firstLines.forEach((line, idx) => {
+            console.log(`  ${idx + 1}: ${line}`);
+        });
+        
         const lines = diffOutput.split('\n');
         let currentFile: string | null = null;
         let relativePath: string | null = null;
@@ -65,13 +72,32 @@ class RestoreDiff {
                     inHunk = false;
                     hunkIndex = 0;
                 } else if (line.startsWith('@@')) {
-                    const match = /@@ -(\d+),?\d* \+(\d+),?\d* @@/.exec(line);
+                    // 標準的なdiff hunk headerの正規表現パターンを修正
+                    // @@ -start,count +start,count @@ の形式
+                    const match = /@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
                     if (match) {
                         inHunk = true;
-                        hunkIndex = parseInt(match[2], 10) - 1;
-                        console.log(`🎯 Hunk starting at line ${hunkIndex + 1}`);
+                        hunkIndex = parseInt(match[3], 10) - 1; // +側の開始行番号
+                        console.log(`🎯 Hunk starting at line ${hunkIndex + 1} (pattern: ${line})`);
                     } else {
-                        console.warn(`⚠️ Invalid hunk header at line ${lineNumber}: ${line}`);
+                        // より柔軟なパターンを試行
+                        const flexibleMatch = /@@ -\d+[^\+]*\+(\d+)[^@]*@@/.exec(line);
+                        if (flexibleMatch) {
+                            inHunk = true;
+                            hunkIndex = parseInt(flexibleMatch[1], 10) - 1;
+                            console.log(`🎯 Hunk starting at line ${hunkIndex + 1} (flexible pattern: ${line})`);
+                        } else {
+                            // 省略形 (@@ ... @@) の処理
+                            const ellipsisMatch = /^@@.*\.\.\..*@@$/.exec(line);
+                            if (ellipsisMatch) {
+                                // 省略形の場合はhunkを開始しない（スキップ）
+                                console.log(`⚠️ Skipping ellipsis hunk header at line ${lineNumber}: ${line}`);
+                                inHunk = false;
+                            } else {
+                                console.warn(`⚠️ Invalid hunk header at line ${lineNumber}: ${line}`);
+                                inHunk = false;
+                            }
+                        }
                     }
                 } else if (inHunk && currentFile !== null) {
                     if (line.startsWith('-')) {

@@ -16,6 +16,7 @@ import Config from './config.js';
 import MessageHandler from './messageHandler.js';
 import FileManager from './fileManager.js';
 import OpenAIClient from './openAIClient.js';
+import LLMRetryEnhancer from './llmRetryEnhancer.js';
 import { 
     LLMParsed, 
     ParsedContentLog, 
@@ -66,6 +67,7 @@ class LLMFlowController {
     private messageHandler!: MessageHandler;
     private openAIClient!: OpenAIClient;
     private logger: Logger = new Logger();
+    private retryEnhancer: LLMRetryEnhancer;
 
     // 作業用データ
     private currentMessages: Array<{ role: string, content: string }> = [];
@@ -81,6 +83,14 @@ class LLMFlowController {
     constructor(pullRequestPath: string) {
         this.inputPremergeDir = pullRequestPath;
         this.startTime = new Date().toISOString();
+        this.retryEnhancer = new LLMRetryEnhancer({
+            maxRetries: 3,
+            enableQualityCheck: true,
+            requireModifiedContent: true,
+            minModifiedLines: 1,
+            retryDelayMs: 1000,
+            exponentialBackoff: true
+        });
         
         // デバッグ情報：環境変数の確認
         console.log(`🔧 LLMFlowController initialized with path: ${pullRequestPath}`);
@@ -271,8 +281,8 @@ class LLMFlowController {
     // =============================================================================
 
     private async sendInitialInfoToLLM() {
-        // LLMへ初期情報送信
-        const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
+        // LLMへ初期情報送信（品質チェック付きリトライ対応）
+        const llm_response = await this.sendLLMWithQualityCheck('initial');
         this.context.llmResponse = llm_response;
 
         // ターン数とトークン数を更新
@@ -1403,13 +1413,18 @@ class LLMFlowController {
                 this.logger.logInfo(`Restored content successfully validated: ${restoredContent.length} characters`);
             }
 
-            // 警告チェック
+            // 警告チェック - より実用的な基準に調整
             if (addedLines === 0 && deletedLines === 0) {
                 result.warnings.push("No actual changes detected in diff");
             }
 
-            if (contextLines < 3 && (addedLines > 0 || deletedLines > 0)) {
-                result.warnings.push("Insufficient context lines in diff");
+            // コンテキストライン不足の判定を緩和
+            // 小規模な変更（5行以下）では警告しない
+            const totalChanges = addedLines + deletedLines;
+            if (contextLines < 2 && totalChanges > 5) {
+                result.warnings.push("Very few context lines in diff - may affect accuracy");
+            } else if (contextLines === 0 && totalChanges > 0) {
+                result.warnings.push("No context lines in diff - this may indicate incomplete diff");
             }
 
             // 復元内容の基本チェック（空でない場合のみ）
@@ -2283,6 +2298,84 @@ class LLMFlowController {
         }
 
         return false;
+    }
+
+    /**
+     * 品質チェック付きLLM実行メソッド
+     * modified: 0 lines などの不完全応答を検出してリトライする
+     */
+    private async sendLLMWithQualityCheck(context: string = 'default'): Promise<any> {
+        let bestResponse = null;
+        let bestMetrics = null;
+        let lastError = null;
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                console.log(`🚀 LLM Request (attempt ${attempt + 1}/3) for ${context}`);
+                
+                // プロンプトの強化（リトライ時）
+                if (attempt > 0 && bestMetrics) {
+                    const lastMessage = this.currentMessages[this.currentMessages.length - 1];
+                    if (lastMessage?.role === 'user') {
+                        lastMessage.content = this.retryEnhancer.enhancePromptForRetry(
+                            lastMessage.content, 
+                            attempt, 
+                            bestMetrics
+                        );
+                    }
+                }
+
+                const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
+                
+                if (!llm_response?.choices?.[0]?.message?.content) {
+                    throw new Error('Empty LLM response');
+                }
+
+                const content = llm_response.choices[0].message.content;
+                const parsed = this.messageHandler.analyzeMessages(content);
+                
+                // 品質チェック
+                const metrics = this.retryEnhancer.checkResponseQuality(parsed);
+                this.retryEnhancer.logQualityMetrics(metrics);
+
+                // ベストレスポンスの更新
+                if (!bestResponse || metrics.completionScore > (bestMetrics?.completionScore || 0)) {
+                    bestResponse = llm_response;
+                    bestMetrics = metrics;
+                    this.context.llmParsed = parsed;
+                }
+
+                // 品質チェック合格の場合は即座に返す
+                if (!this.retryEnhancer.shouldRetry(metrics, attempt)) {
+                    console.log(`✅ Quality check passed (score: ${metrics.completionScore}%)`);
+                    return bestResponse;
+                }
+
+                // リトライ待機
+                if (attempt < 2) {
+                    const delay = this.retryEnhancer.calculateRetryDelay(attempt);
+                    console.log(`⏳ Quality retry delay: ${delay}ms`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+
+            } catch (error) {
+                lastError = error;
+                console.error(`❌ LLM call failed (attempt ${attempt + 1}):`, error);
+                
+                if (attempt < 2) {
+                    const delay = this.retryEnhancer.calculateRetryDelay(attempt);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+
+        // 全てのリトライが失敗した場合、ベストレスポンスがあればそれを返す
+        if (bestResponse) {
+            console.log(`⚠️ Using best available response (score: ${bestMetrics?.completionScore}%)`);
+            return bestResponse;
+        }
+
+        throw new Error(`All LLM retry attempts failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
     }
 }
 

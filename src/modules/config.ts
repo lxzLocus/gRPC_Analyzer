@@ -33,6 +33,13 @@ interface ExternalConfig {
         temperature?: number;
         timeout?: number;
         retryAttempts?: number;
+        qualityCheck?: {
+            enabled?: boolean;
+            requireModifiedContent?: boolean;
+            minModifiedLines?: number;
+            retryDelayMs?: number;
+            exponentialBackoff?: boolean;
+        };
     };
     openai?: {
         model?: string;
@@ -198,6 +205,23 @@ class Config {
         if (process.env.LLM_RETRY_ATTEMPTS) {
             if (!this.externalConfig.llm) this.externalConfig.llm = {};
             this.externalConfig.llm.retryAttempts = parseInt(process.env.LLM_RETRY_ATTEMPTS);
+        }
+        
+        // LLM品質チェック設定
+        if (process.env.LLM_QUALITY_CHECK_ENABLED) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            if (!this.externalConfig.llm.qualityCheck) this.externalConfig.llm.qualityCheck = {};
+            this.externalConfig.llm.qualityCheck.enabled = process.env.LLM_QUALITY_CHECK_ENABLED === 'true';
+        }
+        if (process.env.LLM_REQUIRE_MODIFIED_CONTENT) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            if (!this.externalConfig.llm.qualityCheck) this.externalConfig.llm.qualityCheck = {};
+            this.externalConfig.llm.qualityCheck.requireModifiedContent = process.env.LLM_REQUIRE_MODIFIED_CONTENT === 'true';
+        }
+        if (process.env.LLM_MIN_MODIFIED_LINES) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            if (!this.externalConfig.llm.qualityCheck) this.externalConfig.llm.qualityCheck = {};
+            this.externalConfig.llm.qualityCheck.minModifiedLines = parseInt(process.env.LLM_MIN_MODIFIED_LINES);
         }
         
         // OpenAI設定

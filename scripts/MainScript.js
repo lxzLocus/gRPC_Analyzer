@@ -42,7 +42,7 @@ const DEFAULT_CONFIG = {
         baseOutputDir: "/app/output",
         maxRetries: 3,
         memoryCleanupInterval: 5,
-        timeoutMs: 30 * 60 * 1000,      // 30分
+        timeoutMs: 5 * 60 * 1000,       // 5分 (300秒) - APIタイムアウトを考慮した現実的な値
         enableGarbageCollection: true
     }
 };

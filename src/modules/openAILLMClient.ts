@@ -31,9 +31,13 @@ export class OpenAILLMClient implements LLMClient {
             // 動的importを使用してES modules対応
             const { default: OpenAI } = await import('openai');
             
+            // タイムアウト設定を統一：openai.timeout -> llm.timeout の順で取得
+            const timeoutMs = this.config.get('openai.timeout', this.config.get('llm.timeout', 120000));
+            console.log(`🕒 OpenAI client timeout set to: ${timeoutMs}ms`);
+            
             this.client = new OpenAI({
                 apiKey: apiKey,
-                timeout: this.config.get('llm.timeout', 30000) // 元の30秒に戻す
+                timeout: timeoutMs
             });
             
             this.isInitialized = true;
@@ -68,7 +72,10 @@ export class OpenAILLMClient implements LLMClient {
             console.log(`🚀 OpenAI request: model=${model}, maxTokens=${maxTokens}`);
 
             // タイムアウト付きのAPI呼び出し
-            const apiTimeout = this.config.get('llm.timeout', 30000);
+            // クライアント初期化時と同じタイムアウト値を使用
+            const apiTimeout = this.config.get('openai.timeout', this.config.get('llm.timeout', 120000));
+            console.log(`🕒 OpenAI API call timeout: ${apiTimeout}ms`);
+            
             const apiCall = this.client.chat.completions.create({
                 model: model,
                 messages: request.messages,

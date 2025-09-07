@@ -16,7 +16,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ];
     
     // 現在選択されているデータセット
-    const selectedDataset = availableDatasets[4]; // test_fewChanged を選択
+    const selectedDataset = availableDatasets[0]; // filtered_fewChanged を選択
     const aprOutputPath = "/app/apr-logs";
 
     // HTMLレポート生成オプション
