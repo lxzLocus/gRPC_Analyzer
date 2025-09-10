@@ -59,24 +59,33 @@ export class LLMRetryEnhancer {
             }
         }
 
-        // Modified コンテンツのチェック
-        if (llmParsed.modifiedDiff && llmParsed.modifiedDiff.trim().length > 0) {
+        // Modified コンテンツのチェック（ログ保存時の形式に合わせて優先順位調整）
+        const modifiedContent = llmParsed.modified_diff || llmParsed.modifiedDiff || llmParsed.modifiedContent;
+        if (modifiedContent && modifiedContent.trim().length > 0) {
             metrics.hasModifiedContent = true;
-            metrics.modifiedLineCount = llmParsed.modifiedDiff.split('\n').length;
+            metrics.modifiedLineCount = modifiedContent.split('\n').length;
+            console.log(`✅ Modified content detected: ${metrics.modifiedLineCount} lines`);
+        } else {
+            console.log(`❌ No modified content found. Available fields:`, Object.keys(llmParsed));
+            console.log(`   - modified_diff: ${llmParsed.modified_diff ? 'EXISTS' : 'NULL'}`);
+            console.log(`   - modifiedDiff: ${llmParsed.modifiedDiff ? 'EXISTS' : 'NULL'}`);
         }
 
-        // Plan のチェック
-        if (llmParsed.plan && llmParsed.plan.trim().length > 0) {
+        // Plan のチェック（フィールド名のバリエーションに対応）
+        const planContent = llmParsed.plan || llmParsed.planContent;
+        if (planContent && planContent.trim().length > 0) {
             metrics.hasPlan = true;
-            metrics.planLineCount = llmParsed.plan.split('\n').length;
+            metrics.planLineCount = planContent.split('\n').length;
         }
 
-        // %%_Fin_%% タグのチェック
-        metrics.hasFinTag = llmParsed.has_fin_tag || false;
+        // %%_Fin_%% タグのチェック（フィールド名のバリエーションに対応）
+        metrics.hasFinTag = llmParsed.has_fin_tag || llmParsed.hasFinTag || false;
 
-        // ファイルリクエストのチェック
+        // ファイルリクエストのチェック（フィールド名のバリエーションに対応）
         metrics.hasFileRequests = (llmParsed.requiredFileInfos && llmParsed.requiredFileInfos.length > 0) ||
-                                  (llmParsed.requiredFilepaths && llmParsed.requiredFilepaths.length > 0);
+                                  (llmParsed.requiredFilepaths && llmParsed.requiredFilepaths.length > 0) ||
+                                  (llmParsed.required_file_infos && llmParsed.required_file_infos.length > 0) ||
+                                  (llmParsed.required_filepaths && llmParsed.required_filepaths.length > 0);
 
         // 完成度スコアの計算
         let score = 0;

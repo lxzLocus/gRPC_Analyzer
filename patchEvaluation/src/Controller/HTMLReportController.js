@@ -12,13 +12,34 @@ export class HTMLReportController {
     }
 
     /**
+     * UTC時刻をJST時刻に変換してYYMMDD_HHmmss形式で返す
+     * @returns {string} JST時刻文字列 (YYMMDD_HHmmss 形式)
+     */
+    getJSTTimestamp() {
+        const now = new Date();
+        // JST = UTC + 9時間
+        const jstOffset = 9 * 60; // 分単位
+        const jstTime = new Date(now.getTime() + jstOffset * 60 * 1000);
+        
+        // YYMMDD_HHmmss形式に変換
+        const year = String(jstTime.getFullYear()).slice(-2);
+        const month = String(jstTime.getMonth() + 1).padStart(2, '0');
+        const day = String(jstTime.getDate()).padStart(2, '0');
+        const hours = String(jstTime.getHours()).padStart(2, '0');
+        const minutes = String(jstTime.getMinutes()).padStart(2, '0');
+        const seconds = String(jstTime.getSeconds()).padStart(2, '0');
+        
+        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+    }
+
+    /**
      * 統計レポートの生成と出力
      * @param {Object} stats - ProcessingStats オブジェクト
      * @param {string} sessionId - セッションID（オプション）
      * @returns {Promise<Object>} 生成されたレポートの情報
      */
     async generateStatisticsReport(stats, sessionId = null) {
-        const timestamp = new Date().toISOString();
+        const timestamp = this.getJSTTimestamp();
         const reportId = sessionId || this.generateReportId();
         
         try {
@@ -68,7 +89,7 @@ export class HTMLReportController {
      * @returns {Promise<Object>} 生成されたレポートの情報
      */
     async generateErrorReport(errorEntries, sessionId = null) {
-        const timestamp = new Date().toISOString();
+        const timestamp = this.getJSTTimestamp();
         const reportId = sessionId || this.generateReportId();
         
         try {
@@ -117,7 +138,7 @@ export class HTMLReportController {
      * @returns {Promise<Object>} 生成されたレポートの情報
      */
     async generateEntryDetailReport(matchedPair, sessionId = null) {
-        const timestamp = new Date().toISOString();
+        const timestamp = this.getJSTTimestamp();
         const reportId = sessionId || this.generateReportId();
         
         try {
@@ -159,7 +180,7 @@ export class HTMLReportController {
         const reportId = sessionId || this.generateReportId();
         const results = {
             sessionId: reportId,
-            timestamp: new Date().toISOString(),
+            timestamp: this.getJSTTimestamp(),
             reports: []
         };
         
@@ -354,7 +375,7 @@ export class HTMLReportController {
      * @returns {string} ユニークなレポートID
      */
     generateReportId() {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const timestamp = this.getJSTTimestamp().replace(/[:.]/g, '-');
         const random = Math.random().toString(36).substring(2, 8);
         return `${timestamp}_${random}`;
     }

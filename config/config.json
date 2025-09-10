@@ -5,6 +5,13 @@
     "debugMode": false,
     "logLevel": "info"
   },
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-5",
+    "maxTokens": 8000,
+    "temperature": 0.1,
+    "timeout": 30000
+  },
   "fileOperations": {
     "maxFileSize": 52428800,
     "timeout": 30000,

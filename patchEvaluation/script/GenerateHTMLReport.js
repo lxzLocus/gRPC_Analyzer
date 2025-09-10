@@ -32,13 +32,13 @@ function showUsage() {
 
 例:
   # 基本的な統計とエラーレポート生成
-  node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs
+  node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/output
 
   # 統計レポートのみ生成
-  node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs --stats-only
+  node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/output --stats-only
 
   # 詳細レポート付きで生成
-  node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs --with-details
+  node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/output --with-details
 `);
 }
 

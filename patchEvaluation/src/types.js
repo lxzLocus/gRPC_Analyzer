@@ -27,10 +27,10 @@ export const DEFAULT_CONFIG = {
         maxFileSize: 52428800
     },
     paths: { 
-        promptDir: '/app/src/prompts', 
-        outputDir: '/app/output', 
-        logsDir: '/app/logs', 
-        backupDir: '/app/backups' 
+        promptDir: './src/prompts', 
+        outputDir: './output', 
+        logsDir: './logs', 
+        backupDir: './backups' 
     }
 };
 

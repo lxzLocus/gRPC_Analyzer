@@ -11,6 +11,15 @@ export class ProcessingStats {
         this.aprParseFailure = 0;
         this.evaluationPipelineSuccess = 0; // 評価パイプライン成功数（ステップ1+2完了）
         this.evaluationPipelineFailure = 0; // 評価パイプライン失敗数
+        
+        // APR品質指標
+        this.aprQualityGood = 0;        // LLMが「良い修正」と評価した数
+        this.aprQualityBad = 0;         // LLMが「悪い修正」と評価した数
+        this.aprEffectiveFixed = 0;     // 実際に問題を解決した修正数
+        this.aprEffectiveUnfixed = 0;   // 問題を解決できなかった修正数
+        this.aprMinimalChanges = 0;     // 最小変更で済んだ修正数
+        this.aprExcessiveChanges = 0;   // 過剰な変更を含む修正数
+        
         this.matchedPairs = [];
         this.unmatchedEntries = [];
         this.errorEntries = [];
@@ -70,6 +79,33 @@ export class ProcessingStats {
      */
     incrementTotalEntries() {
         this.totalDatasetEntries++;
+    }
+
+    /**
+     * APR品質指標を更新
+     */
+    incrementAprQualityGood() {
+        this.aprQualityGood++;
+    }
+
+    incrementAprQualityBad() {
+        this.aprQualityBad++;
+    }
+
+    incrementAprEffectiveFixed() {
+        this.aprEffectiveFixed++;
+    }
+
+    incrementAprEffectiveUnfixed() {
+        this.aprEffectiveUnfixed++;
+    }
+
+    incrementAprMinimalChanges() {
+        this.aprMinimalChanges++;
+    }
+
+    incrementAprExcessiveChanges() {
+        this.aprExcessiveChanges++;
     }
 
     /**
@@ -135,6 +171,36 @@ export class ProcessingStats {
     calculateParseSuccessFromFound() {
         return this.aprLogFound > 0 
             ? (this.aprParseSuccess / this.aprLogFound * 100).toFixed(1) 
+            : 0;
+    }
+
+    /**
+     * APR品質成功率を計算
+     */
+    calculateAprQualitySuccessRate() {
+        const total = this.aprQualityGood + this.aprQualityBad;
+        return total > 0 
+            ? (this.aprQualityGood / total * 100).toFixed(1) 
+            : 0;
+    }
+
+    /**
+     * 修正効果率を計算
+     */
+    calculateAprEffectivenessRate() {
+        const total = this.aprEffectiveFixed + this.aprEffectiveUnfixed;
+        return total > 0 
+            ? (this.aprEffectiveFixed / total * 100).toFixed(1) 
+            : 0;
+    }
+
+    /**
+     * 最小変更率を計算
+     */
+    calculateAprMinimalChangeRate() {
+        const total = this.aprMinimalChanges + this.aprExcessiveChanges;
+        return total > 0 
+            ? (this.aprMinimalChanges / total * 100).toFixed(1) 
             : 0;
     }
 

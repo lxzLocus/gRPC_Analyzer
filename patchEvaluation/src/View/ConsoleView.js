@@ -148,9 +148,10 @@ export class ConsoleView {
      * @param {Object} evaluationResult - 評価結果
      */
     showLLMEvaluationSuccess(evaluationResult) {
-        console.log(`  ✅ TemplateCompiler LLM評価完了: ${evaluationResult.overall_assessment}`);
-        console.log(`    - 正確性: ${evaluationResult.is_correct ? '正しい' : '不正確'}`);
-        console.log(`    - 妥当性: ${evaluationResult.is_plausible ? '妥当' : '妥当でない'}`);
+        const assessment = evaluationResult?.overall_assessment || evaluationResult?.semantic_equivalence_level || '評価結果不明';
+        console.log(`  ✅ TemplateCompiler LLM評価完了: ${assessment}`);
+        console.log(`    - 正確性: ${evaluationResult?.is_correct ? '正しい' : '不正確'}`);
+        console.log(`    - 妥当性: ${evaluationResult?.is_plausible ? '妥当' : '妥当でない'}`);
     }
 
     /**

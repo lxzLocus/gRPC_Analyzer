@@ -5,6 +5,10 @@ import * as fs from 'fs';
 type LLMRequestLog = {
   prompt_template: string;
   full_prompt_content: string;
+  llm_metadata?: {
+    provider: string;
+    request_timestamp: string;
+  };
 };
 
 type ParsedContentLog = {
@@ -23,6 +27,12 @@ type LLMResponseLog = {
     prompt_tokens: number;
     completion_tokens: number;
     total: number;
+  };
+  llm_metadata?: {
+    provider: string;
+    model: string;
+    response_timestamp: string;
+    request_timestamp: string;
   };
 };
 
@@ -49,6 +59,14 @@ type ExperimentMetadataType = {
     promptTokens: number;
     completionTokens: number;
     total: number;
+  };
+  llm_provider: string;
+  llm_model: string;
+  llm_config?: {
+    temperature?: number;
+    max_tokens?: number;
+    top_p?: number;
+    [key: string]: any;
   };
 };
 
@@ -126,7 +144,15 @@ export default class Logger {
     status: string,
     totalTurns: number,
     promptTokens: number,
-    completionTokens: number
+    completionTokens: number,
+    llmProvider: string = 'unknown',
+    llmModel: string = 'unknown',
+    llmConfig?: {
+      temperature?: number;
+      max_tokens?: number;
+      top_p?: number;
+      [key: string]: any;
+    }
   ): void {
     this.experimentMetadata = {
       experiment_id: experimentId,
@@ -138,7 +164,10 @@ export default class Logger {
         promptTokens,
         completionTokens,
         total: promptTokens + completionTokens
-      }
+      },
+      llm_provider: llmProvider,
+      llm_model: llmModel,
+      ...(llmConfig && { llm_config: llmConfig })
     };
   }
 

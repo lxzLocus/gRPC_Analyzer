@@ -5,7 +5,20 @@
 
 import fs from 'fs';
 import path from 'path';
+import { config as dotenvConfig } from 'dotenv';
 import { DEFAULT_CONFIG } from '../types.js';
+
+// 環境変数の読み込み（Config クラス読み込み時に実行）
+dotenvConfig({ path: '/app/.env' });
+
+/**
+ * プロジェクトルートディレクトリを取得
+ * patchEvaluationディレクトリから見て2つ上の /app ディレクトリ
+ */
+function getProjectRoot() {
+    // 明示的に /app を返す
+    return '/app';
+}
 
 /**
  * Configuration class for managing file paths and prompt templates.
@@ -19,14 +32,15 @@ class Config {
         this.loadEnvironmentVariables();
 
         // 従来の設定（外部設定で上書き可能）
+        const projectRoot = getProjectRoot();
         this.inputProjectDir = pullRequestPath;
-        this.outputDir = this.getConfigValue('paths.outputDir', path.join('/app', 'output'));
-        this.inputDir = path.join('/app', 'input');
-        this.promptDir = this.getConfigValue('paths.promptDir', path.join('/app', 'prompts'));
+        this.outputDir = this.getConfigValue('paths.outputDir', path.join(projectRoot, 'output'));
+        this.inputDir = path.join(projectRoot, 'input');
+        this.promptDir = this.getConfigValue('paths.promptDir', path.join(projectRoot, 'patchEvaluation', 'prompt'));
         this.promptTextfile = '00_prompt_gem.txt'; // Gemini用プロンプトに変更
         this.promptRefineTextfile = '00_promptRefine.txt';
         this.tmpDiffRestorePath = path.join(this.outputDir, 'tmpDiffRestore.txt');
-        this.maxTokens = this.getConfigValue('llm.maxTokens', 128000);
+        this.maxTokens = this.getConfigValue('llm.maxTokens', 4000);
 
         // 新しい設定プロパティ
         this.debugMode = this.getConfigValue('system.debugMode', false);
@@ -46,7 +60,8 @@ class Config {
      * 外部設定ファイルを読み込み
      */
     loadExternalConfig(configPath) {
-        const defaultConfigPath = configPath || '/app/config/config.json';
+        const projectRoot = getProjectRoot();
+        const defaultConfigPath = configPath || path.join(projectRoot, 'config', 'config.json');
         
         try {
             if (fs.existsSync(defaultConfigPath)) {
@@ -65,6 +80,32 @@ class Config {
      * 環境変数を読み込み（.env ファイルの値を上書き）
      */
     loadEnvironmentVariables() {
+        // LLM設定の初期化（未定義の場合）
+        if (!this.externalConfig.llm) {
+            this.externalConfig.llm = {
+                provider: 'openai',
+                model: 'gpt-4o',
+                maxTokens: 4000,
+                temperature: 0.1,
+                timeout: 30000
+            };
+        }
+        
+        // システム設定の初期化（未定義の場合）
+        if (!this.externalConfig.system) {
+            this.externalConfig.system = {
+                debugMode: false,
+                logLevel: 'info'
+            };
+        }
+        
+        // ファイル操作設定の初期化（未定義の場合）
+        if (!this.externalConfig.fileOperations) {
+            this.externalConfig.fileOperations = {
+                maxFileSize: 52428800
+            };
+        }
+        
         // 環境変数で外部設定を上書き
         if (process.env.DEBUG_MODE) {
             this.externalConfig.system.debugMode = process.env.DEBUG_MODE === 'true';
@@ -116,16 +157,17 @@ class Config {
      * 必要なディレクトリを作成
      */
     ensureDirectoriesExist() {
+        const projectRoot = getProjectRoot();
         const directories = [
             this.outputDir,
-            this.getConfigValue('paths.logsDir', '/app/logs'),
-            this.getConfigValue('paths.backupDir', '/app/backups'),
+            this.getConfigValue('paths.logsDir', path.join(projectRoot, 'logs')),
+            this.getConfigValue('paths.backupDir', path.join(projectRoot, 'backups')),
             path.join(this.outputDir, 'reports'),
             path.join(this.outputDir, 'reports', 'assets'),
-            path.join(this.getConfigValue('paths.logsDir', '/app/logs'), 'performance'),
-            path.join(this.getConfigValue('paths.logsDir', '/app/logs'), 'diff_errors'),
-            path.join(this.getConfigValue('paths.logsDir', '/app/logs'), 'parsing_errors'),
-            path.join(this.getConfigValue('paths.logsDir', '/app/logs'), 'file_errors')
+            path.join(this.getConfigValue('paths.logsDir', path.join(projectRoot, 'logs')), 'performance'),
+            path.join(this.getConfigValue('paths.logsDir', path.join(projectRoot, 'logs')), 'diff_errors'),
+            path.join(this.getConfigValue('paths.logsDir', path.join(projectRoot, 'logs')), 'parsing_errors'),
+            path.join(this.getConfigValue('paths.logsDir', path.join(projectRoot, 'logs')), 'file_errors')
         ];
 
         directories.forEach(dir => {

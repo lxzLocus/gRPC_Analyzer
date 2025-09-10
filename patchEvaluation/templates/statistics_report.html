@@ -414,6 +414,78 @@
                 </div>
             </div>
             {{/if}}
+
+            <!-- LLM統計セクション -->
+            {{#if stats.llmStats}}
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">🤖</span>
+                    LLM使用統計
+                </h2>
+                <div class="metrics-grid">
+                    <div class="metric-card info">
+                        <div class="metric-value">{{stats.llmStats.totalLLMTypes}}</div>
+                        <div class="metric-label">🎯 使用LLMタイプ数</div>
+                        <div class="metric-description">異なるプロバイダー・モデルの組み合わせ数</div>
+                    </div>
+                    <div class="metric-card success">
+                        <div class="metric-value">{{formatNumber stats.llmStats.totalInteractions}}</div>
+                        <div class="metric-label">💬 総LLM相互作用回数</div>
+                        <div class="metric-description">すべての評価プロセスにおけるLLM呼び出し回数</div>
+                    </div>
+                    <div class="metric-card warning">
+                        <div class="metric-value">{{formatNumber stats.llmStats.totalTokens}}</div>
+                        <div class="metric-label">🔤 総消費トークン数</div>
+                        <div class="metric-description">すべてのLLM呼び出しで消費されたトークン総数</div>
+                    </div>
+                    <div class="metric-card info">
+                        <div class="metric-value">{{formatNumber stats.llmStats.averageTokensPerInteraction}}</div>
+                        <div class="metric-label">📊 平均トークン/相互作用</div>
+                        <div class="metric-description">1回のLLM呼び出しあたりの平均トークン消費量</div>
+                    </div>
+                </div>
+
+                {{#if stats.llmStats.llmList}}
+                <h3 style="margin-top: 30px; color: #1f2937; font-size: 1.4em;">使用されたLLMプロバイダー・モデル詳細</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>プロバイダー</th>
+                            <th>モデル</th>
+                            <th>使用回数</th>
+                            <th>総トークン数</th>
+                            <th>平均トークン/回</th>
+                            <th>初回使用</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each stats.llmStats.llmList}}
+                        <tr>
+                            <td>
+                                <strong style="color: #3b82f6;">{{provider}}</strong>
+                            </td>
+                            <td>
+                                <span style="font-family: monospace; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">{{model}}</span>
+                            </td>
+                            <td>
+                                <span style="color: #059669; font-weight: 600;">{{formatNumber usage}}</span>
+                            </td>
+                            <td>
+                                {{formatNumber totalTokens}}
+                            </td>
+                            <td>
+                                {{formatNumber averageTokens}}
+                            </td>
+                            <td>
+                                <span style="color: #6b7280; font-size: 0.9em;">{{firstSeen}}</span>
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+                {{/if}}
+            </div>
+            {{/if}}
         </div>
 
         <div class="footer">

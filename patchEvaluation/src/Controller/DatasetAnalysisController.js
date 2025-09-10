@@ -12,7 +12,11 @@ import Config from '../Config/config.js';
  * データセット解析のメイン制御を行うControllerクラス
  */
 export class DatasetAnalysisController {
-    constructor(configPath = '/app/config/config.json') {
+    constructor(configPath) {
+        // プロジェクトルートから設定ファイルのデフォルトパスを取得
+        const projectRoot = '/app';
+        const defaultConfigPath = configPath || path.join(projectRoot, 'config', 'config.json');
+        
         // Repository層
         this.datasetRepository = new DatasetRepository();
         
@@ -30,6 +34,27 @@ export class DatasetAnalysisController {
         
         // Model
         this.stats = new ProcessingStats();
+    }
+
+    /**
+     * UTC時刻をJST時刻に変換してYYMMDD_HHmmss形式で返す
+     * @returns {string} JST時刻文字列 (YYMMDD_HHmmss 形式)
+     */
+    getJSTTimestamp() {
+        const now = new Date();
+        // JST = UTC + 9時間
+        const jstOffset = 9 * 60; // 分単位
+        const jstTime = new Date(now.getTime() + jstOffset * 60 * 1000);
+        
+        // YYMMDD_HHmmss形式に変換
+        const year = String(jstTime.getFullYear()).slice(-2);
+        const month = String(jstTime.getMonth() + 1).padStart(2, '0');
+        const day = String(jstTime.getDate()).padStart(2, '0');
+        const hours = String(jstTime.getHours()).padStart(2, '0');
+        const minutes = String(jstTime.getMinutes()).padStart(2, '0');
+        const seconds = String(jstTime.getSeconds()).padStart(2, '0');
+        
+        return `${year}${month}${day}_${hours}${minutes}${seconds}`;
     }
 
     /**
@@ -193,8 +218,14 @@ export class DatasetAnalysisController {
      * @param {string[]} changedFiles - 変更ファイルリスト
      */
     async processAPRLog(entryId, aprLogPath, paths, changedFiles) {
+        // デバッグ情報
+        console.log(`🔧 Debug - entryId: ${entryId}`);
+        console.log(`🔧 Debug - aprLogPath: ${aprLogPath}`);
+        
         // APRログの存在確認
         const aprLogInfo = await this.aprLogService.checkAPRLogExistence(aprLogPath);
+        
+        console.log(`🔧 Debug - aprLogInfo:`, JSON.stringify(aprLogInfo, null, 2));
         
         if (!aprLogInfo.exists) {
             this.handleAPRLogNotFound(entryId, aprLogPath, paths, changedFiles, aprLogInfo.error);
@@ -442,6 +473,11 @@ export class DatasetAnalysisController {
                 // 評価パイプライン成功（ステップ1+2完了）
                 this.stats.incrementEvaluationPipelineSuccess();
             } else {
+                // 詳細なエラー情報を出力
+                console.error('❌ LLM評価失敗の詳細:');
+                console.error('  - エラー:', evaluationResult.error);
+                console.error('  - 結果:', JSON.stringify(evaluationResult.result, null, 2));
+                
                 this.consoleView.showLLMEvaluationFailure();
                 finalModInfo.llmEvaluation = { error: evaluationResult.error };
                 
@@ -450,6 +486,10 @@ export class DatasetAnalysisController {
             }
 
         } catch (error) {
+            console.error('❌ LLM評価例外の詳細:');
+            console.error('  - エラーメッセージ:', error.message);
+            console.error('  - スタックトレース:', error.stack);
+            
             this.consoleView.showLLMEvaluationError(error.message);
             finalModInfo.llmEvaluation = { error: error.message, templateUsed: false };
             
@@ -662,7 +702,7 @@ export class DatasetAnalysisController {
             // レポートサマリー生成
             const summaryResult = {
                 sessionId: this.generateSessionId(),
-                timestamp: new Date().toISOString(),
+                timestamp: this.getJSTTimestamp(),
                 reports: reportResults
             };
             
@@ -695,7 +735,7 @@ export class DatasetAnalysisController {
      * @returns {string} ユニークなセッションID
      */
     generateSessionId() {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const timestamp = this.getJSTTimestamp().replace(/[:.]/g, '-');
         const random = Math.random().toString(36).substring(2, 8);
         return `analysis_${timestamp}_${random}`;
     }

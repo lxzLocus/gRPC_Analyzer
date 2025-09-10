@@ -1,9 +1,14 @@
 import fs from 'fs/promises';
+import path from 'path';
+import { config as dotenvConfig } from 'dotenv';
 import { TemplateRenderer } from './TemplateCompiler.js';
 import { CodeContextExtractor } from './CodeContextExtractor.js';
 import { LLMClientController } from '../Controller/LLMClientController.js';
 import { createLLMRequest } from '../Repository/llmClient.js';
 import Config from '../Config/config.js';
+
+// 環境変数の読み込み
+dotenvConfig({ path: '/app/.env' });
 
 /**
  * LLM評価処理を担当するサービスクラス
@@ -60,7 +65,23 @@ export class LLMEvaluationService {
         try {
             // JSON形式の場合
             if (responseContent.trim().startsWith('{')) {
-                return JSON.parse(responseContent);
+                const parsed = JSON.parse(responseContent);
+                
+                // 新しいテンプレート形式（plausibility_evaluation/correctness_evaluation）から変換
+                if (parsed.plausibility_evaluation && parsed.correctness_evaluation) {
+                    return {
+                        overall_assessment: parsed.correctness_evaluation.semantic_equivalence_level || "UNKNOWN",
+                        is_correct: parsed.correctness_evaluation.is_correct || false,
+                        is_plausible: parsed.plausibility_evaluation.is_plausible || false,
+                        semantic_equivalence_level: parsed.correctness_evaluation.semantic_equivalence_level || "UNKNOWN",
+                        // 元の詳細情報も保持
+                        plausibility_evaluation: parsed.plausibility_evaluation,
+                        correctness_evaluation: parsed.correctness_evaluation
+                    };
+                }
+                
+                // 旧形式の場合はそのまま返す
+                return parsed;
             }
             
             // テキスト形式の場合の簡易パース
@@ -121,12 +142,17 @@ export class LLMEvaluationService {
         try {
             // テンプレートとLLMクライアントの初期化確認
             if (!this.templateRenderer) {
-                await this.initializeTemplate("/app/prompt/00_evaluationPrompt.txt");
+                // プロジェクトルートのpromptディレクトリを参照
+                const projectRoot = '/app';
+                await this.initializeTemplate(path.join(projectRoot, "patchEvaluation", "prompt", "00_evaluationPrompt.txt"));
             }
             if (!this.llmClient) {
                 const config = new Config();
                 await this.initializeLLMClient(config);
             }
+
+            // Configインスタンスを取得（設定値の統一化）
+            const config = new Config();
 
             // テンプレートに渡すコンテキストデータの準備
             const templateContext = {
@@ -139,12 +165,12 @@ export class LLMEvaluationService {
             // テンプレートレンダリング
             const renderedPrompt = this.templateRenderer.render(templateContext);
             
-            // LLMリクエストを作成
+            // LLMリクエストを作成（Configから設定を取得）
             const llmRequest = createLLMRequest([
                 { role: 'user', content: renderedPrompt }
             ], {
-                temperature: 0.1,
-                maxTokens: 2000
+                temperature: config.getConfigValue('llm.temperature', 0.1),
+                maxTokens: config.getConfigValue('llm.maxTokens', 4000)
             });
             
             // LLMクライアントでの評価実行
@@ -160,7 +186,13 @@ export class LLMEvaluationService {
                     result: {
                         ...evaluationResult,
                         templateUsed: true,
-                        promptLength: renderedPrompt.length
+                        promptLength: renderedPrompt.length,
+                        llmMetadata: {
+                            provider: this.llmClient.getProviderName(),
+                            model: llmResponse.model || 'unknown',
+                            usage: llmResponse.usage || null,
+                            timestamp: new Date().toISOString()
+                        }
                     }
                 };
             } else {

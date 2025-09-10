@@ -3,7 +3,11 @@
  * OpenAI APIとの通信を担当
  */
 
+import { config as dotenvConfig } from 'dotenv';
 import { LLMClient, createLLMResponse } from './llmClient.js';
+
+// 環境変数の読み込み
+dotenvConfig({ path: '/app/.env' });
 
 export class OpenAILLMClient extends LLMClient {
     constructor(config, apiKey) {
@@ -63,7 +67,7 @@ export class OpenAILLMClient extends LLMClient {
         }
 
         try {
-            const model = request.model || this.config.get('openai.model', 'gpt-5');
+            const model = request.model || this.config.get('llm.model', this.config.get('openai.model', 'gpt-5'));
             const maxTokens = request.maxTokens || this.config.get('llm.maxTokens', 4000);
             
             console.log(`🚀 OpenAI request: model=${model}, maxTokens=${maxTokens}`);
@@ -71,9 +75,16 @@ export class OpenAILLMClient extends LLMClient {
             // APIリクエストパラメータを準備
             const apiParams = {
                 model: model,
-                messages: request.messages,
-                max_completion_tokens: maxTokens
+                messages: request.messages
             };
+            
+            // gpt-5以外の場合のみmax_completion_tokensを設定
+            if (model !== 'gpt-5' && maxTokens) {
+                apiParams.max_completion_tokens = maxTokens;
+                console.log(`🔢 OpenAI max_completion_tokens: ${maxTokens}`);
+            } else if (model === 'gpt-5') {
+                console.log(`ℹ️  gpt-5: max_completion_tokensパラメータはスキップされます`);
+            }
             
             // gpt-5以外の場合のみtemperatureを設定
             if (model !== 'gpt-5' && request.temperature !== undefined) {

@@ -10,7 +10,11 @@ APRログ分析結果を視覚的で分かりやすいHTMLレポートとして�
 ### 機能特徴
 - **📊 統計レポート**: 分析結果の全体統計をグラフィカルに表示
 - **❌ エラーレポート**: エラーの分類と頻度分析
-- **📝 詳細レポート**: 個別エントリーの詳細分析結果
+- **📝 詳細レポート**: 個別エント```
+[1] Processing: project/pullrequest/issue123
+  ✅ APRログ発見: /app/output/project/pullrequest/issue123 (1 ファイル)
+  🔄 APRログ解析を開始: project/pullrequest/issue123 (1 ログファイル)
+  📄 最新ログファイル: processing_summary_2025-08-19.log分析結果
 - **📋 サマリーレポート**: 生成されたレポートの一覧とナビゲーション
 - **📱 レスポンシブデザイン**: モバイル対応の美しいUI
 - **📄 印刷対応**: PDF生成や印刷に最適化されたスタイル
@@ -50,16 +54,16 @@ node script/MainScript.js
 #### 2. 専用スクリプトでの生成
 ```bash
 # 基本的な統計とエラーレポート生成
-node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs
+node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/output
 
 # 統計レポートのみ生成
-node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs --stats-only
+node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/output --stats-only
 
 # エラーレポートのみ生成
-node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs --errors-only
+node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/output --errors-only
 
 # 詳細レポート付きで生成（最大10件）
-node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/apr-logs --with-details
+node script/GenerateHTMLReport.js --dataset /app/dataset/filtered_fewChanged --apr-logs /app/output --with-details
 
 # ヘルプ表示
 node script/GenerateHTMLReport.js --help
@@ -340,7 +344,7 @@ node /app/src/Controller.js
 
 ```
 [1] Processing: project/pullrequest/issue123
-  ✅ APRログ発見: /app/apr-logs/project/pullrequest/issue123 (1 ファイル)
+  ✅ APRログ発見: /app/output/project/pullrequest/issue123 (1 ファイル)
   � APRログ解析を開始: project/pullrequest/issue123 (1 ログファイル)
   � 最新ログファイル: processing_summary_2025-08-19.log
   ✅ APRログ解析成功:

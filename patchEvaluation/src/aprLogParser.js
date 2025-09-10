@@ -92,15 +92,27 @@ class APRLogParser {
      * @returns {object} 抽出された対話データ
      */
     extractLLMDialogue(logData) {
+        // 新しいログ形式のLLMメタデータを抽出
+        const experimentMeta = logData.experiment_metadata;
+        const llmMetadata = experimentMeta ? {
+            provider: experimentMeta.llm_provider,
+            model: experimentMeta.llm_model,
+            config: experimentMeta.llm_config,
+            totalTokens: experimentMeta.total_tokens,
+            startTime: experimentMeta.start_time,
+            endTime: experimentMeta.end_time
+        } : null;
+
         const dialogue = {
-            experimentId: logData.experiment_metadata?.experiment_id || 'unknown',
+            experimentId: experimentMeta?.experiment_id || 'unknown',
             turns: [],
-            totalTokens: logData.experiment_metadata?.total_tokens?.total || 0,
-            status: logData.experiment_metadata?.status || 'unknown',
+            totalTokens: experimentMeta?.total_tokens?.total || 0,
+            status: experimentMeta?.status || 'unknown',
             modificationHistory: [],
             requestedFiles: new Set(),
             allThoughts: [],
-            allPlans: []
+            allPlans: [],
+            llmMetadata: llmMetadata  // 新しい形式のLLMメタデータを格納
         };
 
         // 対話履歴の処理
@@ -119,13 +131,15 @@ class APRLogParser {
                         commentText: parsed.commentText,
                         hasFinTag: parsed.has_fin_tag,
                         usage: turn.llm_response.usage || {}
+                        // 個別ターンのLLMメタデータは削除（experiment_metadataから取得するため）
                     };
 
                     dialogue.turns.push(turnData);
 
-                    // トークン数の累計
+                    // トークン数の累計（individual turn usage を使用）
                     if (turnData.usage.total) {
-                        dialogue.totalTokens += turnData.usage.total;
+                        // 個別ターンのトークン数は累計しない（experiment_metadataに総計があるため）
+                        // dialogue.totalTokens += turnData.usage.total;
                     }
 
                     // 思考とプランの蓄積
@@ -444,7 +458,24 @@ class APRLogParser {
             }
         };
 
-        if (dialogue.modificationHistory.length > 0) {
+        // 最後のターンから修正内容を取得
+        if (dialogue.turns && dialogue.turns.length > 0) {
+            const lastTurn = dialogue.turns[dialogue.turns.length - 1];
+            
+            // modifiedDiffまたはdiffContentからdiffを取得
+            const diffContent = lastTurn.modifiedDiff || lastTurn.diffContent || '';
+            
+            if (diffContent && diffContent.trim().length > 0) {
+                finalMods.lastModification = {
+                    turn: lastTurn.turnNumber,
+                    timestamp: lastTurn.timestamp,
+                    diff: diffContent
+                };
+            }
+        }
+        
+        // フォールバック: modificationHistoryを使用
+        if (!finalMods.lastModification && dialogue.modificationHistory.length > 0) {
             finalMods.lastModification = dialogue.modificationHistory[dialogue.modificationHistory.length - 1];
         }
 
@@ -637,7 +668,9 @@ class APRLogParser {
 
         try {
             // 設定の初期化（引数がない場合はデフォルト設定を使用）
-            const evalConfig = config || new Config('/app/patchEvaluation');
+            // プロジェクトルートディレクトリを基準にした相対パスを使用
+            const projectRoot = '/app';
+            const evalConfig = config || new Config(path.join(projectRoot, 'patchEvaluation'));
             
             // LLMクライアントの作成
             const llmClient = LLMClientController.create(evalConfig);
@@ -721,12 +754,14 @@ class APRLogParser {
      */
     async loadEvaluationPrompt() {
         try {
-            const promptPath = '/app/prompt/00_evaluationPrompt.txt';
+            const projectRoot = '/app';
+            const promptPath = path.join(projectRoot, 'prompt', '00_evaluationPrompt.txt');
             return await fs.readFile(promptPath, 'utf-8');
         } catch (error) {
             console.warn('⚠️ メインプロンプトファイルが見つかりません、patchEvaluationディレクトリから読み込みます');
             try {
-                const fallbackPath = '/app/patchEvaluation/prompt/00_evaluationPrompt.txt';
+                const projectRoot = '/app';
+                const fallbackPath = path.join(projectRoot, 'patchEvaluation', 'prompt', '00_evaluationPrompt.txt');
                 return await fs.readFile(fallbackPath, 'utf-8');
             } catch (fallbackError) {
                 throw new Error(`評価プロンプトファイルを読み込めませんでした: ${error.message}, ${fallbackError.message}`);

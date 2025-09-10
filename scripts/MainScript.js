@@ -76,6 +76,14 @@ async function main() {
     console.log(`📝 Node.js Version: ${process.version}`);
     console.log(`🗑️ Garbage Collection: ${global.gc ? 'Available' : 'Not Available (use --expose-gc)'}`);
     
+    // LLM設定情報の表示
+    console.log('\n🤖 LLM Configuration:');
+    console.log(`   Provider: ${process.env.LLM_PROVIDER || 'openai'}`);
+    console.log(`   Model: ${getLLMModel()}`);
+    console.log(`   Temperature: ${getLLMTemperature()}`);
+    console.log(`   Max Tokens: ${getLLMMaxTokens()}`);
+    console.log(`   API Key Length: ${getLLMApiKeyLength()}`);
+    
     // 処理オプションの表示
     const options = {
         ...DEFAULT_CONFIG.processingOptions,
@@ -162,6 +170,66 @@ function formatDuration(milliseconds) {
         return `${minutes}m ${seconds % 60}s`;
     } else {
         return `${seconds}s`;
+    }
+}
+
+/**
+ * LLMモデル名を取得
+ */
+function getLLMModel() {
+    const provider = process.env.LLM_PROVIDER || 'openai';
+    
+    if (provider === 'openai') {
+        return process.env.OPENAI_MODEL || 'gpt-4';
+    } else if (provider === 'gemini') {
+        return process.env.GEMINI_MODEL || 'gemini-1.5-pro';
+    } else {
+        return 'unknown';
+    }
+}
+
+/**
+ * LLM温度設定を取得
+ */
+function getLLMTemperature() {
+    const provider = process.env.LLM_PROVIDER || 'openai';
+    
+    if (provider === 'openai') {
+        return process.env.OPENAI_TEMPERATURE || '0.7';
+    } else if (provider === 'gemini') {
+        return process.env.GEMINI_TEMPERATURE || '0.7';
+    } else {
+        return 'unknown';
+    }
+}
+
+/**
+ * LLM最大トークン数を取得
+ */
+function getLLMMaxTokens() {
+    const provider = process.env.LLM_PROVIDER || 'openai';
+    
+    if (provider === 'openai') {
+        return process.env.OPENAI_MAX_TOKENS || '4000';
+    } else if (provider === 'gemini') {
+        return process.env.GEMINI_MAX_TOKENS || '4000';
+    } else {
+        return 'unknown';
+    }
+}
+
+/**
+ * LLM APIキーの長さを取得（セキュリティのため長さのみ表示）
+ */
+function getLLMApiKeyLength() {
+    const provider = process.env.LLM_PROVIDER || 'openai';
+    
+    if (provider === 'openai') {
+        return (process.env.OPENAI_API_KEY || '').length;
+    } else if (provider === 'gemini') {
+        return (process.env.GEMINI_API_KEY || '').length;
+    } else {
+        return 0;
     }
 }
 

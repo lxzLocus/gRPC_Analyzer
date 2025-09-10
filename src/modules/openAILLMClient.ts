@@ -71,16 +71,34 @@ export class OpenAILLMClient implements LLMClient {
             
             console.log(`🚀 OpenAI request: model=${model}, maxTokens=${maxTokens}`);
 
+            // APIリクエストパラメータを準備
+            const apiParams: any = {
+                model: model,
+                messages: request.messages
+            };
+            
+            // gpt-5以外の場合のみmax_completion_tokensを設定
+            if (model !== 'gpt-5' && maxTokens) {
+                apiParams.max_completion_tokens = maxTokens;
+                console.log(`🔢 OpenAI max_completion_tokens: ${maxTokens}`);
+            } else if (model === 'gpt-5') {
+                console.log(`ℹ️  gpt-5: max_completion_tokensパラメータはスキップされます`);
+            }
+
+            // gpt-5以外の場合のみtemperatureを設定
+            if (model !== 'gpt-5' && request.temperature !== undefined) {
+                apiParams.temperature = request.temperature;
+                console.log(`🌡️  OpenAI temperature: ${request.temperature}`);
+            } else if (model === 'gpt-5') {
+                console.log(`ℹ️  gpt-5: temperatureパラメータはスキップされます`);
+            }
+
             // タイムアウト付きのAPI呼び出し
             // クライアント初期化時と同じタイムアウト値を使用
             const apiTimeout = this.config.get('openai.timeout', this.config.get('llm.timeout', 120000));
             console.log(`🕒 OpenAI API call timeout: ${apiTimeout}ms`);
             
-            const apiCall = this.client.chat.completions.create({
-                model: model,
-                messages: request.messages,
-                max_completion_tokens: maxTokens
-            });
+            const apiCall = this.client.chat.completions.create(apiParams);
 
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error(`OpenAI API timeout after ${apiTimeout}ms`)), apiTimeout)

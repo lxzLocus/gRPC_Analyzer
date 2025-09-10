@@ -851,6 +851,11 @@ class LLMFlowController {
             }
         }
         
+        // LLMプロバイダー情報を取得
+        const llmProvider = process.env.LLM_PROVIDER || 'openai';
+        const llmModel = this.getCurrentLLMModel();
+        const llmConfig = this.getLLMConfig();
+        
         this.logger.setExperimentMetadata(
             experimentId,
             this.startTime,
@@ -858,7 +863,10 @@ class LLMFlowController {
             status,
             this.currentTurn,
             this.totalPromptTokens,
-            this.totalCompletionTokens
+            this.totalCompletionTokens,
+            llmProvider,
+            llmModel,
+            llmConfig
         );
 
         // 終了処理: ログを /app/log/PROJECT_NAME/PULLREQUEST/PULLREQUEST_NAME/DATE_TIME.log へ保存
@@ -2376,6 +2384,42 @@ class LLMFlowController {
         }
 
         throw new Error(`All LLM retry attempts failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
+    }
+
+    /**
+     * 現在使用中のLLMモデル名を取得
+     */
+    private getCurrentLLMModel(): string {
+        const provider = process.env.LLM_PROVIDER || 'openai';
+        
+        if (provider === 'openai') {
+            return process.env.OPENAI_MODEL || 'gpt-4';
+        } else if (provider === 'gemini') {
+            return process.env.GEMINI_MODEL || 'gemini-1.5-pro';
+        } else {
+            return 'unknown';
+        }
+    }
+
+    /**
+     * LLM設定情報を取得
+     */
+    private getLLMConfig(): any {
+        const provider = process.env.LLM_PROVIDER || 'openai';
+        const config: any = {};
+        
+        if (provider === 'openai') {
+            config.temperature = parseFloat(process.env.OPENAI_TEMPERATURE || '0.7');
+            config.max_tokens = parseInt(process.env.OPENAI_MAX_TOKENS || '4000');
+            config.top_p = parseFloat(process.env.OPENAI_TOP_P || '1.0');
+        } else if (provider === 'gemini') {
+            config.temperature = parseFloat(process.env.GEMINI_TEMPERATURE || '0.7');
+            config.max_tokens = parseInt(process.env.GEMINI_MAX_TOKENS || '4000');
+            config.top_p = parseFloat(process.env.GEMINI_TOP_P || '1.0');
+        }
+        
+        // 空の設定オブジェクトの場合はundefinedを返す
+        return Object.keys(config).length > 0 ? config : undefined;
     }
 }
 

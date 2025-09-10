@@ -218,13 +218,13 @@ class OpenAIClient {
     client: any;
 
     constructor(apiKey: string) {
-        this.client = new OpenAI({ apiKey });
+        // OpenAIクライアントを直接作成
+        this.client = new OpenAI({ apiKey: apiKey || process.env.OPENAI_API_KEY });
     }
 
     async fetchOpenAPI(messages: Array<{ role: string, content: string }>): Promise<any> {
         try {
-            // 環境変数からモデルを取得、デフォルトは gpt-4.1
-            const model = process.env.OPENAI_MODEL || 'gpt-4.1';
+            const model = process.env.OPENAI_MODEL || 'gpt-4o';
             const completion = await this.client.chat.completions.create({
                 model: model,
                 messages: messages
@@ -232,7 +232,12 @@ class OpenAIClient {
             return completion;
         } catch (error) {
             console.error((error as any).message);
+            throw error;
         }
+    }
+
+    getProviderName(): string {
+        return 'openai';
     }
 }
 
@@ -290,6 +295,10 @@ async function main() {
         const llm_request_log = {
             prompt_template: prompt_template_name,
             full_prompt_content: next_prompt_content!,
+            llm_metadata: {
+                provider: openAIClient.getProviderName(),
+                request_timestamp: turnTimestamp
+            }
         };
 
         // 3-1. LLMへリクエスト送信
@@ -300,6 +309,7 @@ async function main() {
             break;
         }
         const llm_content = llm_response.choices[0].message.content;
+        const responseTimestamp = new Date().toISOString();
         const usage = {
             prompt_tokens: llm_response.usage?.prompt_tokens || 0,
             completion_tokens: llm_response.usage?.completion_tokens || 0,
@@ -321,6 +331,12 @@ async function main() {
                 has_fin_tag: parsed_response.has_fin_tag
             },
             usage: usage,
+            llm_metadata: {
+                provider: openAIClient.getProviderName(),
+                model: llm_response.model || 'unknown',
+                response_timestamp: responseTimestamp,
+                request_timestamp: turnTimestamp
+            }
         };
 
         // 3-3. システムアクションを決定し、次のプロンプトを準備
