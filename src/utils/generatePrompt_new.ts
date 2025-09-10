@@ -479,7 +479,21 @@ async function main() {
                 });
 
                 // 全ての行を結合して最終的なテキストを作成
-                const finalOutputText = outputLines.join('\n');
+                let finalOutputText = outputLines.join('\n');
+
+                // 手書きファイルが存在しない場合の説明メッセージ
+                if (handwrittenFiles.length === 0) {
+                    finalOutputText = `No handwritten files found. Only auto-generated files were modified.
+
+In this pull request, only .proto files and their auto-generated files (.pb.go, etc.) 
+were modified. No handwritten code files were changed.
+Therefore, no suspected handwritten files exist for analysis.
+
+File categorization of changes:
+- Proto files: .proto files
+- Generated files: Files matching patterns like .pb.go, .pb.cc, .pb.h, etc.
+- Handwritten files: None (excluding excluded files, test files, and auto-generated files)`;
+                }
 
                 // ファイルに書き込み
                 const suspectedFilesPath = path.join(pullRequestPath, '05_suspectedFiles.txt');
