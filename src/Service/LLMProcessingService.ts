@@ -6,6 +6,7 @@
 import { DatasetRepository } from '../Repository/DatasetRepository.js';
 import { BatchProcessingOptions, LLMControllerResult } from '../types/BatchProcessTypes.js';
 import LLMFlowController from '../modules/llmFlowController.js';
+import Logger from '../modules/logger.js';
 
 // Node.js型の宣言
 declare const process: any;
@@ -14,10 +15,12 @@ export class LLMProcessingService {
     private datasetRepository: DatasetRepository;
     private options: BatchProcessingOptions;
     private currentController: LLMFlowController | null = null;
+    private logger: Logger;
 
     constructor(options: BatchProcessingOptions) {
         this.options = options;
         this.datasetRepository = new DatasetRepository();
+        this.logger = new Logger();
     }
 
     /**
@@ -49,6 +52,16 @@ export class LLMProcessingService {
                 
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
+                
+                // 詳細エラーログの記録
+                this.logger.logLLMParsingError(
+                    lastError.message || 'Unknown error',
+                    'processWithRetry',
+                    'Expected successful LLM processing',
+                    `Failed at attempt ${retry + 1}/${maxRetries + 1}`,
+                    lastError
+                );
+                
                 console.error(`❌ Error in attempt ${retry + 1}/${maxRetries + 1} for ${pullRequestTitle}:`, lastError.message);
                 
                 if (!this.isRetryableError(lastError.message) || retry === maxRetries) {

@@ -1,11 +1,14 @@
 import fs from 'fs';
 import path from 'path';
+import Logger from './logger.js';
 
 class RestoreDiff {
     private sourceCodePath: string;
+    private logger: Logger;
     
     constructor(sourceCodePath: string) {
         this.sourceCodePath = sourceCodePath;
+        this.logger = new Logger();
     }
 
     applyDiff(diffOutput: string): string {
@@ -59,7 +62,21 @@ class RestoreDiff {
                             fileLines = content.split('\n');
                             console.log(`✅ File read successfully: ${fileLines.length} lines`);
                         } catch (readError) {
-                            console.error(`❌ Failed to read file ${currentFile}:`, (readError as Error).message);
+                            const error = readError as Error;
+                            console.error(`❌ Failed to read file ${currentFile}:`, error.message);
+                            
+                            // 詳細エラーログの記録
+                            this.logger.logFileOperationError(
+                                'readFile',
+                                currentFile,
+                                error,
+                                {
+                                    relativePath: newPath,
+                                    sourceCodePath: this.sourceCodePath,
+                                    diffProcessing: true
+                                }
+                            );
+                            
                             fileLines = [];
                             errorCount++;
                         }
@@ -119,7 +136,25 @@ class RestoreDiff {
                     }
                 }
             } catch (lineError) {
-                console.error(`❌ Error processing line ${lineNumber}: "${line}"`, (lineError as Error).message);
+                const error = lineError as Error;
+                console.error(`❌ Error processing line ${lineNumber}: "${line}"`, error.message);
+                
+                // 詳細エラーログの記録
+                this.logger.logDiffApplicationError(
+                    error,
+                    diffOutput,
+                    currentFile ? [currentFile] : [],
+                    {
+                        lineNumber,
+                        line,
+                        currentFile,
+                        relativePath,
+                        sourceCodePath: this.sourceCodePath,
+                        inHunk,
+                        hunkIndex
+                    }
+                );
+                
                 errorCount++;
             }
         });
@@ -137,6 +172,21 @@ class RestoreDiff {
         if (result.length === 0) {
             console.error('❌ RestoreDiff produced empty result');
             console.error('Input diff was:', diffOutput.substring(0, 500));
+            
+            // 詳細エラーログの記録
+            const emptyResultError = new Error('RestoreDiff produced empty result');
+            this.logger.logDiffApplicationError(
+                emptyResultError,
+                diffOutput,
+                [],
+                {
+                    sourceCodePath: this.sourceCodePath,
+                    processedFiles,
+                    errorCount,
+                    diffLength: diffOutput.length,
+                    resultLength: result.length
+                }
+            );
             
             // フォールバック: 元のdiffをそのまま返す
             console.log('🔄 Fallback: returning original diff content');

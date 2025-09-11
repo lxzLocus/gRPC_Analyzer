@@ -223,7 +223,10 @@ export class BatchProcessView {
             fs.writeFileSync(this.errorReportFile, JSON.stringify(errorReports, null, 2));
             console.log(`❌ Error report saved to: ${this.errorReportFile} (${errorReports.length} errors)`);
         } else {
+            // エラーレポートが空でも、統計情報の参照用に空の配列で作成
+            fs.writeFileSync(this.errorReportFile, JSON.stringify([], null, 2));
             console.log('✅ No errors to report');
+            console.log(`📄 Empty error report created at: ${this.errorReportFile}`);
         }
     }
 

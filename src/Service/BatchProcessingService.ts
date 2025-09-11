@@ -7,6 +7,7 @@ import { DatasetRepository } from '../Repository/DatasetRepository.js';
 import { LLMProcessingService } from './LLMProcessingService.js';
 import { ReportService } from './ReportService.js';
 import { MemoryManagementService } from './MemoryManagementService.js';
+import Logger from '../modules/logger.js';
 import { 
     ProcessingResult,
     ProcessingStatistics,
@@ -20,7 +21,9 @@ export class BatchProcessingService {
     private llmService: LLMProcessingService;
     private reportService: ReportService;
     private memoryService: MemoryManagementService;
+    private logger: Logger;
     private statistics: ProcessingStatistics;
+    private errorReports: ErrorReport[] = []; // エラーレポート配列を追加
     private options: BatchProcessingOptions;
 
     constructor(options: BatchProcessingOptions = {}) {
@@ -37,6 +40,7 @@ export class BatchProcessingService {
         this.llmService = new LLMProcessingService(this.options);
         this.reportService = new ReportService(this.options.baseOutputDir!);
         this.memoryService = new MemoryManagementService(this.options);
+        this.logger = new Logger();
 
         this.statistics = {
             totalRepositories: 0,
@@ -103,15 +107,17 @@ export class BatchProcessingService {
         pullRequestTitle: string
     ): Promise<ProcessingResult> {
         const startTime = Date.now();
+        let pullRequestPath = '';
+        let premergeDir = '';
 
         try {
             // premergeディレクトリの検索
-            const pullRequestPath = await this.datasetRepository.getPullRequestPath(
+            pullRequestPath = await this.datasetRepository.getPullRequestPath(
                 datasetDir, repositoryName, category, pullRequestTitle
             );
             
-            const premergeDir = await this.datasetRepository.findPremergeDirectory(pullRequestPath);
-            if (!premergeDir) {
+            const premergeResult = await this.datasetRepository.findPremergeDirectory(pullRequestPath);
+            if (!premergeResult) {
                 const result = this.createFailureResult(
                     repositoryName, category, pullRequestTitle, pullRequestPath, '',
                     'No premerge directory found', 'MissingPremergeDirectory', startTime
@@ -119,6 +125,7 @@ export class BatchProcessingService {
                 this.updateStatistics('skip');
                 return result;
             }
+            premergeDir = premergeResult;
 
             // LLM処理の実行
             const llmResult = await this.llmService.processWithRetry(
@@ -142,6 +149,22 @@ export class BatchProcessingService {
                 errorType: isSuccess ? undefined : 'ProcessingFailure'
             };
 
+            // エラーの場合はReportServiceに記録
+            if (!isSuccess && result.errorMessage) {
+                await this.reportService.recordError({
+                    repositoryName,
+                    category,
+                    pullRequestTitle,
+                    errorType: result.errorType || 'ProcessingFailure',
+                    errorMessage: result.errorMessage,
+                    processingPhase: 'LLM Processing',
+                    timestamp: new Date().toISOString(),
+                    pullRequestPath,
+                    premergeDir,
+                    stackTrace: ''
+                });
+            }
+
             this.updateStatistics(isSuccess ? 'success' : 'failure', result.errorType);
             return result;
 
@@ -152,6 +175,38 @@ export class BatchProcessingService {
                 error instanceof Error ? error.constructor.name : 'UnknownError',
                 startTime
             );
+
+            // 詳細エラーログの記録
+            if (error instanceof Error) {
+                this.logger.logFileOperationError(
+                    'processPullRequest',
+                    premergeDir || pullRequestPath,
+                    error,
+                    {
+                        repositoryName,
+                        category,
+                        pullRequestTitle,
+                        processingPhase: 'Processing Exception',
+                        pullRequestPath,
+                        premergeDir
+                    }
+                );
+            }
+
+            // エラーをReportServiceに記録
+            await this.reportService.recordError({
+                repositoryName,
+                category,
+                pullRequestTitle,
+                errorType: result.errorType || 'UnknownError',
+                errorMessage: result.errorMessage || 'Unknown error occurred',
+                processingPhase: 'Processing Exception',
+                timestamp: new Date().toISOString(),
+                pullRequestPath: result.pullRequestPath || '',
+                premergeDir: result.premergeDir || '',
+                stackTrace: error instanceof Error ? (error.stack || '') : ''
+            });
+
             this.updateStatistics('failure', result.errorType);
             return result;
         }

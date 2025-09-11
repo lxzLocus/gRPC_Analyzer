@@ -74,6 +74,9 @@ export default class Logger {
   private interactionLogs: InteractionLogEntry[] = [];
   private experimentMetadata: ExperimentMetadataType | null = null;
 
+  // 古いメソッドは不要になるため削除またはコメントアウト
+  // public logInteractionToFile(...) { ... }
+
   /**
    * 情報ログを出力（コンソール + ファイル出力対応）
    */
@@ -81,6 +84,9 @@ export default class Logger {
     const timestamp = new Date().toISOString();
     const logMessage = `[INFO ${timestamp}] ${message}`;
     console.log(logMessage);
+    
+    // TODO: ファイル出力機能を後で実装
+    // this.writeLogToFile(logMessage);
   }
 
   /**
@@ -94,6 +100,8 @@ export default class Logger {
     } else {
       console.error(logMessage);
     }
+    
+    // TODO: ファイル出力機能を後で実装
   }
 
   /**
@@ -103,12 +111,14 @@ export default class Logger {
     const timestamp = new Date().toISOString();
     const logMessage = `[WARN ${timestamp}] ${message}`;
     console.warn(logMessage);
+    
+    // TODO: ファイル出力機能を後で実装
   }
 
   /**
    * インタラクションログを追加
    */
-  addInteractionLog(
+  public addInteractionLog(
     turn: number,
     timestamp: string,
     llmRequest: LLMRequestLog,
@@ -125,9 +135,9 @@ export default class Logger {
   }
 
   /**
-   * 実験メタデータを設定
+   * 実験メタデータをセット
    */
-  setExperimentMetadata(
+  public setExperimentMetadata(
     experimentId: string,
     startTime: string,
     endTime: string,
@@ -135,8 +145,8 @@ export default class Logger {
     totalTurns: number,
     promptTokens: number,
     completionTokens: number,
-    llmProvider: string,
-    llmModel: string,
+    llmProvider: string = 'unknown',
+    llmModel: string = 'unknown',
     llmConfig?: {
       temperature?: number;
       max_tokens?: number;
@@ -181,7 +191,7 @@ export default class Logger {
   }
 
   // =============================================================================
-  // 詳細エラーログとパフォーマンス監視機能
+  // Phase 3-3: 詳細エラーログとパフォーマンス監視機能
   // =============================================================================
 
   /**
@@ -356,34 +366,10 @@ export default class Logger {
   }
 
   // =============================================================================
-  // プライベートヘルパーメソッド
+  // ヘルパーメソッド
   // =============================================================================
 
   private performanceTimers?: Map<string, any>;
-
-  private writeDetailedLogToFile(category: string, logData: any): void {
-    try {
-      // ログディレクトリを作成
-      const logDir = `/app/logs/${category}`;
-      if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true });
-      }
-      
-      // タイムスタンプ付きのファイル名
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const logFile = `${logDir}/${timestamp}.json`;
-      
-      // ファイルに詳細ログを書き込み
-      fs.writeFileSync(logFile, JSON.stringify(logData, null, 2), 'utf-8');
-      
-      // コンソールにも簡易版を出力
-      console.log(`[DETAILED_LOG_${category.toUpperCase()}] Logged to: ${logFile}`);
-    } catch (error) {
-      // ファイル書き込みに失敗した場合はコンソールのみに出力
-      console.log(`[DETAILED_LOG_${category.toUpperCase()}]`, JSON.stringify(logData, null, 2));
-      console.error('Failed to write log to file:', error);
-    }
-  }
 
   private captureSystemState(): any {
     return {
@@ -467,6 +453,7 @@ export default class Logger {
   }
 
   private getRelativePath(filePath: string): string {
+    // TODO: プロジェクトルートからの相対パスを計算
     return filePath.replace('/app/', '');
   }
 
@@ -490,7 +477,7 @@ export default class Logger {
     try {
       const stats = fs.statSync(filePath);
       return {
-        readable: true,
+        readable: true, // ファイルが存在すれば読めると仮定
         writable: true,
         executable: (stats.mode & parseInt('111', 8)) !== 0
       };
@@ -521,4 +508,227 @@ export default class Logger {
     
     return options;
   }
-}
+
+  private writeDetailedLogToFile(category: string, logData: any): void {
+    try {
+      // ログディレクトリを作成
+      const logDir = `/app/logs/${category}`;
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+      
+      // タイムスタンプ付きのファイル名
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const logFile = `${logDir}/${timestamp}.json`;
+      
+      // ファイルに詳細ログを書き込み
+      fs.writeFileSync(logFile, JSON.stringify(logData, null, 2), 'utf-8');
+      
+      // コンソールにも簡易版を出力
+      console.log(`[DETAILED_LOG_${category.toUpperCase()}] Logged to: ${logFile}`);
+    } catch (error) {
+      // ファイル書き込みに失敗した場合はコンソールのみに出力
+      console.log(`[DETAILED_LOG_${category.toUpperCase()}]`, JSON.stringify(logData, null, 2));
+      console.error('Failed to write log to file:', error);
+    }
+  }
+
+  /**
+   * 統計情報の自動レポート生成
+   */
+  public generateDetailedReport(): any {
+    const metadata = this.experimentMetadata;
+    const interactions = this.interactionLogs;
+    
+    if (!metadata) {
+      return { error: 'No experiment metadata available' };
+    }
+
+    // エラー統計の計算
+    const errorStats = this.calculateErrorStatistics(interactions);
+    
+    // パフォーマンス統計の計算  
+    const performanceStats = this.calculatePerformanceStatistics(interactions);
+    
+    // 成功率の計算
+    const successRate = this.calculateSuccessRate(interactions);
+
+    return {
+      summary: {
+        experimentId: metadata.experiment_id,
+        totalTurns: metadata.total_turns,
+        totalTokens: metadata.total_tokens,
+        duration: this.calculateDuration(metadata.start_time, metadata.end_time),
+        status: metadata.status,
+        successRate
+      },
+      errorAnalysis: errorStats,
+      performanceAnalysis: performanceStats,
+      recommendations: this.generateRecommendations(errorStats, performanceStats, successRate),
+      generatedAt: new Date().toISOString()
+    };
+  }
+
+  private calculateErrorStatistics(interactions: InteractionLogEntry[]): any {
+    const errorsByType: Record<string, number> = {};
+    const errorsByPhase: Record<string, number> = {};
+    let totalErrors = 0;
+    let recoveredErrors = 0;
+
+    for (const interaction of interactions) {
+      // システムアクションからエラーを検出
+      if (interaction.system_action.type.includes('ERROR') || 
+          interaction.system_action.details.toLowerCase().includes('error')) {
+        totalErrors++;
+        
+        // エラータイプの分類
+        if (interaction.system_action.type.includes('DIFF')) {
+          errorsByType['diff_application'] = (errorsByType['diff_application'] || 0) + 1;
+        } else if (interaction.system_action.type.includes('PARSING')) {
+          errorsByType['response_parsing'] = (errorsByType['response_parsing'] || 0) + 1;
+        } else if (interaction.system_action.type.includes('FILE')) {
+          errorsByType['file_operation'] = (errorsByType['file_operation'] || 0) + 1;
+        } else {
+          errorsByType['other'] = (errorsByType['other'] || 0) + 1;
+        }
+        
+        // フェーズ別の分類
+        const turn = interaction.turn;
+        if (turn <= 3) {
+          errorsByPhase['initial'] = (errorsByPhase['initial'] || 0) + 1;
+        } else if (turn <= 10) {
+          errorsByPhase['middle'] = (errorsByPhase['middle'] || 0) + 1;
+        } else {
+          errorsByPhase['late'] = (errorsByPhase['late'] || 0) + 1;
+        }
+      }
+      
+      // 次のターンで回復したかチェック（簡易版）
+      if (totalErrors > recoveredErrors && 
+          !interaction.system_action.details.toLowerCase().includes('error')) {
+        recoveredErrors++;
+      }
+    }
+
+    return {
+      totalErrors,
+      errorsByType,
+      errorsByPhase,
+      recoveryRate: totalErrors > 0 ? (recoveredErrors / totalErrors) * 100 : 100
+    };
+  }
+
+  private calculatePerformanceStatistics(interactions: InteractionLogEntry[]): any {
+    if (interactions.length === 0) {
+      return {
+        averageResponseTime: 0,
+        tokenUsageEfficiency: 0,
+        memoryUsage: {},
+        turnDistribution: {}
+      };
+    }
+
+    let totalTokens = 0;
+    let totalResponseTime = 0;
+    const turnDistribution: Record<string, number> = {};
+    
+    for (const interaction of interactions) {
+      // トークン使用量の集計
+      totalTokens += interaction.llm_response.usage.total;
+      
+      // レスポンス時間の推定（これは実際のタイムスタンプから計算すべき）
+      // 現在は仮の値として処理
+      totalResponseTime += 2000; // 2秒と仮定
+      
+      // ターン数の分布
+      const turnRange = Math.floor(interaction.turn / 5) * 5; // 5ターンごとに分類
+      const key = `${turnRange}-${turnRange + 4}`;
+      turnDistribution[key] = (turnDistribution[key] || 0) + 1;
+    }
+
+    // 効率性の計算（トークン数に対するタスク完了率）
+    const lastInteraction = interactions[interactions.length - 1];
+    const hasFinTag = lastInteraction?.llm_response?.parsed_content?.has_fin_tag || false;
+    const efficiency = hasFinTag ? (100 / totalTokens) * 1000 : 0; // 1000トークンあたりのスコア
+
+    return {
+      averageResponseTime: totalResponseTime / interactions.length,
+      tokenUsageEfficiency: efficiency,
+      memoryUsage: {
+        estimatedPeakUsage: totalTokens * 0.004, // 1トークン ≈ 4バイトと仮定
+        totalTokensProcessed: totalTokens
+      },
+      turnDistribution
+    };
+  }
+
+  private calculateSuccessRate(interactions: InteractionLogEntry[]): number {
+    if (interactions.length === 0) return 0;
+    
+    // 最後のインタラクションがFin_tagを持っているかチェック
+    const lastInteraction = interactions[interactions.length - 1];
+    return lastInteraction?.llm_response?.parsed_content?.has_fin_tag ? 100 : 0;
+  }
+
+  private calculateDuration(startTime: string, endTime: string): any {
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const durationMs = end.getTime() - start.getTime();
+    
+    return {
+      milliseconds: durationMs,
+      seconds: durationMs / 1000,
+      minutes: durationMs / (1000 * 60)
+    };
+  }
+
+  private generateRecommendations(errorStats: any, performanceStats: any, successRate: number): string[] {
+    const recommendations = [];
+    
+    // 成功率に基づく推奨事項
+    if (successRate < 100) {
+      recommendations.push('Consider improving error handling and recovery mechanisms');
+      if (successRate < 50) {
+        recommendations.push('Review diff generation prompts for better accuracy');
+      }
+    }
+    
+    // エラー統計に基づく推奨事項
+    if (errorStats.totalErrors > 0) {
+      recommendations.push('Analyze error patterns to improve diff generation quality');
+      
+      if (errorStats.errorsByType.diff_application > 0) {
+        recommendations.push('Improve diff format validation before application');
+      }
+      
+      if (errorStats.errorsByType.response_parsing > 0) {
+        recommendations.push('Enhance LLM response format constraints in prompts');
+      }
+      
+      if (errorStats.errorsByType.file_operation > 0) {
+        recommendations.push('Review file permission and path handling');
+      }
+      
+      if (errorStats.recoveryRate < 70) {
+        recommendations.push('Implement better error recovery strategies');
+      }
+    }
+    
+    // パフォーマンス統計に基づく推奨事項
+    if (performanceStats.averageResponseTime > 5000) { // 5秒以上
+      recommendations.push('Optimize prompts to reduce response time');
+    }
+    
+    if (performanceStats.tokenUsageEfficiency < 0.1) {
+      recommendations.push('Review prompt efficiency to reduce token usage');
+    }
+    
+    // 一般的な推奨事項
+    if (recommendations.length === 0) {
+      recommendations.push('System is operating within expected parameters');
+      recommendations.push('Consider running integration tests for comprehensive validation');
+    }
+    
+    return recommendations;
+  }
+
