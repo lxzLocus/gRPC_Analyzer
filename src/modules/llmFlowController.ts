@@ -92,6 +92,11 @@ class LLMFlowController {
             exponentialBackoff: true
         });
         
+        // 🔧 パス構築デバッグ - コンストラクタレベルでのパス情報を記録
+        console.log('🔧 LLMFlowController コンストラクタでのパス情報:');
+        console.log(`   受け取った pullRequestPath: ${pullRequestPath}`);
+        console.log(`   設定された inputPremergeDir: ${this.inputPremergeDir}`);
+        
         // デバッグ情報：環境変数の確認
         console.log(`🔧 LLMFlowController initialized with path: ${pullRequestPath}`);
         console.log(`� [NEW VERSION 2025-07-31] LLMFlowController loaded`);
@@ -263,6 +268,12 @@ class LLMFlowController {
     private async prepareInitialContext() {
         // autoResponser.tsのConfig, FileManager, MessageHandler, OpenAIClientを初期化
         this.config = new Config(this.inputPremergeDir);
+        
+        // 🔧 Config 初期化後のパス情報をデバッグ
+        console.log('🔧 Config 初期化後のパス情報:');
+        console.log(`   this.inputPremergeDir: ${this.inputPremergeDir}`);
+        console.log(`   this.config.inputProjectDir: ${this.config.inputProjectDir}`);
+        
         this.fileManager = new FileManager(this.config, this.logger);
         this.messageHandler = new MessageHandler();
         this.openAIClient = new OpenAIClient(this.config); // Configインスタンスを渡す
@@ -880,6 +891,14 @@ class LLMFlowController {
             const projectName = parts[parts.length - 4] || 'unknown_project';
             const category = parts[parts.length - 3] || 'unknown_category';
             const pullRequestName = parts[parts.length - 2] || 'unknown_pr';
+            
+            // 🔧 パス構築デバッグ情報をログ出力
+            console.log('🔍 APRログパス構築デバッグ情報:');
+            console.log(`   入力ディレクトリ: ${inputDir}`);
+            console.log(`   パス分割結果: ${JSON.stringify(parts)}`);
+            console.log(`   抽出されたプロジェクト名: ${projectName}`);
+            console.log(`   抽出されたカテゴリ: ${category}`);
+            console.log(`   抽出されたPR名: ${pullRequestName}`);
 
             // JST（日本標準時）でのログファイル名を生成
             const now = new Date();
@@ -897,6 +916,11 @@ class LLMFlowController {
                 fs.mkdirSync(logDir, { recursive: true });
             }
             const logPath = path.join(logDir, `${dateStr}.log`);
+            
+            // 🔧 APRログ最終保存パス情報をログ出力
+            console.log('📁 APRログ最終保存パス情報:');
+            console.log(`   ログディレクトリ: ${logDir}`);
+            console.log(`   ログファイルパス: ${logPath}`);
 
             const logData = this.logger.getFinalJSON();
             if (logData) {

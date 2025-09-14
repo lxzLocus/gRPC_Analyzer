@@ -134,6 +134,47 @@ export class StatisticsReportView {
         console.log(`  ✅ LLM評価結果:`);
         console.log(`    - 正確な修正: ${llmStats.correctCount}/${llmStats.withLLMEval} (${llmStats.correctRate}%)`);
         console.log(`    - 妥当な修正: ${llmStats.plausibleCount}/${llmStats.withLLMEval} (${llmStats.plausibleRate}%)`);
+        
+        // LLM評価スキップ統計の表示
+        this.showEvaluationSkipStatistics(stats);
+    }
+
+    /**
+     * LLM評価スキップ統計の表示
+     * @param {Object} stats - 統計情報
+     */
+    showEvaluationSkipStatistics(stats) {
+        const skipStats = stats.calculateEvaluationSkipStats();
+        if (!skipStats) return;
+
+        console.log(`  ⏭️  評価スキップ統計: ${skipStats.totalSkipped}/${skipStats.totalProcessed} (${skipStats.skipRate}%)`);
+        
+        if (skipStats.reasonStats.length > 0) {
+            console.log(`  📊 スキップ理由別統計:`);
+            skipStats.reasonStats.forEach((reasonStat, index) => {
+                const reasonName = this.getSkipReasonDisplayName(reasonStat.reason);
+                console.log(`    ${index + 1}. ${reasonName}: ${reasonStat.count}件 (${reasonStat.percentage}%)`);
+            });
+        }
+    }
+
+    /**
+     * スキップ理由の表示名を取得
+     * @param {string} reason - スキップ理由コード
+     * @returns {string} 表示名
+     */
+    getSkipReasonDisplayName(reason) {
+        const reasonMap = {
+            'INVESTIGATION_PHASE': '調査フェーズ中',
+            'ALL_MODIFICATIONS_NULL': '修正生成なし',
+            'FINAL_TURN_NO_MODIFICATION': '最終ターンに修正なし',
+            'NO_INTERACTION_LOG': 'interaction_logなし',
+            'EMPTY_INTERACTION_LOG': 'interaction_log空',
+            'NO_MODIFICATION_PROPERTY': 'modified_diffプロパティなし',
+            'EXTRACTION_LOGIC_ERROR': '抽出ロジックエラー'
+        };
+        
+        return reasonMap[reason] || reason;
     }
 
     /**
@@ -182,7 +223,12 @@ export class StatisticsReportView {
         stats.matchedPairs.slice(0, 3).forEach((pair, index) => {
             console.log(`  ${index + 1}. ${pair.datasetEntry}`);
             console.log(`     ターン数: ${pair.aprLogData.turns}, トークン: ${pair.aprLogData.totalTokens}, 修正: ${pair.aprLogData.modifications}`);
-            console.log(`     ログファイル: ${pair.latestLogFile} (${pair.logFiles.length} ファイル中)`);
+            console.log(`     ログファイル: ${pair.latestLogFile} (${pair.logFiles ? pair.logFiles.length : '不明'} ファイル中)`);
+            
+            // スキップ理由を表示
+            if (pair.evaluationSkipReason) {
+                console.log(`     ⚠️ 評価スキップ理由: ${this.getSkipReasonDisplayName(pair.evaluationSkipReason)}`);
+            }
             
             // 変更ファイル情報を追加
             if (pair.changedFiles && pair.changedFiles.length > 0) {

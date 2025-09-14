@@ -16,7 +16,6 @@ logs/
 output/
 docs/
 backups/
-cache/
 
 test*.*
 

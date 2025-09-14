@@ -16,25 +16,50 @@ class APRLogParser {
     }
 
     /**
-     * APRログディレクトリから対話ログを読み取り
-     * @param {string} aprLogPath - APRログのパス
+     * APRログディレクトリまたはログファイルから対話ログを読み取り
+     * @param {string} aprLogPath - APRログのパス（ディレクトリまたは.logファイル）
      * @returns {Promise<object>} 解析されたログデータ
      */
     async parseLogEntry(aprLogPath) {
         try {
-            const logFiles = await fs.readdir(aprLogPath);
-            const logFilesList = logFiles.filter(file => file.endsWith('.log'));
+            let logFilePath;
             
-            if (logFilesList.length === 0) {
-                console.log(`⚠️ APRログファイルが見つかりません: ${aprLogPath}`);
+            // パスがファイルかディレクトリかを判定
+            const stats = await fs.stat(aprLogPath);
+            
+            if (stats.isFile() && aprLogPath.endsWith('.log')) {
+                // 直接ログファイルを指定された場合
+                logFilePath = aprLogPath;
+                console.log(`📖 直接指定されたログファイル: ${path.basename(aprLogPath)}`);
+            } else if (stats.isDirectory()) {
+                // ディレクトリの場合、従来の処理
+                let logFiles;
+                try {
+                    logFiles = await fs.readdir(aprLogPath);
+                } catch (readdirError) {
+                    if (readdirError.code === 'ENAMETOOLONG') {
+                        console.log(`⚠️ APRログパス名が長すぎます: ${aprLogPath}`);
+                        return null;
+                    }
+                    throw readdirError;
+                }
+                
+                const logFilesList = logFiles.filter(file => file.endsWith('.log'));
+                
+                if (logFilesList.length === 0) {
+                    console.log(`⚠️ APRログファイルが見つかりません: ${aprLogPath}`);
+                    return null;
+                }
+
+                // 最新のログファイルを選択（タイムスタンプでソート）
+                const latestLogFile = logFilesList.sort().pop();
+                logFilePath = path.join(aprLogPath, latestLogFile);
+                
+                console.log(`📖 解析対象ログファイル: ${latestLogFile}`);
+            } else {
+                console.log(`⚠️ 無効なパス: ${aprLogPath}`);
                 return null;
             }
-
-            // 最新のログファイルを選択（タイムスタンプでソート）
-            const latestLogFile = logFilesList.sort().pop();
-            const logFilePath = path.join(aprLogPath, latestLogFile);
-            
-            console.log(`📖 解析対象ログファイル: ${latestLogFile}`);
 
             const logContent = await fs.readFile(logFilePath, 'utf-8');
             
@@ -118,9 +143,15 @@ class APRLogParser {
         // 対話履歴の処理
         if (logData.interaction_log && Array.isArray(logData.interaction_log)) {
             for (const turn of logData.interaction_log) {
+                // parsed_contentへの複数の可能なパスを試す
+                let parsed = null;
                 if (turn.llm_response && turn.llm_response.parsed_content) {
-                    const parsed = turn.llm_response.parsed_content;
-                    
+                    parsed = turn.llm_response.parsed_content;
+                } else if (turn.parsed_content) {
+                    parsed = turn.parsed_content;
+                }
+                
+                if (parsed) {
                     const turnData = {
                         turnNumber: turn.turn || dialogue.turns.length + 1,
                         timestamp: turn.timestamp,
@@ -130,7 +161,7 @@ class APRLogParser {
                         modifiedDiff: parsed.modified_diff,
                         commentText: parsed.commentText,
                         hasFinTag: parsed.has_fin_tag,
-                        usage: turn.llm_response.usage || {}
+                        usage: turn.llm_response ? turn.llm_response.usage || {} : {}
                         // 個別ターンのLLMメタデータは削除（experiment_metadataから取得するため）
                     };
 
@@ -448,38 +479,137 @@ class APRLogParser {
      * @returns {object} 最終修正内容
      */
     extractFinalModifications(dialogue) {
-        const finalMods = {
-            lastModification: null,
-            allModifications: dialogue.modificationHistory,
-            finalState: {
-                hasImplementedSolution: dialogue.modificationHistory.length > 0,
-                wasCompleted: dialogue.turns.some(turn => turn.hasFinTag),
-                finalStatus: dialogue.status
-            }
+        const logMessages = [];
+        const debugLog = (message) => {
+            logMessages.push(message);
+            console.log(message);
         };
-
-        // 最後のターンから修正内容を取得
-        if (dialogue.turns && dialogue.turns.length > 0) {
-            const lastTurn = dialogue.turns[dialogue.turns.length - 1];
-            
-            // modifiedDiffまたはdiffContentからdiffを取得
-            const diffContent = lastTurn.modifiedDiff || lastTurn.diffContent || '';
-            
-            if (diffContent && diffContent.trim().length > 0) {
-                finalMods.lastModification = {
-                    turn: lastTurn.turnNumber,
-                    timestamp: lastTurn.timestamp,
-                    diff: diffContent
-                };
-            }
-        }
         
-        // フォールバック: modificationHistoryを使用
-        if (!finalMods.lastModification && dialogue.modificationHistory.length > 0) {
-            finalMods.lastModification = dialogue.modificationHistory[dialogue.modificationHistory.length - 1];
-        }
+        debugLog('🔍 extractFinalModifications デバッグ:');
+        debugLog(`  - dialogue keys: ${Object.keys(dialogue).join(', ')}`);
+        
+        try {
+            const finalMods = {
+                lastModification: null,
+                allModifications: [],
+                finalState: {
+                    hasImplementedSolution: false,
+                    wasCompleted: false,
+                    finalStatus: dialogue.status || 'unknown'
+                }
+            };
 
-        return finalMods;
+            // 変換後データ（turns形式）と元データ（interaction_log形式）の両方に対応
+            let turns = [];
+            
+            if (dialogue.turns && Array.isArray(dialogue.turns)) {
+                // 変換後データ（parseLogEntryで変換されたデータ）
+                turns = dialogue.turns;
+                debugLog(`  - 変換後データ（turns）で処理、ターン数: ${turns.length}`);
+            } else if (dialogue.interaction_log) {
+                // 元データ（生JSON）
+                debugLog(`  - interaction_log type: ${Array.isArray(dialogue.interaction_log) ? 'Array' : typeof dialogue.interaction_log}`);
+                debugLog(`  - interaction_log length: ${dialogue.interaction_log ? dialogue.interaction_log.length : 'null/undefined'}`);
+                
+                // interaction_logの構造で処理（配列形式とオブジェクト形式の両方に対応）
+                if (Array.isArray(dialogue.interaction_log)) {
+                    turns = dialogue.interaction_log;
+                    debugLog(`  - 配列形式で処理、ターン数: ${turns.length}`);
+                } 
+                // オブジェクト形式の場合（従来の形式）
+                else if (typeof dialogue.interaction_log === 'object') {
+                    const turnKeys = Object.keys(dialogue.interaction_log).sort((a, b) => parseInt(a) - parseInt(b));
+                    turns = turnKeys.map(key => dialogue.interaction_log[key]);
+                    debugLog(`  - オブジェクト形式で処理、ターン数: ${turns.length}`);
+                }
+            } else {
+                debugLog('  - turns も interaction_log も存在しません');
+                return finalMods;
+            }
+
+            const modifications = [];
+            let hasCompletionTag = false;
+
+            // 全ターンを調査して修正内容を収集
+            turns.forEach((turn, index) => {
+                debugLog(`  - Turn ${index + 1}:`);
+                debugLog(`    - turn keys: ${Object.keys(turn).join(', ')}`);
+                
+                let parsedContent = null;
+                
+                // 変換後データの場合
+                if (turn.modifiedDiff !== undefined) {
+                    // parseLogEntryで変換されたデータ形式
+                    parsedContent = {
+                        modified_diff: turn.modifiedDiff,
+                        has_fin_tag: turn.hasFinTag,
+                        thought: turn.thought,
+                        plan: turn.plan
+                    };
+                    debugLog(`    - 変換後データ形式を検出`);
+                    debugLog(`    - modifiedDiff: ${turn.modifiedDiff ? `存在 (${turn.modifiedDiff.length}文字)` : 'null/undefined'}`);
+                } else {
+                    // 元データの場合
+                    parsedContent = turn.parsed_content || turn.llm_response?.parsed_content;
+                }
+                
+                debugLog(`    - parsedContent exists: ${!!parsedContent}`);
+                if (parsedContent) {
+                    debugLog(`    - parsedContent keys: ${Object.keys(parsedContent).join(', ')}`);
+                    debugLog(`    - modified_diff exists: ${!!parsedContent.modified_diff}`);
+                    debugLog(`    - modified_diff length: ${parsedContent.modified_diff ? parsedContent.modified_diff.length : 0}`);
+                }
+                
+                if (parsedContent) {
+                    // 完了タグの確認
+                    if (parsedContent.has_fin_tag) {
+                        hasCompletionTag = true;
+                    }
+                    
+                    // modified_diffが存在し、かつnullでない場合
+                    if (parsedContent.modified_diff && parsedContent.modified_diff.trim().length > 0) {
+                        debugLog(`    - 修正を発見! Turn ${index + 1}`);
+                        modifications.push({
+                            turn: turn.turn || turn.turnNumber || (index + 1),
+                            timestamp: turn.timestamp,
+                            diff: parsedContent.modified_diff,
+                            thought: parsedContent.thought || '',
+                            plan: parsedContent.plan || ''
+                        });
+                    } else {
+                        debugLog(`    - 修正なし: ${!parsedContent.modified_diff ? 'modified_diffがnull/undefined' : 'modified_diffが空文字'}`);
+                    }
+                }
+            });
+
+            debugLog(`  - 発見された修正数: ${modifications.length}`);
+            
+            // 全ての修正内容を記録
+            finalMods.allModifications = modifications;
+            
+            // 最後の有効な修正を取得（最終ターンにmodified_diffがnullでも、前のターンから取得）
+            if (modifications.length > 0) {
+                finalMods.lastModification = modifications[modifications.length - 1];
+                debugLog(`  - 最終修正: Turn ${finalMods.lastModification.turn}`);
+            } else {
+                debugLog(`  - 最終修正なし`);
+            }
+
+            // 実装完了の判定
+            finalMods.finalState.hasImplementedSolution = modifications.length > 0;
+            finalMods.finalState.wasCompleted = hasCompletionTag;
+
+            debugLog('🔍 extractFinalModifications 結果:');
+            debugLog(`  - hasImplementedSolution: ${finalMods.finalState.hasImplementedSolution}`);
+            debugLog(`  - lastModification exists: ${!!finalMods.lastModification}`);
+
+            return finalMods;
+            
+        } catch (error) {
+            debugLog(`❌ extractFinalModifications エラー: ${error.message}`);
+            debugLog(`  - Stack: ${error.stack}`);
+            throw error;
+        }
     }
 
     /**
@@ -670,7 +800,7 @@ class APRLogParser {
             // 設定の初期化（引数がない場合はデフォルト設定を使用）
             // プロジェクトルートディレクトリを基準にした相対パスを使用
             const projectRoot = '/app';
-            const evalConfig = config || new Config(path.join(projectRoot, 'patchEvaluation'));
+            const evalConfig = config || new Config(projectRoot);
             
             // LLMクライアントの作成
             const llmClient = LLMClientController.create(evalConfig);

@@ -36,7 +36,7 @@ class Config {
         this.inputProjectDir = pullRequestPath;
         this.outputDir = this.getConfigValue('paths.outputDir', path.join(projectRoot, 'output'));
         this.inputDir = path.join(projectRoot, 'input');
-        this.promptDir = this.getConfigValue('paths.promptDir', path.join(projectRoot, 'patchEvaluation', 'prompt'));
+        this.promptDir = this.getConfigValue('paths.promptDir', path.join(projectRoot, 'prompt'));
         this.promptTextfile = '00_prompt_gem.txt'; // Gemini用プロンプトに変更
         this.promptRefineTextfile = '00_promptRefine.txt';
         this.tmpDiffRestorePath = path.join(this.outputDir, 'tmpDiffRestore.txt');

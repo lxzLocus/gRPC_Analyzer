@@ -15,6 +15,14 @@ export class ConsoleView {
     }
 
     /**
+     * 処理開始メッセージの表示
+     * @param {string} pullRequestKey - プルリクエストキー
+     */
+    showProcessingStart(pullRequestKey) {
+        console.log(`\n🔄 処理開始: ${pullRequestKey}`);
+    }
+
+    /**
      * 処理中のエントリー情報表示
      * @param {number} entryNumber - エントリー番号
      * @param {string} entryId - エントリーID
@@ -46,8 +54,21 @@ export class ConsoleView {
     showGroundTruthDiffError(errorMessage) {
         console.log(`   ❌ Ground Truth Diff生成エラー: ${errorMessage}`);
     }
+    /**
+     * APRログ発見メッセージの表示
+     * @param {string} aprLogPath - APRログパス
+     * @param {number} fileCount - ファイル数
+     */
     showAPRLogFound(aprLogPath, fileCount) {
         console.log(`  ✅ APRログ発見: ${aprLogPath} (${fileCount} ファイル)`);
+    }
+
+    /**
+     * 複数APRログ発見メッセージの表示
+     * @param {number} logCount - ログファイル数
+     */
+    showAPRLogsFound(logCount) {
+        console.log(`  ✅ APRログ発見: ${logCount} ログファイル`);
     }
 
     /**
@@ -74,6 +95,24 @@ export class ConsoleView {
      */
     showAPRLogAnalysisStart(entryId, logFileCount) {
         console.log(`  🔍 APRログ解析を開始: ${entryId} (${logFileCount} ログファイル)`);
+    }
+
+    /**
+     * APR解析開始メッセージの表示
+     * @param {string} pullRequestKey - プルリクエストキー
+     * @param {number} logFileCount - ログファイル数
+     */
+    showAPRParsingStart(pullRequestKey, logFileCount) {
+        console.log(`  🔍 APR解析を開始: ${pullRequestKey} (${logFileCount} ログファイル)`);
+    }
+
+    /**
+     * 処理エラーメッセージの表示
+     * @param {string} pullRequestKey - プルリクエストキー
+     * @param {string} errorMessage - エラーメッセージ
+     */
+    showProcessingError(pullRequestKey, errorMessage) {
+        console.log(`  ❌ 処理エラー [${pullRequestKey}]: ${errorMessage}`);
     }
 
     /**

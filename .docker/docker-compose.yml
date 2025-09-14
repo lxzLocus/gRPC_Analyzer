@@ -86,17 +86,17 @@ services:
       - type: bind
         source: F:/Workspace/gRPC_Analyzer/patchEvaluation
         target: /app
-      # # データセット（読み取り専用）
-      # - type: bind
-      #   source: E:/Workspace/gRPC_Analyzer/dataset
-      #   target: /app/dataset
-      #   read_only: true
-      # # APRログ（読み取り専用）
-      # - type: bind
-      #   source: F:/Workspace/gRPC_Analyzer/log
-      #   target: /app/apr-logs
-      #   read_only: true
-      # # APR結果（読み取り専用）
+      # データセット（読み取り専用）
+      - type: bind
+        source: E:/Workspace/gRPC_Analyzer/dataset
+        target: /app/dataset
+        read_only: true
+      # APRログ（読み取り専用）
+      - type: bind
+        source: F:/Workspace/gRPC_Analyzer/log
+        target: /app/apr-logs
+        read_only: true
+      # APR結果（読み取り専用）
       # - type: bind
       #   source: F:/Workspace/gRPC_Analyzer/output
       #   target: /app/apr-output

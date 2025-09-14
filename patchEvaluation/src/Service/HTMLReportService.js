@@ -10,8 +10,8 @@ export class HTMLReportService {
     constructor(config) {
         this.config = config;
         this.reportsDir = path.join(config.outputDir, 'reports');
-        // patchEvaluationのtemplatesディレクトリを参照
-        const projectRoot = '/app/patchEvaluation';
+        // templatesディレクトリを参照
+        const projectRoot = '/app';
         this.templateDir = path.join(projectRoot, 'templates');
         this.assetsDir = path.join(this.reportsDir, 'assets');
         this.outputBaseDir = config.outputDir; // 階層化出力用のベースディレクトリ

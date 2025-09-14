@@ -192,10 +192,17 @@ export class DatasetAnalysisController {
             );
 
             // APRログの処理
+            // pullRequestPathからproject、category、pullRequestを抽出
+            const relativePath = path.relative(datasetDir, pullRequestPath);
+            const pathParts = relativePath.split(path.sep);
+            const projectName = pathParts[0];
+            const categoryName = pathParts[1];
+            const pullRequestName = pathParts[2];
+            
             const aprLogRelativePath = this.datasetRepository.buildAPRLogPath(
-                aprOutputPath, 
-                datasetDir, 
-                pullRequestPath
+                projectName, 
+                categoryName, 
+                pullRequestName
             );
 
             await this.processAPRLog(
@@ -329,9 +336,26 @@ export class DatasetAnalysisController {
                 aprLogData
             );
         } else {
+            // 評価できない理由の詳細分析
+            const skipReason = this.analyzeEvaluationSkipReason(finalModsResult, aprLogData);
+            
             this.consoleView.showNoFinalModification();
+            console.log(`   📋 評価スキップ理由: ${skipReason.reason}`);
+            console.log(`   📋 詳細: ${skipReason.details}`);
+            
             // 最終修正なしの場合も評価パイプライン完了とみなす（スキップケース）
             this.stats.incrementEvaluationPipelineSuccess();
+            
+            // スキップ理由を統計に記録
+            finalModInfo = {
+                evaluationSkipped: true,
+                skipReason: skipReason,
+                turn: null,
+                timestamp: null,
+                diffLines: 0,
+                affectedFiles: [],
+                diff: null
+            };
         }
 
         // 成功したマッチングを記録
@@ -796,5 +820,111 @@ export class DatasetAnalysisController {
                 error: error.message
             };
         }
+    }
+
+    /**
+     * 評価スキップ理由の詳細分析
+     * @param {Object} finalModsResult - 最終修正抽出結果
+     * @param {Object} aprLogData - APRログデータ
+     * @returns {Object} スキップ理由の詳細
+     */
+    analyzeEvaluationSkipReason(finalModsResult, aprLogData) {
+        // 基本情報の確認（配列形式とオブジェクト形式の両方に対応）
+        const hasInteractionLog = aprLogData.interaction_log && 
+                                  ((Array.isArray(aprLogData.interaction_log) && aprLogData.interaction_log.length > 0) ||
+                                   (typeof aprLogData.interaction_log === 'object' && Object.keys(aprLogData.interaction_log).length > 0));
+        
+        // ターン数の確認（配列形式とオブジェクト形式の両方に対応）
+        let totalTurns = 0;
+        if (hasInteractionLog) {
+            if (Array.isArray(aprLogData.interaction_log)) {
+                totalTurns = aprLogData.interaction_log.length;
+            } else {
+                totalTurns = Object.keys(aprLogData.interaction_log).length;
+            }
+        }
+        
+        const experimentStatus = aprLogData.experiment_metadata?.status || 'unknown';
+        
+        // ターン別の修正状況を確認
+        let turnsWithModification = 0;
+        let turnsWithNullModification = 0;
+        let lastTurnHasContent = false;
+        let investigationPhase = false;
+        
+        if (hasInteractionLog) {
+            let turns = [];
+            
+            // 配列形式とオブジェクト形式の両方に対応
+            if (Array.isArray(aprLogData.interaction_log)) {
+                turns = aprLogData.interaction_log;
+            } else {
+                const turnKeys = Object.keys(aprLogData.interaction_log).sort((a, b) => parseInt(a) - parseInt(b));
+                turns = turnKeys.map(key => aprLogData.interaction_log[key]);
+            }
+            
+            turns.forEach((turn, index) => {
+                const parsedContent = turn.parsed_content || turn.llm_response?.parsed_content;
+                
+                if (parsedContent) {
+                    if (parsedContent.modified_diff && parsedContent.modified_diff.trim().length > 0) {
+                        turnsWithModification++;
+                    } else if (parsedContent.modified_diff === null) {
+                        turnsWithNullModification++;
+                    }
+                    
+                    // 最後のターンの詳細分析
+                    if (index === turns.length - 1) {
+                        lastTurnHasContent = parsedContent.modified_diff && parsedContent.modified_diff.trim().length > 0;
+                        // 調査フェーズの判定
+                        investigationPhase = parsedContent.reply_required && 
+                                           Array.isArray(parsedContent.reply_required) && 
+                                           parsedContent.reply_required.length > 0;
+                    }
+                }
+            });
+        }
+        
+        // 理由の判定
+        let reason, details;
+        
+        if (!hasInteractionLog) {
+            reason = "NO_INTERACTION_LOG";
+            details = "APRログにinteraction_logが存在しません";
+        } else if (totalTurns === 0) {
+            reason = "EMPTY_INTERACTION_LOG";
+            details = "interaction_logが空です";
+        } else if (turnsWithModification === 0 && turnsWithNullModification === 0) {
+            reason = "NO_MODIFICATION_PROPERTY";
+            details = "全てのターンでmodified_diffプロパティが見つかりません";
+        } else if (turnsWithModification === 0) {
+            if (investigationPhase) {
+                reason = "INVESTIGATION_PHASE";
+                details = `調査フェーズ中（${totalTurns}ターン、全てmodified_diff=null、reply_requiredあり）`;
+            } else {
+                reason = "ALL_MODIFICATIONS_NULL";
+                details = `全ターンでmodified_diffがnull（${totalTurns}ターン、修正生成なし）`;
+            }
+        } else if (!lastTurnHasContent) {
+            reason = "FINAL_TURN_NO_MODIFICATION";
+            details = `最終ターンに修正なし（${turnsWithModification}/${totalTurns}ターンで修正生成、最終ターンは調査継続）`;
+        } else {
+            reason = "EXTRACTION_LOGIC_ERROR";
+            details = `抽出ロジックエラー（修正あり: ${turnsWithModification}、null: ${turnsWithNullModification}）`;
+        }
+        
+        return {
+            reason,
+            details,
+            metadata: {
+                totalTurns,
+                turnsWithModification,
+                turnsWithNullModification,
+                lastTurnHasContent,
+                investigationPhase,
+                experimentStatus,
+                hasInteractionLog
+            }
+        };
     }
 }

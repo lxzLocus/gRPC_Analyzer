@@ -144,7 +144,7 @@ export class LLMEvaluationService {
             if (!this.templateRenderer) {
                 // プロジェクトルートのpromptディレクトリを参照
                 const projectRoot = '/app';
-                await this.initializeTemplate(path.join(projectRoot, "patchEvaluation", "prompt", "00_evaluationPrompt.txt"));
+                await this.initializeTemplate(path.join(projectRoot, "prompt", "00_evaluationPrompt.txt"));
             }
             if (!this.llmClient) {
                 const config = new Config();

@@ -8,7 +8,7 @@ COPY package*.json ./
 # 依存関係をインストール
 RUN npm install
 
-# アプリケーションコードをコピー
+# 必要なソースファイルとスクリプトをコピー
 COPY . .
 
 RUN apk update && apk add --no-cache git

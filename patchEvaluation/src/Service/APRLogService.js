@@ -26,7 +26,17 @@ export class APRLogService {
         try {
             const aprLogStats = await fs.stat(aprLogPath);
             if (aprLogStats.isDirectory()) {
-                const files = await fs.readdir(aprLogPath);
+                let files;
+                try {
+                    files = await fs.readdir(aprLogPath);
+                } catch (readdirError) {
+                    if (readdirError.code === 'ENAMETOOLONG') {
+                        result.error = 'APRログディレクトリのパス名が長すぎます';
+                        return result;
+                    }
+                    throw readdirError;
+                }
+                
                 result.logFiles = files.filter(file => file.endsWith('.log'));
                 
                 if (result.logFiles.length > 0) {
@@ -39,7 +49,11 @@ export class APRLogService {
                 result.error = 'APRログが存在しません（ディレクトリではない）';
             }
         } catch (error) {
-            result.error = `APRログアクセスエラー: ${error.message}`;
+            if (error.code === 'ENAMETOOLONG') {
+                result.error = 'APRログパス名が長すぎます';
+            } else {
+                result.error = `APRログアクセスエラー: ${error.message}`;
+            }
         }
 
         return result;

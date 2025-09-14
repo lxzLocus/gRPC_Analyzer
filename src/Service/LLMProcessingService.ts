@@ -91,6 +91,10 @@ export class LLMProcessingService {
         const startTime = Date.now();
 
         try {
+            // 🔧 パス構築デバッグ - LLMFlowController へのパス渡し
+            console.log('🔧 LLMProcessingService -> LLMFlowController パス渡し:');
+            console.log(`   premergeDir: ${premergeDir}`);
+            
             this.currentController = new LLMFlowController(premergeDir);
             
             // タイムアウト設定

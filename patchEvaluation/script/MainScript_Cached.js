@@ -1,7 +1,11 @@
+/**
+ * キャッシュ機能付きMainScriptエントリーポイント
+ * オリジナルのMainScript.jsにキャッシュ機能を統合
+ */
 import { config as dotenvConfig } from 'dotenv';
 import path from 'path';
 
-import { datasetLoop } from '../src/Controller/Controller.js';
+import { cachedDatasetLoop, CacheManager } from '../src/Controller/CachedController.js';
 
 // 環境変数の読み込み
 dotenvConfig({ path: '/app/.env' });
@@ -59,44 +63,92 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     
     // データセット選択（利用可能なデータセット）
     const availableDatasets = [
-        path.join(projectRoot, "dataset", "filtered_fewChanged"),     // 少数変更ファイル
-        path.join(projectRoot, "dataset", "filtered_confirmed"),     // 確認済み
-        path.join(projectRoot, "dataset", "filtered_commit"),        // コミット履歴
-        path.join(projectRoot, "dataset", "filtered_protoChanged"),   // プロトコル変更
-        path.join(projectRoot, "dataset", "test_fewChanged")
+        path.join(projectRoot, "dataset", "test_fewChanged"),         // 小規模テストデータセット（利用可能）
+        path.join(projectRoot, "dataset", "filtered_fewChanged"),     // 少数変更ファイル（アンマウント）
+        path.join(projectRoot, "dataset", "filtered_confirmed"),     // 確認済み（アンマウント）
+        path.join(projectRoot, "dataset", "filtered_commit"),        // コミット履歴（アンマウント）
+        path.join(projectRoot, "dataset", "filtered_protoChanged"),   // プロトコル変更（アンマウント）
     ];
     
     // 現在選択されているデータセット（コマンドライン引数または デフォルト）
-    const selectedDataset = commandLineArgs.datasetPath || availableDatasets[0];
+    const selectedDataset = commandLineArgs.datasetPath || availableDatasets[1];
     const aprOutputPath = commandLineArgs.aprLogRootPath || commandLineArgs.aprOutputPath || path.join(projectRoot, "apr-logs");
+
+    // キャッシュオプションの解析
+    const useCache = commandLineArgs.cache !== 'false' && commandLineArgs.noCache !== 'true'; // デフォルト: true
+    const clearCacheFirst = commandLineArgs.clearCache === 'true' || commandLineArgs.clearCacheFirst === 'true';
+    
+    // キャッシュ管理コマンドの処理（CacheManagerは必要な時のみ作成）
+    if (commandLineArgs.showCacheStats) {
+        console.log('📈 キャッシュ統計を表示中...');
+        const cacheManager = new CacheManager();
+        await cacheManager.showCacheStats();
+        process.exit(0);
+    }
+    
+    if (commandLineArgs.clearCache) {
+        console.log('🗑️ キャッシュクリアを実行中...');
+        const cacheManager = new CacheManager();
+        await cacheManager.clearCache();
+        console.log('✅ キャッシュをクリアしました');
+        process.exit(0);
+    }
+    
+    if (commandLineArgs.limitCache) {
+        const maxFiles = parseInt(commandLineArgs.limitCache) || 5000;
+        console.log(`📊 キャッシュサイズを${maxFiles}ファイルに制限中...`);
+        const cacheManager = new CacheManager();
+        await cacheManager.limitCacheSize(maxFiles);
+        process.exit(0);
+    }
 
     // デバッグ情報
     console.log('🔧 コマンドライン引数:', commandLineArgs);
     console.log('🔧 選択されたデータセット:', selectedDataset);
     console.log('🔧 APRログパス:', aprOutputPath);
+    console.log('🔧 キャッシュ機能:', useCache ? '有効' : '無効');
+    if (clearCacheFirst) {
+        console.log('🔧 実行前キャッシュクリア: 有効');
+    }
 
-    // HTMLレポート生成オプション
+    // HTMLレポート生成オプション + キャッシュオプション
     const reportOptions = {
         generateHTMLReport: true,       // HTMLレポート生成
         generateErrorReport: true,      // エラーレポート生成
-        generateDetailReports: false    // 詳細レポート生成（最初の10件）
+        generateDetailReports: false,   // 詳細レポート生成（最初の10件）
+        useCache,                      // キャッシュ使用
+        clearCacheFirst                // 実行前キャッシュクリア
+
     };
 
-    console.log('🚀 データセット分析を開始');
+    console.log('🚀 データセット分析を開始（キャッシュ機能付き）');
     console.log(`📂 選択されたデータセット: ${selectedDataset}`);
     console.log(`📁 APRログパス: ${aprOutputPath}`);
     console.log(`📊 HTMLレポート生成: ${reportOptions.generateHTMLReport ? '有効' : '無効'}`);
     console.log(`❌ エラーレポート生成: ${reportOptions.generateErrorReport ? '有効' : '無効'}`);
     console.log(`📝 詳細レポート生成: ${reportOptions.generateDetailReports ? '有効' : '無効'}`);
+    console.log(`📈 キャッシュ機能: ${reportOptions.useCache ? '有効' : '無効'}`);
+    if (reportOptions.clearCacheFirst) {
+        console.log(`🗑️ 実行前キャッシュクリア: 有効`);
+    }
     console.log('=============================================\n');
 
-    datasetLoop(selectedDataset, aprOutputPath, reportOptions)
+    cachedDatasetLoop(selectedDataset, aprOutputPath, reportOptions)
         .then((stats) => {
             console.log('\n🎉 分析が正常に完了しました！');
             console.log(`✅ ${stats.aprParseSuccess}/${stats.totalDatasetEntries} のマッチングペアが成功`);
             
             if (stats.aprParseSuccess > 0) {
                 console.log(`📊 成功率: ${(stats.aprParseSuccess/stats.totalDatasetEntries*100).toFixed(1)}%`);
+            }
+            
+            // キャッシュ使用時の統計表示
+            if (reportOptions.useCache) {
+                console.log('\n📈 キャッシュパフォーマンス概要:');
+                console.log('   - キャッシュファイルは /app/cache/diff-cache に保存されました');
+                console.log('   - 次回実行時はキャッシュにより高速化されます');
+                console.log('   - キャッシュ統計: --showCacheStats で確認可能');
+                console.log('   - キャッシュクリア: --clearCache で実行可能');
             }
             
             // HTMLレポート情報の表示
@@ -113,4 +165,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             console.error("スタックトレース:", err.stack);
         });
 }
-

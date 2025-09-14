@@ -23,6 +23,9 @@ export class ProcessingStats {
         this.matchedPairs = [];
         this.unmatchedEntries = [];
         this.errorEntries = [];
+        
+        // LLM評価スキップ理由の統計
+        this.evaluationSkipReasons = new Map();
     }
 
     /**
@@ -112,7 +115,35 @@ export class ProcessingStats {
      * 成功したマッチングペアを追加
      */
     addMatchedPair(pair) {
+        // データの整合性を確認してから追加
+        if (!pair) {
+            console.warn('⚠️ ProcessingStats.addMatchedPair: pairがnullまたはundefined');
+            return;
+        }
+        
+        // aprLogDataが存在しない場合はデフォルト値で初期化
+        if (!pair.aprLogData) {
+            console.warn('⚠️ ProcessingStats.addMatchedPair: aprLogDataが存在しません。デフォルト値で初期化します。', {
+                project: pair.project,
+                category: pair.category,
+                pullRequest: pair.pullRequest
+            });
+            pair.aprLogData = {
+                turns: 0,
+                totalTokens: 0,
+                modifications: 0,
+                affectedFiles: 0
+            };
+        }
+        
         this.matchedPairs.push(pair);
+        
+        // LLM評価スキップ理由の記録
+        if (pair.finalModification && pair.finalModification.evaluationSkipped && pair.finalModification.skipReason) {
+            const reason = pair.finalModification.skipReason.reason;
+            const currentCount = this.evaluationSkipReasons.get(reason) || 0;
+            this.evaluationSkipReasons.set(reason, currentCount + 1);
+        }
     }
 
     /**
@@ -210,10 +241,10 @@ export class ProcessingStats {
     calculateDetailedStats() {
         if (this.matchedPairs.length === 0) return null;
 
-        const totalTurns = this.matchedPairs.reduce((sum, pair) => sum + pair.aprLogData.turns, 0);
-        const totalTokens = this.matchedPairs.reduce((sum, pair) => sum + pair.aprLogData.totalTokens, 0);
-        const totalMods = this.matchedPairs.reduce((sum, pair) => sum + pair.aprLogData.modifications, 0);
-        const totalAffectedFiles = this.matchedPairs.reduce((sum, pair) => sum + pair.aprLogData.affectedFiles, 0);
+        const totalTurns = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprLogData?.turns || 0), 0);
+        const totalTokens = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprLogData?.totalTokens || 0), 0);
+        const totalMods = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprLogData?.modifications || 0), 0);
+        const totalAffectedFiles = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprLogData?.affectedFiles || 0), 0);
         const totalChangedFiles = this.matchedPairs.reduce((sum, pair) => sum + (pair.changedFiles ? pair.changedFiles.length : 0), 0);
         const totalAprDiffFiles = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprDiffFiles ? pair.aprDiffFiles.length : 0), 0);
 
@@ -241,7 +272,7 @@ export class ProcessingStats {
      * LLM評価統計を計算
      */
     calculateLLMEvaluationStats() {
-        const withFinalMod = this.matchedPairs.filter(pair => pair.finalModification !== null).length;
+        const withFinalMod = this.matchedPairs.filter(pair => pair.finalModification !== null && pair.finalModification !== undefined).length;
         const withLLMEval = this.matchedPairs.filter(pair => 
             pair.finalModification && 
             pair.finalModification.llmEvaluation && 
@@ -269,6 +300,38 @@ export class ProcessingStats {
             plausibleCount,
             correctRate: (correctCount / withLLMEval * 100).toFixed(1),
             plausibleRate: (plausibleCount / withLLMEval * 100).toFixed(1)
+        };
+    }
+
+    /**
+     * LLM評価スキップ統計を計算
+     */
+    calculateEvaluationSkipStats() {
+        const totalSkipped = this.matchedPairs.filter(pair => 
+            pair.finalModification && 
+            pair.finalModification.evaluationSkipped
+        ).length;
+
+        if (totalSkipped === 0) return null;
+
+        // スキップ理由別の統計
+        const reasonStats = [];
+        for (const [reason, count] of this.evaluationSkipReasons.entries()) {
+            reasonStats.push({
+                reason,
+                count,
+                percentage: ((count / totalSkipped) * 100).toFixed(1)
+            });
+        }
+
+        // 件数でソート（降順）
+        reasonStats.sort((a, b) => b.count - a.count);
+
+        return {
+            totalSkipped,
+            totalProcessed: this.matchedPairs.length,
+            skipRate: ((totalSkipped / this.matchedPairs.length) * 100).toFixed(1),
+            reasonStats
         };
     }
 }

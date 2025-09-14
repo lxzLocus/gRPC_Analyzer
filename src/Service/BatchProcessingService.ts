@@ -116,6 +116,14 @@ export class BatchProcessingService {
                 datasetDir, repositoryName, category, pullRequestTitle
             );
             
+            // 🔧 パス構築デバッグ - BatchProcessingService でのパス情報
+            console.log('🔧 BatchProcessingService パス構築デバッグ:');
+            console.log(`   datasetDir: ${datasetDir}`);
+            console.log(`   repositoryName: ${repositoryName}`);
+            console.log(`   category: ${category}`);  
+            console.log(`   pullRequestTitle: ${pullRequestTitle}`);
+            console.log(`   構築された pullRequestPath: ${pullRequestPath}`);
+            
             const premergeResult = await this.datasetRepository.findPremergeDirectory(pullRequestPath);
             if (!premergeResult) {
                 const result = this.createFailureResult(
@@ -126,6 +134,9 @@ export class BatchProcessingService {
                 return result;
             }
             premergeDir = premergeResult;
+            
+            // 🔧 premergeDir 設定後の情報
+            console.log(`   発見された premergeDir: ${premergeDir}`);
 
             // LLM処理の実行
             const llmResult = await this.llmService.processWithRetry(
