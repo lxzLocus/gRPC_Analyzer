@@ -79,7 +79,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const reportOptions = {
         generateHTMLReport: true,       // HTMLレポート生成
         generateErrorReport: true,      // エラーレポート生成
-        generateDetailReports: false    // 詳細レポート生成（最初の10件）
+        generateDetailReports: false,   // 詳細レポート生成（最初の10件）
+        generateDetailedAnalysis: true  // 詳細分析レポート生成（新機能）
     };
 
     console.log('🚀 データセット分析を開始');
@@ -88,6 +89,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`📊 HTMLレポート生成: ${reportOptions.generateHTMLReport ? '有効' : '無効'}`);
     console.log(`❌ エラーレポート生成: ${reportOptions.generateErrorReport ? '有効' : '無効'}`);
     console.log(`📝 詳細レポート生成: ${reportOptions.generateDetailReports ? '有効' : '無効'}`);
+    console.log(`🔬 詳細分析レポート生成: ${reportOptions.generateDetailedAnalysis ? '有効' : '無効'}`);
     console.log('=============================================\n');
 
     datasetLoop(selectedDataset, aprOutputPath, reportOptions)

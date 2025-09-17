@@ -486,6 +486,664 @@
                 {{/if}}
             </div>
             {{/if}}
+
+            <!-- LLM評価結果詳細セクション -->
+            {{#if stats.llmEvaluationResults}}
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">📊</span>
+                    LLM評価結果詳細
+                </h2>
+                
+                <div class="metrics-grid">
+                    <!-- 完全一致 -->
+                    <div class="metric-card success">
+                        <div class="metric-value">{{stats.llmEvaluationResults.identicalCount}}</div>
+                        <div class="metric-label">🎯 完全一致</div>
+                        <div class="metric-description">Ground Truthと完全に同一の修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.identicalRate}}" data-accent-color="#059669" data-accent-color-light="#10b981"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.identicalRate}}% ({{stats.llmEvaluationResults.identicalCount}}/{{stats.llmEvaluationResults.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 意味的同等 -->
+                    <div class="metric-card success">
+                        <div class="metric-value">{{stats.llmEvaluationResults.semanticallyEquivalentCount}}</div>
+                        <div class="metric-label">✅ 意味的同等</div>
+                        <div class="metric-description">異なる実装だが意味的に同等の修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.semanticallyEquivalentRate}}" data-accent-color="#10b981" data-accent-color-light="#34d399"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.semanticallyEquivalentRate}}% ({{stats.llmEvaluationResults.semanticallyEquivalentCount}}/{{stats.llmEvaluationResults.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 後方互換用（CORRECT） -->
+                    {{#if stats.llmEvaluationResults.correctCount}}
+                    <div class="metric-card success">
+                        <div class="metric-value">{{stats.llmEvaluationResults.correctCount}}</div>
+                        <div class="metric-label">✅ 正確な修正（旧形式）</div>
+                        <div class="metric-description">旧評価形式での正確な修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.correctRate}}" data-accent-color="#10b981" data-accent-color-light="#34d399"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.correctRate}}% ({{stats.llmEvaluationResults.correctCount}}/{{stats.llmEvaluationResults.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    {{/if}}
+                    
+                    <!-- 妥当だが異なる -->
+                    <div class="metric-card warning">
+                        <div class="metric-value">{{stats.llmEvaluationResults.plausibleCount}}</div>
+                        <div class="metric-label">🟡 妥当だが異なる修正</div>
+                        <div class="metric-description">妥当性はあるが最適解ではない修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.plausibleRate}}" data-accent-color="#f59e0b" data-accent-color-light="#fbbf24"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.plausibleRate}}% ({{stats.llmEvaluationResults.plausibleCount}}/{{stats.llmEvaluationResults.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 不正確 -->
+                    <div class="metric-card error">
+                        <div class="metric-value">{{stats.llmEvaluationResults.incorrectCount}}</div>
+                        <div class="metric-label">❌ 不正確な修正</div>
+                        <div class="metric-description">間違いまたは有害な修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.incorrectRate}}" data-accent-color="#ef4444" data-accent-color-light="#f87171"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.incorrectRate}}% ({{stats.llmEvaluationResults.incorrectCount}}/{{stats.llmEvaluationResults.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 未知の評価 -->
+                    {{#if stats.llmEvaluationResults.unknownCount}}
+                    <div class="metric-card info">
+                        <div class="metric-value">{{stats.llmEvaluationResults.unknownCount}}</div>
+                        <div class="metric-label">❓ 未知の評価</div>
+                        <div class="metric-description">予期しない評価レベル</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.unknownRate}}" data-accent-color="#8b5cf6" data-accent-color-light="#a78bfa"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.unknownRate}}% ({{stats.llmEvaluationResults.unknownCount}}/{{stats.llmEvaluationResults.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    {{/if}}
+                    
+                    <!-- スキップ -->
+                    <div class="metric-card info">
+                        <div class="metric-value">{{stats.llmEvaluationResults.skippedCount}}</div>
+                        <div class="metric-label">⏭️ 評価スキップ</div>
+                        <div class="metric-description">評価がスキップされたエントリー</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.skippedRate}}" data-accent-color="#6b7280" data-accent-color-light="#9ca3af"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.skippedRate}}% ({{stats.llmEvaluationResults.skippedCount}}/{{stats.totalDatasetEntries}})</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 統合正解率 -->
+                    <div class="metric-card success" style="grid-column: 1 / -1; background: linear-gradient(135deg, #059669 0%, #10b981 100%);">
+                        <div class="metric-value">{{stats.llmEvaluationResults.totalCorrectCount}}</div>
+                        <div class="metric-label">🏆 統合正解数</div>
+                        <div class="metric-description">完全一致 + 意味的同等 + 正確な修正（旧形式）の合計</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.totalCorrectRate}}" data-accent-color="#ffffff" data-accent-color-light="#f0f9ff"></div>
+                            </div>
+                            <div class="progress-text" style="color: white;">{{stats.llmEvaluationResults.totalCorrectRate}}% ({{stats.llmEvaluationResults.totalCorrectCount}}/{{stats.llmEvaluationResults.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 正確性評価詳細セクション -->
+                <h3 style="margin-top: 40px; color: #1f2937; font-size: 1.6em;">🎯 正確性評価詳細（Correctness Evaluation）</h3>
+                <div class="metrics-grid">
+                    <div class="metric-card success">
+                        <div class="metric-value">{{stats.llmEvaluationResults.correctness.identicalCount}}</div>
+                        <div class="metric-label">🎯 完全一致</div>
+                        <div class="metric-description">Ground Truthと完全に同一の修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.correctness.identicalRate}}" data-accent-color="#059669" data-accent-color-light="#10b981"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.correctness.identicalRate}}% ({{stats.llmEvaluationResults.correctness.identicalCount}}/{{stats.llmEvaluationResults.correctness.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card success">
+                        <div class="metric-value">{{stats.llmEvaluationResults.correctness.semanticallyEquivalentCount}}</div>
+                        <div class="metric-label">✅ 意味的同等</div>
+                        <div class="metric-description">異なる実装だが意味的に同等の修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.correctness.semanticallyEquivalentRate}}" data-accent-color="#10b981" data-accent-color-light="#34d399"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.correctness.semanticallyEquivalentRate}}% ({{stats.llmEvaluationResults.correctness.semanticallyEquivalentCount}}/{{stats.llmEvaluationResults.correctness.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card warning">
+                        <div class="metric-value">{{stats.llmEvaluationResults.correctness.plausibleButDifferentCount}}</div>
+                        <div class="metric-label">🟡 妥当だが異なる</div>
+                        <div class="metric-description">妥当性はあるが意味的に異なる修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.correctness.plausibleButDifferentRate}}" data-accent-color="#f59e0b" data-accent-color-light="#fbbf24"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.correctness.plausibleButDifferentRate}}% ({{stats.llmEvaluationResults.correctness.plausibleButDifferentCount}}/{{stats.llmEvaluationResults.correctness.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card error">
+                        <div class="metric-value">{{stats.llmEvaluationResults.correctness.incorrectCount}}</div>
+                        <div class="metric-label">❌ 不正確</div>
+                        <div class="metric-description">間違いまたは有害な修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.correctness.incorrectRate}}" data-accent-color="#ef4444" data-accent-color-light="#f87171"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.correctness.incorrectRate}}% ({{stats.llmEvaluationResults.correctness.incorrectCount}}/{{stats.llmEvaluationResults.correctness.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 妥当性評価詳細セクション -->
+                <h3 style="margin-top: 40px; color: #1f2937; font-size: 1.6em;">🔍 妥当性評価詳細（Plausibility Evaluation）</h3>
+                <div class="metrics-grid">
+                    <div class="metric-card success">
+                        <div class="metric-value">{{stats.llmEvaluationResults.plausibility.plausibleCount}}</div>
+                        <div class="metric-label">✅ 妥当</div>
+                        <div class="metric-description">構文的・論理的に正しく、テストに通る可能性が高い修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.plausibility.plausibleRate}}" data-accent-color="#10b981" data-accent-color-light="#34d399"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.plausibility.plausibleRate}}% ({{stats.llmEvaluationResults.plausibility.plausibleCount}}/{{stats.llmEvaluationResults.plausibility.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card error">
+                        <div class="metric-value">{{stats.llmEvaluationResults.plausibility.notPlausibleCount}}</div>
+                        <div class="metric-label">❌ 非妥当</div>
+                        <div class="metric-description">構文エラー、論理的欠陥、または依存関係の問題がある修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.plausibility.notPlausibleRate}}" data-accent-color="#ef4444" data-accent-color-light="#f87171"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.plausibility.notPlausibleRate}}% ({{stats.llmEvaluationResults.plausibility.notPlausibleCount}}/{{stats.llmEvaluationResults.plausibility.totalEvaluated}})</div>
+                        </div>
+                </div>
+                </div>
+
+                <!-- 妥当性詳細レベルセクション -->
+                <h4 style="margin-top: 30px; color: #1f2937; font-size: 1.4em;">🔍 妥当性の詳細分析</h4>
+                <div class="metrics-grid">
+                    <div class="metric-card info">
+                        <div class="metric-value">{{stats.llmEvaluationResults.plausibility.syntacticallyCorrectCount}}</div>
+                        <div class="metric-label">📝 構文的正確性</div>
+                        <div class="metric-description">構文エラーがない修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.plausibility.syntacticallyCorrectRate}}" data-accent-color="#3b82f6" data-accent-color-light="#60a5fa"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.plausibility.syntacticallyCorrectRate}}% ({{stats.llmEvaluationResults.plausibility.syntacticallyCorrectCount}}/{{stats.llmEvaluationResults.plausibility.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card info">
+                        <div class="metric-value">{{stats.llmEvaluationResults.plausibility.logicallyValidCount}}</div>
+                        <div class="metric-label">🧠 論理的妥当性</div>
+                        <div class="metric-description">論理的欠陥がない修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.plausibility.logicallyValidRate}}" data-accent-color="#8b5cf6" data-accent-color-light="#a78bfa"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.plausibility.logicallyValidRate}}% ({{stats.llmEvaluationResults.plausibility.logicallyValidCount}}/{{stats.llmEvaluationResults.plausibility.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card info">
+                        <div class="metric-value">{{stats.llmEvaluationResults.plausibility.dependencyResolvedCount}}</div>
+                        <div class="metric-label">🔗 依存関係解決</div>
+                        <div class="metric-description">依存関係の問題がない修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.plausibility.dependencyResolvedRate}}" data-accent-color="#06b6d4" data-accent-color-light="#22d3ee"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.plausibility.dependencyResolvedRate}}% ({{stats.llmEvaluationResults.plausibility.dependencyResolvedCount}}/{{stats.llmEvaluationResults.plausibility.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card success">
+                        <div class="metric-value">{{stats.llmEvaluationResults.plausibility.completelyPlausibleCount}}</div>
+                        <div class="metric-label">✅ 完全に妥当</div>
+                        <div class="metric-description">全チェック項目を満たす修正</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{stats.llmEvaluationResults.plausibility.completelyPlausibleRate}}" data-accent-color="#10b981" data-accent-color-light="#34d399"></div>
+                            </div>
+                            <div class="progress-text">{{stats.llmEvaluationResults.plausibility.completelyPlausibleRate}}% ({{stats.llmEvaluationResults.plausibility.completelyPlausibleCount}}/{{stats.llmEvaluationResults.plausibility.totalEvaluated}})</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 詳細評価結果テーブル -->
+                <h3 style="margin-top: 30px; color: #1f2937; font-size: 1.4em;">評価結果内訳</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>評価カテゴリ</th>
+                            <th>件数</th>
+                            <th>割合</th>
+                            <th>説明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span style="color: #059669; font-weight: bold;">🎯 IDENTICAL</span></td>
+                            <td>{{stats.llmEvaluationResults.identicalCount}}</td>
+                            <td>{{stats.llmEvaluationResults.identicalRate}}%</td>
+                            <td>Ground Truthと完全に同一の修正</td>
+                        </tr>
+                        <tr>
+                            <td><span style="color: #10b981; font-weight: bold;">✅ SEMANTICALLY_EQUIVALENT</span></td>
+                            <td>{{stats.llmEvaluationResults.semanticallyEquivalentCount}}</td>
+                            <td>{{stats.llmEvaluationResults.semanticallyEquivalentRate}}%</td>
+                            <td>異なる実装だが意味的に同等の修正</td>
+                        </tr>
+                        <tr>
+                            <td><span style="color: #10b981; font-weight: bold;">✅ CORRECT (旧形式)</span></td>
+                            <td>{{stats.llmEvaluationResults.correctCount}}</td>
+                            <td>{{stats.llmEvaluationResults.correctRate}}%</td>
+                            <td>修正が完全に正確で最適解と評価された（旧評価形式）</td>
+                        </tr>
+                        <tr>
+                            <td><span style="color: #f59e0b; font-weight: bold;">🟡 PLAUSIBLE_BUT_DIFFERENT</span></td>
+                            <td>{{stats.llmEvaluationResults.plausibleCount}}</td>
+                            <td>{{stats.llmEvaluationResults.plausibleRate}}%</td>
+                            <td>妥当性があるが意味的に異なる修正</td>
+                        </tr>
+                        <tr>
+                            <td><span style="color: #ef4444; font-weight: bold;">❌ INCORRECT</span></td>
+                            <td>{{stats.llmEvaluationResults.incorrectCount}}</td>
+                            <td>{{stats.llmEvaluationResults.incorrectRate}}%</td>
+                            <td>不正確または不適切な修正と評価された</td>
+                        </tr>
+                        <tr>
+                            <td><span style="color: #6b7280; font-weight: bold;">⏭️ SKIPPED</span></td>
+                            <td>{{stats.llmEvaluationResults.skippedCount}}</td>
+                            <td>{{stats.llmEvaluationResults.skippedRate}}%</td>
+                            <td>評価がスキップされた（interaction_logなし等）</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- スキップ詳細統計 -->
+                {{#if stats.llmEvaluationResults.skipDetails.totalSkipped}}
+                <div style="margin-top: 40px; padding: 25px; background: #f8fafc; border-left: 4px solid #6b7280; border-radius: 8px;">
+                    <h3 style="margin: 0 0 20px 0; color: #1f2937; font-size: 1.3em; display: flex; align-items: center;">
+                        <span style="margin-right: 10px;">⏭️</span>
+                        評価スキップ詳細統計
+                        <span style="margin-left: 15px; font-size: 0.8em; background: #6b7280; color: white; padding: 4px 12px; border-radius: 12px;">
+                            {{stats.llmEvaluationResults.skipDetails.totalSkipped}}件
+                        </span>
+                    </h3>
+
+                    <div style="margin-bottom: 25px;">
+                        <h4 style="color: #374151; margin: 0 0 15px 0; font-size: 1.1em;">📊 スキップ理由別統計</h4>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                            <thead>
+                                <tr style="background: #e5e7eb;">
+                                    <th style="padding: 12px 15px; text-align: left; border: 1px solid #d1d5db; font-weight: 600;">理由コード</th>
+                                    <th style="padding: 12px 15px; text-align: center; border: 1px solid #d1d5db; font-weight: 600;">件数</th>
+                                    <th style="padding: 12px 15px; text-align: center; border: 1px solid #d1d5db; font-weight: 600;">割合</th>
+                                    <th style="padding: 12px 15px; text-align: left; border: 1px solid #d1d5db; font-weight: 600;">説明</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{#each stats.llmEvaluationResults.skipDetails.sortedReasons}}
+                                <tr>
+                                    <td style="padding: 10px 15px; border: 1px solid #d1d5db;">
+                                        <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 0.9em;">{{reason}}</code>
+                                    </td>
+                                    <td style="padding: 10px 15px; text-align: center; border: 1px solid #d1d5db; font-weight: bold;">{{count}}</td>
+                                    <td style="padding: 10px 15px; text-align: center; border: 1px solid #d1d5db;">{{percentage}}%</td>
+                                    <td style="padding: 10px 15px; border: 1px solid #d1d5db; color: #4b5563;">{{description}}</td>
+                                </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="color: #374151; margin: 0 0 15px 0; font-size: 1.1em;">🔍 スキップ理由の詳細説明</h4>
+                        <div style="display: grid; gap: 15px;">
+                            <div style="padding: 15px; background: white; border-radius: 8px; border: 1px solid #e5e7eb;">
+                                <strong style="color: #dc2626;">NO_INTERACTION_LOG・EMPTY_INTERACTION_LOG</strong>
+                                <p style="margin: 8px 0 0 0; color: #6b7280; line-height: 1.5;">
+                                    APRシステムがログを生成できていない、またはログが空の状態。APRツールの実行自体が失敗している可能性があります。
+                                </p>
+                            </div>
+                            <div style="padding: 15px; background: white; border-radius: 8px; border: 1px solid #e5e7eb;">
+                                <strong style="color: #d97706;">ALL_MODIFICATIONS_NULL・NO_MODIFICATION_PROPERTY</strong>
+                                <p style="margin: 8px 0 0 0; color: #6b7280; line-height: 1.5;">
+                                    APRシステムが修正案を生成できなかった状態。問題の難易度が高い、またはAPRツールの能力を超えている可能性があります。
+                                </p>
+                            </div>
+                            <div style="padding: 15px; background: white; border-radius: 8px; border: 1px solid #e5e7eb;">
+                                <strong style="color: #7c3aed;">INVESTIGATION_PHASE</strong>
+                                <p style="margin: 8px 0 0 0; color: #6b7280; line-height: 1.5;">
+                                    APRシステムが問題を理解するための情報収集段階で終了。より多くの情報が必要な複雑な問題の可能性があります。
+                                </p>
+                            </div>
+                            <div style="padding: 15px; background: white; border-radius: 8px; border: 1px solid #e5e7eb;">
+                                <strong style="color: #059669;">FINAL_TURN_NO_MODIFICATION</strong>
+                                <p style="margin: 8px 0 0 0; color: #6b7280; line-height: 1.5;">
+                                    途中まで修正案を生成していたが、最終的に修正案を提出せずに終了。部分的な解決に留まった状態です。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 詳細なスキップエントリー一覧 -->
+                    {{#if stats.llmEvaluationResults.skipDetails.detailedBreakdown}}
+                    <div style="margin-top: 25px;">
+                        <h4 style="color: #374151; margin: 0 0 15px 0; font-size: 1.1em;">📋 スキップエントリー詳細</h4>
+                        <details style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #374151; margin-bottom: 15px;">
+                                詳細リストを表示 ({{stats.llmEvaluationResults.skipDetails.totalSkipped}}件)
+                            </summary>
+                            <div style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
+                                <table style="width: 100%; border-collapse: collapse;">
+                                    <thead>
+                                        <tr style="background: #f9fafb; position: sticky; top: 0;">
+                                            <th style="padding: 8px 12px; text-align: left; border: 1px solid #e5e7eb; font-size: 0.9em;">プロジェクト</th>
+                                            <th style="padding: 8px 12px; text-align: left; border: 1px solid #e5e7eb; font-size: 0.9em;">理由</th>
+                                            <th style="padding: 8px 12px; text-align: left; border: 1px solid #e5e7eb; font-size: 0.9em;">エントリーID</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {{#each stats.llmEvaluationResults.skipDetails.detailedBreakdown}}
+                                        <tr>
+                                            <td style="padding: 6px 12px; border: 1px solid #e5e7eb; font-size: 0.85em;">{{project}}</td>
+                                            <td style="padding: 6px 12px; border: 1px solid #e5e7eb; font-size: 0.85em;">
+                                                <code style="background: #f3f4f6; padding: 1px 4px; border-radius: 3px;">{{reason}}</code>
+                                            </td>
+                                            <td style="padding: 6px 12px; border: 1px solid #e5e7eb; font-size: 0.85em; font-family: monospace;">{{datasetEntry}}</td>
+                                        </tr>
+                                        {{/each}}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                    </div>
+                    {{/if}}
+                </div>
+                {{/if}}
+
+                <!-- 計算方法と判定基準の詳細説明 -->
+                <div style="margin-top: 40px; padding: 25px; background: #f8fafc; border-left: 4px solid #3b82f6; border-radius: 8px;">
+                    <h3 style="margin: 0 0 20px 0; color: #1f2937; font-size: 1.3em; display: flex; align-items: center;">
+                        <span style="margin-right: 10px;">🔍</span>
+                        評価結果の計算方法と判定基準
+                    </h3>
+
+                    <!-- 計算式の説明 -->
+                    <div style="margin-bottom: 25px;">
+                        <h4 style="color: #374151; margin: 0 0 15px 0; font-size: 1.1em;">📊 割合計算式</h4>
+                        <div style="background: white; padding: 15px; border-radius: 6px; font-family: monospace; border: 1px solid #e5e7eb;">
+                            <div style="margin-bottom: 8px; color: #374151;"><strong style="color: #1f2937;">完全一致率:</strong> <span style="color: #4b5563;">(IDENTICAL件数 ÷ 評価実施総数) × 100</span></div>
+                            <div style="margin-bottom: 8px; color: #374151;"><strong style="color: #1f2937;">意味的同等率:</strong> <span style="color: #4b5563;">(SEMANTICALLY_EQUIVALENT件数 ÷ 評価実施総数) × 100</span></div>
+                            <div style="margin-bottom: 8px; color: #374151;"><strong style="color: #1f2937;">妥当だが異なる率:</strong> <span style="color: #4b5563;">(PLAUSIBLE_BUT_DIFFERENT件数 ÷ 評価実施総数) × 100</span></div>
+                            <div style="margin-bottom: 8px; color: #374151;"><strong style="color: #1f2937;">不正確率:</strong> <span style="color: #4b5563;">(INCORRECT件数 ÷ 評価実施総数) × 100</span></div>
+                            <div style="color: #374151;"><strong style="color: #1f2937;">スキップ率:</strong> <span style="color: #4b5563;">(SKIPPED件数 ÷ 全データセットエントリー数) × 100</span></div>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 0.9em; color: #6b7280;">
+                            ※ 評価実施総数 = IDENTICAL + SEMANTICALLY_EQUIVALENT + PLAUSIBLE_BUT_DIFFERENT + INCORRECT<br>
+                            ※ スキップ率のみ全データセット数を分母とし、その他は実際に評価を実施した件数を分母とする
+                        </div>
+                    </div>
+
+                    <!-- 判定基準の説明 -->
+                    <div style="margin-bottom: 25px;">
+                        <h4 style="color: #374151; margin: 0 0 15px 0; font-size: 1.1em;">⚖️ LLM評価判定基準</h4>
+                        <p style="color: #6b7280; margin: 0 0 20px 0; font-size: 0.95em;">
+                            各修正は以下の5段階で評価されます。上位2つ（IDENTICAL + SEMANTICALLY_EQUIVALENT）が<strong>正解</strong>として扱われます。
+                        </p>
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 20px;">
+                            
+                            <!-- IDENTICAL - 最高レベル -->
+                            <div style="background: #ecfdf5; border: 2px solid #059669; border-radius: 12px; padding: 20px;">
+                                <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                                    <span style="font-size: 1.4em; margin-right: 10px;">🎯</span>
+                                    <div>
+                                        <strong style="color: #065f46; font-size: 1.2em;">IDENTICAL（完全一致）</strong>
+                                        <div style="color: #059669; font-size: 0.9em; margin-top: 2px;">★★★★★ 最高品質</div>
+                                    </div>
+                                </div>
+                                <div style="color: #065f46; margin-bottom: 15px; font-weight: 500;">
+                                    Ground Truthと文字通り完全に同一の修正
+                                </div>
+                                <ul style="margin: 0 0 15px 0; padding-left: 20px; color: #065f46;">
+                                    <li>コード構造、変数名、実装方法が全て一致</li>
+                                    <li>空白文字やコメントを除いて完全に同じ</li>
+                                    <li>人間が書いた正解と全く同じコードを生成</li>
+                                </ul>
+                                <div style="background: #f0fdf4; padding: 12px; border-radius: 6px; border-left: 3px solid #10b981;">
+                                    <strong style="color: #166534; font-size: 0.9em;">📝 具体例:</strong>
+                                    <div style="color: #374151; font-size: 0.85em; margin-top: 5px;">
+                                        Ground Truth: <code>if (x != null) return x.getValue();</code><br>
+                                        AI修正: <code>if (x != null) return x.getValue();</code><br>
+                                        → <span style="color: #059669; font-weight: bold;">完全一致！</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- SEMANTICALLY_EQUIVALENT - 正解レベル -->
+                            <div style="background: #f0fdf4; border: 2px solid #10b981; border-radius: 12px; padding: 20px;">
+                                <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                                    <span style="font-size: 1.4em; margin-right: 10px;">✅</span>
+                                    <div>
+                                        <strong style="color: #166534; font-size: 1.2em;">SEMANTICALLY_EQUIVALENT（意味的同等）</strong>
+                                        <div style="color: #10b981; font-size: 0.9em; margin-top: 2px;">★★★★☆ 正解レベル</div>
+                                    </div>
+                                </div>
+                                <div style="color: #166534; margin-bottom: 15px; font-weight: 500;">
+                                    異なる実装だが、機能的に完全に同等の修正
+                                </div>
+                                <ul style="margin: 0 0 15px 0; padding-left: 20px; color: #166534;">
+                                    <li>同じ問題を異なるアプローチで解決</li>
+                                    <li>実行結果や動作が Ground Truth と同じ</li>
+                                    <li>コーディングスタイルや手法の違いは許容</li>
+                                    <li>15の意味的同等ルール（R1-R15）のいずれかに該当</li>
+                                </ul>
+                                <div style="background: #f8fafa; padding: 12px; border-radius: 6px; border-left: 3px solid #22c55e;">
+                                    <strong style="color: #166534; font-size: 0.9em;">📝 具体例:</strong>
+                                    <div style="color: #374151; font-size: 0.85em; margin-top: 5px;">
+                                        Ground Truth: <code>return x != null ? x.getValue() : null;</code><br>
+                                        AI修正: <code>if (x != null) return x.getValue(); else return null;</code><br>
+                                        → <span style="color: #10b981; font-weight: bold;">意味的に同等！</span>（三項演算子 vs if文）
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- PLAUSIBLE_BUT_DIFFERENT - 部分正解レベル -->
+                            <div style="background: #fffbeb; border: 2px solid #f59e0b; border-radius: 12px; padding: 20px;">
+                                <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                                    <span style="font-size: 1.4em; margin-right: 10px;">🟡</span>
+                                    <div>
+                                        <strong style="color: #d97706; font-size: 1.2em;">PLAUSIBLE_BUT_DIFFERENT（妥当だが異なる）</strong>
+                                        <div style="color: #f59e0b; font-size: 0.9em; margin-top: 2px;">★★★☆☆ 部分正解レベル</div>
+                                    </div>
+                                </div>
+                                <div style="color: #d97706; margin-bottom: 15px; font-weight: 500;">
+                                    妥当性はあるが、最適解ではない修正
+                                </div>
+                                <ul style="margin: 0 0 15px 0; padding-left: 20px; color: #d97706;">
+                                    <li>部分的に問題を解決する代替的なアプローチ</li>
+                                    <li>構文的に正しく、論理的にも妥当</li>
+                                    <li>しかし Ground Truth とは異なる問題解釈</li>
+                                    <li>追加の手直しや改善が必要な場合がある</li>
+                                </ul>
+                                <div style="background: #fefcf3; padding: 12px; border-radius: 6px; border-left: 3px solid #f59e0b;">
+                                    <strong style="color: #d97706; font-size: 0.9em;">📝 具体例:</strong>
+                                    <div style="color: #374151; font-size: 0.85em; margin-top: 5px;">
+                                        Ground Truth: <code>list.clear(); list.addAll(newItems);</code><br>
+                                        AI修正: <code>list = new ArrayList&lt;&gt;(newItems);</code><br>
+                                        → <span style="color: #f59e0b; font-weight: bold;">妥当だが異なる！</span>（参照の扱いが違う）
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- INCORRECT - 不正解レベル -->
+                            <div style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 12px; padding: 20px;">
+                                <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                                    <span style="font-size: 1.4em; margin-right: 10px;">❌</span>
+                                    <div>
+                                        <strong style="color: #dc2626; font-size: 1.2em;">INCORRECT（不正確な修正）</strong>
+                                        <div style="color: #ef4444; font-size: 0.9em; margin-top: 2px;">★☆☆☆☆ 不正解レベル</div>
+                                    </div>
+                                </div>
+                                <div style="color: #dc2626; margin-bottom: 15px; font-weight: 500;">
+                                    問題を解決していない、または有害な修正
+                                </div>
+                                <ul style="margin: 0 0 15px 0; padding-left: 20px; color: #dc2626;">
+                                    <li>問題を適切に解決していない</li>
+                                    <li>新たなバグや問題を引き起こす可能性</li>
+                                    <li>構文エラーや論理的な誤りを含む</li>
+                                    <li>要求仕様を満たしていない</li>
+                                </ul>
+                                <div style="background: #fef7f7; padding: 12px; border-radius: 6px; border-left: 3px solid #ef4444;">
+                                    <strong style="color: #dc2626; font-size: 0.9em;">📝 具体例:</strong>
+                                    <div style="color: #374151; font-size: 0.85em; margin-top: 5px;">
+                                        Ground Truth: <code>if (x != null) return x.getValue();</code><br>
+                                        AI修正: <code>return x.getValue();</code><br>
+                                        → <span style="color: #ef4444; font-weight: bold;">不正確！</span>（NullPointerExceptionのリスク）
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- SKIPPED - 評価対象外 -->
+                            <div style="background: #f8fafc; border: 2px solid #6b7280; border-radius: 12px; padding: 20px;">
+                                <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                                    <span style="font-size: 1.4em; margin-right: 10px;">⏭️</span>
+                                    <div>
+                                        <strong style="color: #4b5563; font-size: 1.2em;">SKIPPED（評価スキップ）</strong>
+                                        <div style="color: #6b7280; font-size: 0.9em; margin-top: 2px;">－ 評価対象外</div>
+                                    </div>
+                                </div>
+                                <div style="color: #4b5563; margin-bottom: 15px; font-weight: 500;">
+                                    技術的な理由で評価できなかった場合
+                                </div>
+                                <ul style="margin: 0 0 15px 0; padding-left: 20px; color: #4b5563;">
+                                    <li>interaction_log（対話ログ）が存在しない</li>
+                                    <li>APRログの構造解析に失敗</li>
+                                    <li>必要なファイル情報が不足</li>
+                                    <li>LLM評価に必要な前提条件が未満たし</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- 正解の定義を明確化 -->
+                        <div style="margin-top: 25px; padding: 20px; background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%); border-radius: 12px; border: 2px solid #10b981;">
+                            <h5 style="margin: 0 0 15px 0; color: #065f46; font-size: 1.1em; display: flex; align-items: center;">
+                                <span style="margin-right: 10px;">🏆</span>
+                                正解の定義
+                            </h5>
+                            <div style="color: #166534; line-height: 1.6;">
+                                <strong style="color: #059669;">正解 = IDENTICAL + SEMANTICALLY_EQUIVALENT</strong><br>
+                                <div style="margin-top: 10px; font-size: 0.95em;">
+                                    ✅ <strong>IDENTICAL</strong>: Ground Truthと完全一致<br>
+                                    ✅ <strong>SEMANTICALLY_EQUIVALENT</strong>: 意味的に同等（異なる実装でも機能的に同じ）<br>
+                                    ⚠️ <strong>PLAUSIBLE_BUT_DIFFERENT</strong>: 妥当だが最適解ではない（部分正解）<br>
+                                    ❌ <strong>INCORRECT</strong>: 不正確または有害<br>
+                                    ⏭️ <strong>SKIPPED</strong>: 評価不可能
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 評価プロセスの説明 -->
+                    <div style="margin-bottom: 25px;">
+                        <h4 style="color: #374151; margin: 0 0 15px 0; font-size: 1.1em;">🔄 評価プロセス</h4>
+                        <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb;">
+                            <ol style="margin: 0; padding-left: 20px; line-height: 1.6; color: #374151;">
+                                <li><strong style="color: #1f2937;">APRログ解析:</strong> <span style="color: #4b5563;">interaction_log から対話内容と修正履歴を抽出</span></li>
+                                <li><strong style="color: #1f2937;">最終修正特定:</strong> <span style="color: #4b5563;">最後に適用された修正を特定</span></li>
+                                <li><strong style="color: #1f2937;">Ground Truth比較:</strong> <span style="color: #4b5563;">データセットの正解修正との詳細比較</span></li>
+                                <li><strong style="color: #1f2937;">コンテキスト準備:</strong> <span style="color: #4b5563;">問題説明、関連ファイル、修正内容を整理</span></li>
+                                <li><strong style="color: #1f2937;">LLM評価実行:</strong> <span style="color: #4b5563;">GPTモデルによる修正内容の正確性・妥当性評価</span></li>
+                                <li><strong style="color: #1f2937;">5段階分類:</strong> <span style="color: #4b5563;">IDENTICAL/SEMANTICALLY_EQUIVALENT/PLAUSIBLE_BUT_DIFFERENT/INCORRECT/SKIPPEDに分類</span></li>
+                                <li><strong style="color: #1f2937;">統計集計:</strong> <span style="color: #4b5563;">各評価レベルの件数と割合を計算し、正確性・妥当性の詳細分析を実施</span></li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <!-- 実際の計算過程 -->
+                    {{#if stats.llmEvaluationResults.calculationDetails}}
+                    <div style="margin-bottom: 25px;">
+                        <h4 style="color: #374151; margin: 0 0 15px 0; font-size: 1.1em;">🧮 実際の計算過程</h4>
+                        <div style="background: white; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                            <div style="margin-bottom: 12px; color: #374151;">
+                                <strong style="color: #1f2937;">基準値:</strong><br>
+                                <span style="color: #4b5563;">• 全データセットエントリー数: {{stats.llmEvaluationResults.calculationDetails.totalDatasetEntries}}</span><br>
+                                <span style="color: #4b5563;">• 実際に評価実施した数: {{stats.llmEvaluationResults.calculationDetails.totalEvaluated}}</span>
+                            </div>
+                            <div style="font-family: monospace; background: #f8fafc; padding: 12px; border-radius: 4px; color: #374151;">
+                                <div style="color: #4b5563; margin-bottom: 4px;">正確率: {{stats.llmEvaluationResults.calculationDetails.calculations.correctRate}}</div>
+                                <div style="color: #4b5563; margin-bottom: 4px;">妥当率: {{stats.llmEvaluationResults.calculationDetails.calculations.plausibleRate}}</div>
+                                <div style="color: #4b5563; margin-bottom: 4px;">不正確率: {{stats.llmEvaluationResults.calculationDetails.calculations.incorrectRate}}</div>
+                                <div style="color: #4b5563;">スキップ率: {{stats.llmEvaluationResults.calculationDetails.calculations.skippedRate}}</div>
+                            </div>
+                        </div>
+                    </div>
+                    {{/if}}
+
+                    <!-- プロジェクト別内訳 -->
+                    {{#if stats.llmEvaluationResults.evaluationBreakdown}}
+                    <div style="margin-bottom: 25px;">
+                        <h4 style="color: #374151; margin: 0 0 15px 0; font-size: 1.1em;">📁 プロジェクト別評価内訳</h4>
+                        <div style="background: white; border-radius: 8px; border: 1px solid #e5e7eb; overflow: hidden;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: #f9fafb;">
+                                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb;">プロジェクト</th>
+                                        <th style="padding: 12px; text-align: center; border-bottom: 1px solid #e5e7eb; color: #10b981;">正確</th>
+                                        <th style="padding: 12px; text-align: center; border-bottom: 1px solid #e5e7eb; color: #f59e0b;">妥当</th>
+                                        <th style="padding: 12px; text-align: center; border-bottom: 1px solid #e5e7eb; color: #ef4444;">不正確</th>
+                                        <th style="padding: 12px; text-align: center; border-bottom: 1px solid #e5e7eb; color: #6b7280;">スキップ</th>
+                                        <th style="padding: 12px; text-align: center; border-bottom: 1px solid #e5e7eb;">合計</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{#each stats.llmEvaluationResults.evaluationBreakdown.byProject}}
+                                    <tr>
+                                        <td style="padding: 12px; border-bottom: 1px solid #f3f4f6; font-weight: 500; color: #1f2937;">{{@key}}</td>
+                                        <td style="padding: 12px; border-bottom: 1px solid #f3f4f6; text-align: center; color: #10b981;">{{correct}}</td>
+                                        <td style="padding: 12px; border-bottom: 1px solid #f3f4f6; text-align: center; color: #f59e0b;">{{plausible}}</td>
+                                        <td style="padding: 12px; border-bottom: 1px solid #f3f4f6; text-align: center; color: #ef4444;">{{incorrect}}</td>
+                                        <td style="padding: 12px; border-bottom: 1px solid #f3f4f6; text-align: center; color: #6b7280;">{{skipped}}</td>
+                                        <td style="padding: 12px; border-bottom: 1px solid #f3f4f6; text-align: center; font-weight: 600; color: #1f2937;">{{total}}</td>
+                                    </tr>
+                                    {{/each}}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {{/if}}
+                </div>
+            </div>
+            {{/if}}
         </div>
 
         <div class="footer">

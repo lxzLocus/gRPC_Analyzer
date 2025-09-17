@@ -92,6 +92,24 @@ export class HTMLReportController {
         const timestamp = this.getJSTTimestamp();
         const reportId = sessionId || this.generateReportId();
         
+        // デバッグ情報の追加
+        console.log('🔍 generateErrorReport - errorEntries type:', typeof errorEntries);
+        console.log('🔍 generateErrorReport - errorEntries isArray:', Array.isArray(errorEntries));
+        console.log('🔍 generateErrorReport - errorEntries length:', errorEntries?.length);
+        
+        // errorEntriesの検証
+        if (!Array.isArray(errorEntries)) {
+            const error = new Error(`Invalid errorEntries: expected array, got ${typeof errorEntries}`);
+            console.error(`❌ エラーレポート生成エラー: ${error.message}`);
+            return {
+                success: false,
+                error: error.message,
+                reportId,
+                timestamp,
+                type: 'error'
+            };
+        }
+        
         try {
             const htmlPath = await this.htmlReportService.generateErrorReport(errorEntries, timestamp);
             
@@ -223,37 +241,77 @@ export class HTMLReportController {
 
     /**
      * レポートサマリーHTML生成（/output 直下に出力）
-     * @param {Object} reportResults - レポート生成結果
+     * @param {Array} reportResults - レポート生成結果の配列
      * @returns {Promise<string>} サマリーHTMLファイルのパス
      */
     async generateReportSummary(reportResults) {
+        // sessionIdを最初の結果から取得（存在する場合）
+        const sessionId = Array.isArray(reportResults) && reportResults.length > 0 && reportResults[0].reportId 
+            ? reportResults[0].reportId 
+            : 'unknown-session';
+            
         const summaryHTML = this.buildSummaryHTML(reportResults);
         // 全体サマリーは /output 直下に出力
-        const summaryPath = path.join(this.htmlReportService.outputBaseDir, `report_summary_${reportResults.sessionId.replace(/[:.]/g, '-')}.html`);
+        const summaryPath = path.join(this.htmlReportService.outputBaseDir, `report_summary_${sessionId.replace(/[:.]/g, '-')}.html`);
         
         // /output ディレクトリが存在することを確認
         await import('fs/promises').then(fs => fs.mkdir(this.htmlReportService.outputBaseDir, { recursive: true }));
         await import('fs/promises').then(fs => fs.writeFile(summaryPath, summaryHTML, 'utf-8'));
         
         console.log(`📋 レポートサマリー生成完了: ${summaryPath}`);
-        return summaryPath;
+        return { filePath: summaryPath };
     }
 
     /**
      * サマリーHTML構築
-     * @param {Object} reportResults - レポート生成結果
+     * @param {Array} reportResults - レポート生成結果の配列
      * @returns {string} サマリーHTML
      */
     buildSummaryHTML(reportResults) {
-        const successfulReports = reportResults.reports.filter(r => r.success);
-        const failedReports = reportResults.reports.filter(r => !r.success);
+        // reportResultsが配列でない場合や未定義の場合の安全な処理
+        if (!Array.isArray(reportResults)) {
+            console.warn('⚠️ buildSummaryHTML - reportResults is not an array:', typeof reportResults);
+            const emptyResults = [];
+            return this.generateSummaryTemplate(emptyResults, emptyResults, 'unknown-session');
+        }
+        
+        const successfulReports = reportResults.filter(r => r && r.success === true);
+        const failedReports = reportResults.filter(r => r && r.success === false);
+        
+        // sessionIdを最初の結果から取得（存在する場合）
+        const sessionId = reportResults.length > 0 && reportResults[0].reportId 
+            ? reportResults[0].reportId 
+            : 'unknown-session';
+        
+        return this.generateSummaryTemplate(successfulReports, failedReports, sessionId);
+    }
+
+    /**
+     * サマリーHTMLテンプレート生成
+     * @param {Array} successfulReports - 成功したレポート
+     * @param {Array} failedReports - 失敗したレポート
+     * @param {string} sessionId - セッションID
+     * @returns {string} サマリーHTML
+     */
+    generateSummaryTemplate(successfulReports, failedReports, sessionId) {
+        const totalReports = successfulReports.length + failedReports.length;
+        
+        // ラベル変換用の関数
+        const getTypeLabel = (type) => {
+            const labels = {
+                'statistics': '📊 統計レポート',
+                'error': '❌ エラーレポート',
+                'entry-detail': '📝 エントリー詳細'
+            };
+            return labels[type] || type;
+        };
         
         return `<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>レポートサマリー - ${reportResults.sessionId}</title>
+    <title>レポートサマリー - ${sessionId}</title>
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; background: #f5f5f5; }
         .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -277,15 +335,15 @@ export class HTMLReportController {
     <div class="container">
         <div class="header">
             <h1 class="title">📋 レポートサマリー</h1>
-            <div class="session-id">セッション: ${reportResults.sessionId}</div>
+            <div class="session-id">セッション: ${sessionId}</div>
         </div>
 
         <div class="section">
-            <h2 class="section-title">📊 生成されたレポート (${successfulReports.length}/${reportResults.reports.length})</h2>
+            <h2 class="section-title">📊 生成されたレポート (${successfulReports.length}/${totalReports})</h2>
             <div class="report-grid">
                 ${successfulReports.map(report => `
                 <div class="report-card ${report.type === 'statistics' ? 'stats' : report.type === 'error' ? 'error' : 'detail'}">
-                    <div class="report-type">${this.getReportTypeLabel(report.type)}</div>
+                    <div class="report-type">${getTypeLabel(report.type)}</div>
                     <div>${report.entryId || '全体統計'}</div>
                     <a href="file://${report.htmlPath}" class="report-link" target="_blank">📄 レポートを開く</a>
                 </div>
@@ -299,7 +357,7 @@ export class HTMLReportController {
             <div class="report-grid">
                 ${failedReports.map(report => `
                 <div class="report-card error">
-                    <div class="report-type">${this.getReportTypeLabel(report.type)}</div>
+                    <div class="report-type">${getTypeLabel(report.type)}</div>
                     <div>エラー: ${report.error}</div>
                 </div>
                 `).join('')}
@@ -308,7 +366,7 @@ export class HTMLReportController {
         ` : ''}
 
         <div class="timestamp">
-            生成日時: ${reportResults.timestamp}
+            生成日時: ${new Date().toLocaleString('ja-JP')}
         </div>
     </div>
 </body>
@@ -335,9 +393,25 @@ export class HTMLReportController {
      * @returns {number} エラータイプ数
      */
     getErrorTypeCount(errorEntries) {
+        // デバッグ情報の追加
+        console.log('🔍 getErrorTypeCount - errorEntries type:', typeof errorEntries);
+        console.log('🔍 getErrorTypeCount - errorEntries isArray:', Array.isArray(errorEntries));
+        console.log('🔍 getErrorTypeCount - errorEntries length:', errorEntries?.length);
+        console.log('🔍 getErrorTypeCount - errorEntries sample:', errorEntries?.[0]);
+        
+        // errorEntriesが配列でない場合や未定義の場合の安全な処理
+        if (!Array.isArray(errorEntries)) {
+            console.warn('⚠️ getErrorTypeCount - errorEntries is not an array, returning 0');
+            return 0;
+        }
+        
         const types = new Set();
         errorEntries.forEach(entry => {
-            types.add(this.htmlReportService.categorizeError(entry.error));
+            if (entry && entry.error) {
+                types.add(this.htmlReportService.categorizeError(entry.error));
+            } else {
+                console.warn('⚠️ getErrorTypeCount - Invalid error entry:', entry);
+            }
         });
         return types.size;
     }
@@ -368,6 +442,43 @@ export class HTMLReportController {
         
         const fs = await import('fs/promises');
         await fs.writeFile(indexPath, JSON.stringify(index, null, 2), 'utf-8');
+    }
+
+    /**
+     * 詳細分析レポートの生成と出力
+     * @param {Object} stats - ProcessingStats オブジェクト
+     * @param {string} sessionId - セッションID（オプション）
+     * @returns {Promise<Object>} 生成されたレポートの情報
+     */
+    async generateDetailedAnalysisReport(stats, sessionId = null) {
+        const timestamp = this.getJSTTimestamp();
+        const reportId = sessionId || this.generateReportId();
+        
+        try {
+            const htmlPath = await this.htmlReportService.generateDetailedAnalysisReport(stats, timestamp);
+            
+            // インデックスファイルの更新
+            await this.updateReportIndex({
+                type: 'detailed_analysis',
+                id: reportId,
+                timestamp: timestamp,
+                path: htmlPath,
+                description: `詳細分析レポート (${stats.matchedPairs.length}件のマッチングペア)`
+            });
+            
+            return {
+                type: 'detailed_analysis',
+                id: reportId,
+                timestamp: timestamp,
+                path: htmlPath,
+                success: true,
+                description: '詳細分析レポート'
+            };
+            
+        } catch (error) {
+            console.error(`❌ 詳細分析レポート生成エラー: ${error.message}`);
+            throw error;
+        }
     }
 
     /**

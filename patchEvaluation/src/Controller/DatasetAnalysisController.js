@@ -1,7 +1,7 @@
 import path from 'path';
 import { DatasetRepository } from '../Repository/DatasetRepository.js';
 import { APRLogService } from '../Service/APRLogService.js';
-import { LLMEvaluationService } from '../Service/LLMEvaluationService.js';
+import LLMEvaluationService from '../Service/LLMEvaluationService.js';
 import { ProcessingStats } from '../Model/ProcessingStats.js';
 import { ConsoleView } from '../View/ConsoleView.js';
 import { StatisticsReportView } from '../View/StatisticsReportView.js';
@@ -65,13 +65,15 @@ export class DatasetAnalysisController {
      * @param {boolean} options.generateHTMLReport - HTMLレポート生成の有無 (default: true)
      * @param {boolean} options.generateErrorReport - エラーレポート生成の有無 (default: true)
      * @param {boolean} options.generateDetailReports - 詳細レポート生成の有無 (default: false)
+     * @param {boolean} options.generateDetailedAnalysis - 詳細分析レポート生成の有無 (default: false)
      * @returns {Promise<Object>} 解析結果の統計情報
      */
     async executeAnalysis(datasetDir, aprOutputPath, options = {}) {
         const {
             generateHTMLReport = true,
             generateErrorReport = true,
-            generateDetailReports = false
+            generateDetailReports = false,
+            generateDetailedAnalysis = false
         } = options;
         
         this.consoleView.showAnalysisStart(datasetDir, aprOutputPath);
@@ -90,7 +92,7 @@ export class DatasetAnalysisController {
             
             // HTMLレポート生成
             if (generateHTMLReport) {
-                const htmlReportResult = await this.generateHTMLReports(generateErrorReport, generateDetailReports);
+                const htmlReportResult = await this.generateHTMLReports(generateErrorReport, generateDetailReports, generateDetailedAnalysis);
                 this.stats.htmlReportResult = htmlReportResult;
             }
             
@@ -384,24 +386,35 @@ export class DatasetAnalysisController {
         this.consoleView.showGroundTruthDiffStart(aprDiffFiles.length);
         
         try {
-            // 新しい統合機能を使用
-            const result = await this.datasetRepository.getChangedFilesWithDiff(
+            // APRで修正されたファイルのみを対象にするため、
+            // 指定されたファイルリストのdiffを生成
+            if (!aprDiffFiles || aprDiffFiles.length === 0) {
+                console.log('⚠️ APR差分ファイルリストが空のため、Ground Truth Diffを生成できません');
+                return null;
+            }
+
+            // オリジナルの generateGroundTruthDiff を直接使用
+            const { generateGroundTruthDiff } = await import('../GenerateFIleChanged.js');
+            const groundTruthDiff = await generateGroundTruthDiff(
                 premergePath, 
                 mergePath, 
-                null // 全ファイル対象
+                aprDiffFiles
             );
             
-            if (result.groundTruthDiff) {
-                const diffLines = result.groundTruthDiff.split('\n').length;
+            if (groundTruthDiff && groundTruthDiff.trim()) {
+                const diffLines = groundTruthDiff.split('\n').length;
                 this.consoleView.showGroundTruthDiffSuccess(diffLines);
-                this.consoleView.showGroundTruthDiffInfo(result.changedFiles.length, result.changedFiles);
+                this.consoleView.showGroundTruthDiffInfo(aprDiffFiles.length, aprDiffFiles);
+                console.log(`✅ Ground Truth Diff生成成功: ${diffLines}行, ${aprDiffFiles.length}ファイル`);
             } else {
                 this.consoleView.showGroundTruthDiffFailure();
+                console.log('⚠️ Ground Truth Diffが空または生成失敗');
             }
             
-            return result.groundTruthDiff;
+            return groundTruthDiff;
         } catch (error) {
             this.consoleView.showGroundTruthDiffError(error.message);
+            console.error('❌ Ground Truth Diff生成エラー:', error);
             return null;
         }
     }
@@ -695,7 +708,7 @@ export class DatasetAnalysisController {
      * @param {boolean} generateDetailReports - 詳細レポート生成の有無
      * @returns {Promise<Object>} レポート生成結果
      */
-    async generateHTMLReports(generateErrorReport = true, generateDetailReports = false) {
+    async generateHTMLReports(generateErrorReport = true, generateDetailReports = false, generateDetailedAnalysis = false) {
         console.log('\n🚀 HTMLレポート生成を開始...');
         
         try {
@@ -721,6 +734,13 @@ export class DatasetAnalysisController {
                     const detailReport = await this.htmlReportController.generateEntryDetailReport(pair);
                     reportResults.push(detailReport);
                 }
+            }
+            
+            // 詳細分析レポート生成
+            if (generateDetailedAnalysis && this.stats.matchedPairs.length > 0) {
+                console.log('🔬 詳細分析レポートを生成中...');
+                const detailedAnalysisReport = await this.htmlReportController.generateDetailedAnalysisReport(this.stats);
+                reportResults.push(detailedAnalysisReport);
             }
             
             // レポートサマリー生成

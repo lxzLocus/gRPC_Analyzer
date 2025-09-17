@@ -241,10 +241,28 @@ export class ProcessingStats {
     calculateDetailedStats() {
         if (this.matchedPairs.length === 0) return null;
 
-        const totalTurns = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprLogData?.turns || 0), 0);
+        const totalTurns = this.matchedPairs.reduce((sum, pair) => {
+            const turns = pair.aprLogData?.turns;
+            if (Array.isArray(turns)) {
+                return sum + turns.length;
+            }
+            return sum + (typeof turns === 'number' ? turns : 0);
+        }, 0);
         const totalTokens = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprLogData?.totalTokens || 0), 0);
-        const totalMods = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprLogData?.modifications || 0), 0);
-        const totalAffectedFiles = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprLogData?.affectedFiles || 0), 0);
+        const totalMods = this.matchedPairs.reduce((sum, pair) => {
+            const mods = pair.aprLogData?.modifications;
+            if (Array.isArray(mods)) {
+                return sum + mods.length;
+            }
+            return sum + (typeof mods === 'number' ? mods : 0);
+        }, 0);
+        const totalAffectedFiles = this.matchedPairs.reduce((sum, pair) => {
+            const affected = pair.aprLogData?.affectedFiles;
+            if (Array.isArray(affected)) {
+                return sum + affected.length;
+            }
+            return sum + (typeof affected === 'number' ? affected : 0);
+        }, 0);
         const totalChangedFiles = this.matchedPairs.reduce((sum, pair) => sum + (pair.changedFiles ? pair.changedFiles.length : 0), 0);
         const totalAprDiffFiles = this.matchedPairs.reduce((sum, pair) => sum + (pair.aprDiffFiles ? pair.aprDiffFiles.length : 0), 0);
 

@@ -18,7 +18,11 @@ export function createLLMRequest(messages, options = {}) {
         })),
         maxTokens: options.maxTokens || undefined,
         temperature: options.temperature || undefined,
-        timeout: options.timeout || undefined
+        timeout: options.timeout || undefined,
+        // Gemini思考制御パラメータ
+        reasoningEffort: options.reasoningEffort || undefined,
+        thinkingBudget: options.thinkingBudget || undefined,
+        includeThoughts: options.includeThoughts || undefined
     };
 }
 

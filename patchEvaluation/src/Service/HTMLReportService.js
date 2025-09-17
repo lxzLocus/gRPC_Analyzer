@@ -97,6 +97,28 @@ export class HTMLReportService {
             return Array.isArray(array) ? array.length : 0;
         });
 
+        // 数値フォーマットヘルパー（カンマ区切り）
+        Handlebars.registerHelper('formatNumber', function(number) {
+            if (typeof number === 'number' && !isNaN(number)) {
+                return number.toLocaleString();
+            }
+            return number || 0;
+        });
+
+        // 配列フィルタリングヘルパー
+        Handlebars.registerHelper('filter', function(array, property, value) {
+            if (!Array.isArray(array)) return [];
+            return array.filter(item => item[property] === value);
+        });
+
+        // パーセンテージヘルパー
+        Handlebars.registerHelper('percentage', function(value, total) {
+            if (typeof value === 'number' && typeof total === 'number' && total > 0) {
+                return ((value / total) * 100).toFixed(1) + '%';
+            }
+            return '0%';
+        });
+
         // デバッグ用ヘルパー
         Handlebars.registerHelper('debug', function(value) {
             console.log('Handlebars Debug:', value);
@@ -172,10 +194,24 @@ export class HTMLReportService {
      * @returns {Promise<string>} 生成されたHTMLファイルのパス
      */
     async generateStatisticsReport(stats, timestamp = this.getJSTTimestamp()) {
+        const statsData = this.extractStatsData(stats);
+        
+        // 不足している計算値を追加
+        const totalEntries = stats.totalDatasetEntries || 1; // 0除算回避
+        const unmatchedRate = ((stats.unmatchedEntries.length / totalEntries) * 100).toFixed(1);
+        const errorRate = ((stats.errorEntries.length / totalEntries) * 100).toFixed(1);
+        
+        // JSONファイルパス
+        const jsonFileName = `statistics_data_${timestamp.replace(/[:.]/g, '-')}.json`;
+        const jsonDataPath = `./${jsonFileName}`; // 相対パス
+        
         const reportData = {
             timestamp,
-            stats: this.extractStatsData(stats),
+            stats: statsData,
             averageStats: this.calculateAverageStats(stats), // パフォーマンス統計を追加
+            unmatchedRate, // テンプレートで期待される値
+            errorRate, // テンプレートで期待される値
+            jsonDataPath, // JSONデータへのリンク
             successfulMatches: stats.matchedPairs.slice(0, 10), // 最初の10件を表示
             errorEntries: stats.errorEntries.slice(0, 20), // 最初の20件を表示
             unmatchedEntries: stats.unmatchedEntries.slice(0, 15) // 最初の15件を表示
@@ -191,12 +227,50 @@ export class HTMLReportService {
         await fs.writeFile(filePath, htmlContent, 'utf-8');
         
         // JSON版も同時に出力（/output 直下）
-        const jsonFileName = `statistics_data_${timestamp.replace(/[:.]/g, '-')}.json`;
         const jsonFilePath = path.join(this.outputBaseDir, jsonFileName);
         await fs.writeFile(jsonFilePath, JSON.stringify(reportData, null, 2), 'utf-8');
         
         console.log(`📊 HTMLレポート生成完了: ${filePath}`);
         console.log(`📊 JSONデータ出力完了: ${jsonFilePath}`);
+        
+        return filePath;
+    }
+
+    /**
+     * 詳細分析レポート生成（APRシステム分析用）
+     * @param {Object} stats - ProcessingStats オブジェクト
+     * @param {string} timestamp - レポート生成時刻
+     * @returns {Promise<string>} 生成されたHTMLファイルのパス
+     */
+    async generateDetailedAnalysisReport(stats, timestamp = this.getJSTTimestamp()) {
+        const detailedData = this.extractDetailedEvaluationData(stats);
+        
+        const reportData = {
+            timestamp,
+            ...detailedData
+        };
+
+        const fileName = `detailed_analysis_report_${timestamp.replace(/[:]/g, '').replace(/[T]/g, '_').replace(/[.]/g, '_').substring(0, 15)}.html`;
+        const filePath = path.join(this.outputBaseDir, fileName);
+
+        // HTMLレポート生成
+        try {
+            const html = await this.renderDetailedAnalysisTemplate(reportData);
+            await fs.writeFile(filePath, html, 'utf-8');
+        } catch (error) {
+            console.error('詳細分析レポート生成エラー:', error);
+            // フォールバック
+            const html = this.getDefaultDetailedAnalysisTemplate(reportData);
+            await fs.writeFile(filePath, html, 'utf-8');
+        }
+
+        // JSONデータも出力
+        const jsonFileName = fileName.replace('.html', '.json');
+        const jsonFilePath = path.join(this.outputBaseDir, jsonFileName);
+        await fs.writeFile(jsonFilePath, JSON.stringify(reportData, null, 2), 'utf-8');
+        
+        console.log(`🔬 詳細分析レポート生成完了: ${filePath}`);
+        console.log(`📊 詳細分析JSONデータ出力完了: ${jsonFilePath}`);
         
         return filePath;
     }    /**
@@ -244,6 +318,14 @@ export class HTMLReportService {
      * @returns {Promise<string>} 生成されたHTMLファイルのパス
      */
     async generateErrorReport(errorEntries, timestamp = this.getJSTTimestamp()) {
+        // errorEntriesの検証
+        if (!Array.isArray(errorEntries)) {
+            console.warn('⚠️ HTMLReportService.generateErrorReport - errorEntries is not an array:', typeof errorEntries);
+            throw new Error(`Invalid errorEntries: expected array, got ${typeof errorEntries}`);
+        }
+        
+        console.log('🔍 HTMLReportService.generateErrorReport - errorEntries length:', errorEntries.length);
+        
         const errorAnalysis = this.analyzeErrors(errorEntries);
         
         const reportData = {
@@ -310,7 +392,10 @@ export class HTMLReportService {
             errorEntriesCount: stats.errorEntries.length,
             
             // LLMメタデータ統計
-            llmStats: this.extractLLMStats(stats)
+            llmStats: this.extractLLMStats(stats),
+            
+            // LLM評価結果統計
+            llmEvaluationResults: this.extractLLMEvaluationResults(stats)
         };
     }
 
@@ -433,21 +518,32 @@ export class HTMLReportService {
 
         const totals = stats.matchedPairs.reduce((acc, pair) => {
             const aprLogData = pair.aprLogData || {};
+            
+            // 実際のデータ構造に基づいた計算
+            const turns = Array.isArray(aprLogData.turns) ? aprLogData.turns.length : 0;
+            const totalTokens = aprLogData.totalTokens || 0;
+            
+            // finalModificationから修正数を取得
+            const modifications = pair.finalModification ? 1 : 0;
+            
+            // changedFilesから影響ファイル数を取得
+            const affectedFiles = Array.isArray(pair.changedFiles) ? pair.changedFiles.length : 0;
+            
             return {
-                turns: acc.turns + (aprLogData.turns || 0),
-                tokens: acc.tokens + (aprLogData.totalTokens || 0),
-                modifications: acc.modifications + (aprLogData.modifications || 0),
-                affectedFiles: acc.affectedFiles + (aprLogData.affectedFiles || 0)
+                turns: acc.turns + turns,
+                tokens: acc.tokens + totalTokens,
+                modifications: acc.modifications + modifications,
+                affectedFiles: acc.affectedFiles + affectedFiles
             };
         }, { turns: 0, tokens: 0, modifications: 0, affectedFiles: 0 });
 
         const count = stats.matchedPairs.length;
         
         return {
-            turns: Math.round(totals.turns / count * 10) / 10, // 小数点第1位まで
-            tokens: Math.round(totals.tokens / count),
-            modifications: Math.round(totals.modifications / count * 10) / 10,
-            affectedFiles: Math.round(totals.affectedFiles / count * 10) / 10
+            turns: count > 0 ? Math.round(totals.turns / count * 10) / 10 : 0, // 小数点第1位まで
+            tokens: count > 0 ? Math.round(totals.tokens / count) : 0,
+            modifications: count > 0 ? Math.round(totals.modifications / count * 10) / 10 : 0,
+            affectedFiles: count > 0 ? Math.round(totals.affectedFiles / count * 10) / 10 : 0
         };
     }
 
@@ -460,7 +556,19 @@ export class HTMLReportService {
         const byType = {};
         const byFrequency = {};
         
+        // errorEntriesの検証
+        if (!Array.isArray(errorEntries)) {
+            console.warn('⚠️ analyzeErrors - errorEntries is not an array:', typeof errorEntries);
+            return { byType, byFrequency: [] };
+        }
+        
         errorEntries.forEach(entry => {
+            // entryとentry.errorの検証
+            if (!entry || typeof entry.error !== 'string') {
+                console.warn('⚠️ analyzeErrors - Invalid entry or error:', entry);
+                return;
+            }
+            
             // エラータイプ別集計
             const errorType = this.categorizeError(entry.error);
             byType[errorType] = (byType[errorType] || 0) + 1;
@@ -484,6 +592,12 @@ export class HTMLReportService {
      * @returns {string} エラーカテゴリ
      */
     categorizeError(errorMessage) {
+        // errorMessageの検証
+        if (typeof errorMessage !== 'string') {
+            console.warn('⚠️ categorizeError - errorMessage is not a string:', typeof errorMessage, errorMessage);
+            return 'その他のエラー';
+        }
+        
         const message = errorMessage.toLowerCase();
         
         if (message.includes('json') || message.includes('parse')) {
@@ -498,6 +612,868 @@ export class HTMLReportService {
             return 'アクセス権限エラー';
         } else {
             return 'その他のエラー';
+        }
+    }
+
+    /**
+     * LLM評価結果統計の抽出
+     * @param {Object} stats - ProcessingStats オブジェクト
+     * @returns {Object} LLM評価結果統計
+     */
+    extractLLMEvaluationResults(stats) {
+        const results = {
+            // 正確性評価（semantic_equivalence_level ベース）
+            correctness: {
+                identicalCount: 0,
+                semanticallyEquivalentCount: 0,
+                correctCount: 0,  // 後方互換性のため維持
+                plausibleButDifferentCount: 0,
+                incorrectCount: 0,
+                unknownCount: 0,
+                totalEvaluated: 0
+            },
+            // 妥当性評価（is_plausible ベース）
+            plausibility: {
+                plausibleCount: 0,
+                notPlausibleCount: 0,
+                totalEvaluated: 0,
+                // 詳細レベル（将来拡張用）
+                syntacticallyCorrectCount: 0,      // 構文的に正しい
+                logicallyValidCount: 0,           // 論理的に妥当
+                dependencyResolvedCount: 0,       // 依存関係が解決済み
+                completelyPlausibleCount: 0       // 完全に妥当
+            },
+            // 統合統計（後方互換性）
+            identicalCount: 0,
+            semanticallyEquivalentCount: 0,
+            correctCount: 0,  // 後方互換性のため維持
+            plausibleCount: 0,
+            incorrectCount: 0,
+            unknownCount: 0,
+            skippedCount: 0,
+            totalEvaluated: 0,
+            
+            // スキップ統計の詳細
+            skipDetails: {
+                totalSkipped: 0,
+                reasonBreakdown: {},
+                detailedBreakdown: []
+            }
+        };
+
+        // matchedPairsから評価結果を集計
+        stats.matchedPairs.forEach(pair => {
+            if (pair.evaluationSkipReason) {
+                results.skippedCount++;
+                results.skipDetails.totalSkipped++;
+                
+                // スキップ理由の詳細情報を収集
+                const skipReason = pair.evaluationSkipReason;
+                if (skipReason) {
+                    // 理由別の統計
+                    if (!results.skipDetails.reasonBreakdown[skipReason]) {
+                        results.skipDetails.reasonBreakdown[skipReason] = 0;
+                    }
+                    results.skipDetails.reasonBreakdown[skipReason]++;
+                    
+                    // 詳細な統計情報
+                    results.skipDetails.detailedBreakdown.push({
+                        reason: skipReason,
+                        datasetEntry: pair.datasetEntry || `${pair.project || 'Unknown'}/${pair.category || 'Unknown'}/${pair.pullRequest || 'Unknown'}`,
+                        project: pair.project || this.extractProjectName(pair.datasetEntry),
+                        metadata: pair.finalModification?.skipReason?.metadata || null
+                    });
+                }
+            } else if (pair.finalModification && pair.finalModification.llmEvaluation && !pair.finalModification.llmEvaluation.error) {
+                const evaluation = pair.finalModification.llmEvaluation;
+                
+                // 正確性評価の統計（semantic_equivalence_level ベース）
+                if (evaluation.correctness_evaluation) {
+                    results.correctness.totalEvaluated++;
+                    const level = evaluation.correctness_evaluation.semantic_equivalence_level;
+                    
+                    switch (level) {
+                        case 'IDENTICAL':
+                            results.correctness.identicalCount++;
+                            break;
+                        case 'SEMANTICALLY_EQUIVALENT':
+                            results.correctness.semanticallyEquivalentCount++;
+                            break;
+                        case 'PLAUSIBLE_BUT_DIFFERENT':
+                            results.correctness.plausibleButDifferentCount++;
+                            break;
+                        case 'INCORRECT':
+                            results.correctness.incorrectCount++;
+                            break;
+                        case 'CORRECT':  // 後方互換性
+                            results.correctness.correctCount++;
+                            break;
+                        default:
+                            console.warn(`Unknown correctness level: ${level}`);
+                            results.correctness.unknownCount++;
+                    }
+                }
+                
+                // 妥当性評価の統計（is_plausible ベース）
+                if (evaluation.plausibility_evaluation) {
+                    results.plausibility.totalEvaluated++;
+                    if (evaluation.plausibility_evaluation.is_plausible) {
+                        results.plausibility.plausibleCount++;
+                        
+                        // 妥当性の詳細分析（reasoning基づく）
+                        const reasoning = evaluation.plausibility_evaluation.reasoning || '';
+                        if (reasoning.toLowerCase().includes('syntactically correct') || 
+                            reasoning.toLowerCase().includes('syntactic')) {
+                            results.plausibility.syntacticallyCorrectCount++;
+                        }
+                        if (reasoning.toLowerCase().includes('logical') || 
+                            reasoning.toLowerCase().includes('logically sound')) {
+                            results.plausibility.logicallyValidCount++;
+                        }
+                        if (reasoning.toLowerCase().includes('dependency') || 
+                            reasoning.toLowerCase().includes('dependencies')) {
+                            results.plausibility.dependencyResolvedCount++;
+                        }
+                        if (reasoning.toLowerCase().includes('all') && 
+                            reasoning.toLowerCase().includes('check')) {
+                            results.plausibility.completelyPlausibleCount++;
+                        }
+                    } else {
+                        results.plausibility.notPlausibleCount++;
+                    }
+                }
+                
+                // 統合統計（後方互換性のため）
+                results.totalEvaluated++;
+                switch (evaluation.overall_assessment) {
+                    case 'IDENTICAL':
+                        results.identicalCount++;
+                        break;
+                    case 'SEMANTICALLY_EQUIVALENT':
+                        results.semanticallyEquivalentCount++;
+                        break;
+                    case 'PLAUSIBLE_BUT_DIFFERENT':
+                        results.plausibleCount++;
+                        break;
+                    case 'INCORRECT':
+                        results.incorrectCount++;
+                        break;
+                    case 'CORRECT':  // 後方互換性
+                        results.correctCount++;
+                        break;
+                    default:
+                        console.warn(`Unknown evaluation level: ${evaluation.overall_assessment}`);
+                        results.unknownCount++;
+                }
+            } else {
+                results.skippedCount++;
+            }
+        });
+
+        // 割合を計算
+        const total = stats.totalDatasetEntries || 1;
+        const totalEval = results.totalEvaluated || 1;
+        const totalCorrectnessEval = results.correctness.totalEvaluated || 1;
+        const totalPlausibilityEval = results.plausibility.totalEvaluated || 1;
+        
+        // 正確性評価の割合計算
+        results.correctness.identicalRate = ((results.correctness.identicalCount / totalCorrectnessEval) * 100).toFixed(1);
+        results.correctness.semanticallyEquivalentRate = ((results.correctness.semanticallyEquivalentCount / totalCorrectnessEval) * 100).toFixed(1);
+        results.correctness.correctRate = ((results.correctness.correctCount / totalCorrectnessEval) * 100).toFixed(1);
+        results.correctness.plausibleButDifferentRate = ((results.correctness.plausibleButDifferentCount / totalCorrectnessEval) * 100).toFixed(1);
+        results.correctness.incorrectRate = ((results.correctness.incorrectCount / totalCorrectnessEval) * 100).toFixed(1);
+        results.correctness.unknownRate = ((results.correctness.unknownCount / totalCorrectnessEval) * 100).toFixed(1);
+        
+        // 妥当性評価の割合計算
+        results.plausibility.plausibleRate = ((results.plausibility.plausibleCount / totalPlausibilityEval) * 100).toFixed(1);
+        results.plausibility.notPlausibleRate = ((results.plausibility.notPlausibleCount / totalPlausibilityEval) * 100).toFixed(1);
+        
+        // 妥当性詳細レベルの割合計算
+        results.plausibility.syntacticallyCorrectRate = ((results.plausibility.syntacticallyCorrectCount / totalPlausibilityEval) * 100).toFixed(1);
+        results.plausibility.logicallyValidRate = ((results.plausibility.logicallyValidCount / totalPlausibilityEval) * 100).toFixed(1);
+        results.plausibility.dependencyResolvedRate = ((results.plausibility.dependencyResolvedCount / totalPlausibilityEval) * 100).toFixed(1);
+        results.plausibility.completelyPlausibleRate = ((results.plausibility.completelyPlausibleCount / totalPlausibilityEval) * 100).toFixed(1);
+        
+        // 統合統計の割合計算（後方互換性）
+        results.identicalRate = ((results.identicalCount / totalEval) * 100).toFixed(1);
+        results.semanticallyEquivalentRate = ((results.semanticallyEquivalentCount / totalEval) * 100).toFixed(1);
+        results.correctRate = ((results.correctCount / totalEval) * 100).toFixed(1);  // 後方互換性
+        results.plausibleRate = ((results.plausibleCount / totalEval) * 100).toFixed(1);
+        results.incorrectRate = ((results.incorrectCount / totalEval) * 100).toFixed(1);
+        results.unknownRate = ((results.unknownCount / totalEval) * 100).toFixed(1);
+        results.skippedRate = ((results.skippedCount / total) * 100).toFixed(1);
+
+        // 統合された正解率（IDENTICAL + SEMANTICALLY_EQUIVALENT + CORRECT）
+        const totalCorrect = results.identicalCount + results.semanticallyEquivalentCount + results.correctCount;
+        results.totalCorrectCount = totalCorrect;
+        results.totalCorrectRate = ((totalCorrect / totalEval) * 100).toFixed(1);
+
+        // スキップ統計の詳細計算
+        if (results.skipDetails.totalSkipped > 0) {
+            // 理由別の割合計算
+            Object.keys(results.skipDetails.reasonBreakdown).forEach(reason => {
+                const count = results.skipDetails.reasonBreakdown[reason];
+                results.skipDetails.reasonBreakdown[reason] = {
+                    count: count,
+                    percentage: ((count / results.skipDetails.totalSkipped) * 100).toFixed(1),
+                    description: this.getSkipReasonDescription(reason)
+                };
+            });
+            
+            // 理由をカウント順でソート
+            results.skipDetails.sortedReasons = Object.entries(results.skipDetails.reasonBreakdown)
+                .map(([reason, data]) => ({ reason, ...data }))
+                .sort((a, b) => b.count - a.count);
+        }
+
+        // 計算過程の詳細情報を追加
+        results.calculationDetails = {
+            totalDatasetEntries: total,
+            totalEvaluated: totalEval,
+            totalCorrectnessEvaluated: totalCorrectnessEval,
+            totalPlausibilityEvaluated: totalPlausibilityEval,
+            calculations: {
+                // 統合統計（後方互換性）
+                identicalRate: `(${results.identicalCount} ÷ ${totalEval}) × 100 = ${results.identicalRate}%`,
+                semanticallyEquivalentRate: `(${results.semanticallyEquivalentCount} ÷ ${totalEval}) × 100 = ${results.semanticallyEquivalentRate}%`,
+                correctRate: `(${results.correctCount} ÷ ${totalEval}) × 100 = ${results.correctRate}%`,
+                plausibleRate: `(${results.plausibleCount} ÷ ${totalEval}) × 100 = ${results.plausibleRate}%`,
+                incorrectRate: `(${results.incorrectCount} ÷ ${totalEval}) × 100 = ${results.incorrectRate}%`,
+                unknownRate: `(${results.unknownCount} ÷ ${totalEval}) × 100 = ${results.unknownRate}%`,
+                skippedRate: `(${results.skippedCount} ÷ ${total}) × 100 = ${results.skippedRate}%`,
+                totalCorrectRate: `(${totalCorrect} ÷ ${totalEval}) × 100 = ${results.totalCorrectRate}%`,
+                
+                // 正確性評価専用
+                correctness: {
+                    identicalRate: `(${results.correctness.identicalCount} ÷ ${totalCorrectnessEval}) × 100 = ${results.correctness.identicalRate}%`,
+                    semanticallyEquivalentRate: `(${results.correctness.semanticallyEquivalentCount} ÷ ${totalCorrectnessEval}) × 100 = ${results.correctness.semanticallyEquivalentRate}%`,
+                    plausibleButDifferentRate: `(${results.correctness.plausibleButDifferentCount} ÷ ${totalCorrectnessEval}) × 100 = ${results.correctness.plausibleButDifferentRate}%`,
+                    incorrectRate: `(${results.correctness.incorrectCount} ÷ ${totalCorrectnessEval}) × 100 = ${results.correctness.incorrectRate}%`
+                },
+                
+                // 妥当性評価専用
+                plausibility: {
+                    plausibleRate: `(${results.plausibility.plausibleCount} ÷ ${totalPlausibilityEval}) × 100 = ${results.plausibility.plausibleRate}%`,
+                    notPlausibleRate: `(${results.plausibility.notPlausibleCount} ÷ ${totalPlausibilityEval}) × 100 = ${results.plausibility.notPlausibleRate}%`
+                }
+            }
+        };
+
+        // 評価対象エントリーの詳細分析
+        results.evaluationBreakdown = this.analyzeEvaluationBreakdown(stats);
+
+        console.log('🔍 LLM評価結果統計:', results);
+        return results;
+    }
+
+    /**
+     * 詳細評価データの抽出（APRシステムの分析用）
+     * @param {Object} stats - ProcessingStats オブジェクト
+     * @returns {Object} 詳細評価データ
+     */
+    extractDetailedEvaluationData(stats) {
+        console.log('🔍 詳細評価データの抽出開始');
+        
+        if (!stats.matchedPairs || stats.matchedPairs.length === 0) {
+            console.log('⚠️ matchedPairsが空またはundefinedです');
+            return {
+                correctnessLevels: {
+                    identical: [],
+                    semanticallyEquivalent: [],
+                    plausibleButDifferent: [],
+                    incorrect: [],
+                    skipped: []
+                },
+                plausibilityLevels: {
+                    plausible: [],
+                    notPlausible: [],
+                    skipped: []
+                },
+                summary: {
+                    totalProcessed: 0,
+                    avgModifiedLines: 0,
+                    avgModifiedFiles: 0,
+                    mostCommonProjects: [],
+                    modificationPatterns: {}
+                }
+            };
+        }
+        
+        const detailedData = {
+            // 正確性レベル別の詳細データ
+            correctnessLevels: {
+                identical: [],
+                semanticallyEquivalent: [],
+                plausibleButDifferent: [],
+                incorrect: [],
+                skipped: []
+            },
+            // 妥当性レベル別の詳細データ
+            plausibilityLevels: {
+                plausible: [],
+                notPlausible: [],
+                skipped: []
+            },
+            // 統計サマリー
+            summary: {
+                totalProcessed: 0,
+                avgModifiedLines: 0,
+                avgModifiedFiles: 0,
+                mostCommonProjects: [],
+                modificationPatterns: {}
+            }
+        };
+
+        // matchedPairsから詳細データを抽出
+        console.log(`📋 ${stats.matchedPairs.length}件のmatchedPairsを処理中...`);
+        stats.matchedPairs.forEach((pair, index) => {
+            if (pair.evaluationSkipReason) {
+                // スキップされたケース
+                const skipData = this.extractPairDetails(pair, 'SKIPPED');
+                detailedData.correctnessLevels.skipped.push(skipData);
+                detailedData.plausibilityLevels.skipped.push(skipData);
+                return;
+            }
+
+            if (!pair.finalModification || !pair.finalModification.llmEvaluation || pair.finalModification.llmEvaluation.error) {
+                // 評価エラーケース
+                const errorData = this.extractPairDetails(pair, 'ERROR');
+                detailedData.correctnessLevels.skipped.push(errorData);
+                detailedData.plausibilityLevels.skipped.push(errorData);
+                return;
+            }
+
+            const evaluation = pair.finalModification.llmEvaluation;
+            const pairDetails = this.extractPairDetails(pair, 'EVALUATED');
+
+            // 正確性評価による分類
+            if (evaluation.correctness_evaluation) {
+                const level = evaluation.correctness_evaluation.semantic_equivalence_level;
+                switch (level) {
+                    case 'IDENTICAL':
+                        detailedData.correctnessLevels.identical.push({...pairDetails, correctnessLevel: 'IDENTICAL'});
+                        break;
+                    case 'SEMANTICALLY_EQUIVALENT':
+                        detailedData.correctnessLevels.semanticallyEquivalent.push({...pairDetails, correctnessLevel: 'SEMANTICALLY_EQUIVALENT'});
+                        break;
+                    case 'PLAUSIBLE_BUT_DIFFERENT':
+                        detailedData.correctnessLevels.plausibleButDifferent.push({...pairDetails, correctnessLevel: 'PLAUSIBLE_BUT_DIFFERENT'});
+                        break;
+                    case 'INCORRECT':
+                        detailedData.correctnessLevels.incorrect.push({...pairDetails, correctnessLevel: 'INCORRECT'});
+                        break;
+                    case 'CORRECT':  // 後方互換性
+                        detailedData.correctnessLevels.semanticallyEquivalent.push({...pairDetails, correctnessLevel: 'CORRECT'});
+                        break;
+                }
+            }
+
+            // 妥当性評価による分類
+            if (evaluation.plausibility_evaluation) {
+                if (evaluation.plausibility_evaluation.is_plausible) {
+                    detailedData.plausibilityLevels.plausible.push({...pairDetails, plausibilityLevel: 'PLAUSIBLE'});
+                } else {
+                    detailedData.plausibilityLevels.notPlausible.push({...pairDetails, plausibilityLevel: 'NOT_PLAUSIBLE'});
+                }
+            }
+        });
+
+        // 統計サマリーの計算
+        detailedData.summary = this.calculateDetailedSummary(detailedData);
+
+        console.log('📊 詳細評価データ抽出完了:', {
+            identicalCount: detailedData.correctnessLevels.identical.length,
+            semanticallyEquivalentCount: detailedData.correctnessLevels.semanticallyEquivalent.length,
+            plausibleButDifferentCount: detailedData.correctnessLevels.plausibleButDifferent.length,
+            incorrectCount: detailedData.correctnessLevels.incorrect.length,
+            skippedCount: detailedData.correctnessLevels.skipped.length
+        });
+
+        return detailedData;
+    }
+
+    /**
+     * ペアから詳細情報を抽出
+     * @param {Object} pair - matchedPairオブジェクト
+     * @param {string} status - 評価ステータス
+     * @returns {Object} 詳細情報
+     */
+    extractPairDetails(pair, status) {
+        const details = {
+            // 基本情報（datasetEntryが存在しない場合は個別フィールドから構築）
+            datasetEntry: pair.datasetEntry || `${pair.project || 'Unknown'}/${pair.category || 'Unknown'}/${pair.pullRequest || 'Unknown'}`,
+            pullRequestName: this.extractPullRequestName(pair.datasetEntry || pair.pullRequest),
+            projectName: this.extractProjectName(pair.datasetEntry || pair.project),
+            status: status,
+            
+            // 修正情報
+            modifiedFiles: 0,
+            modifiedLines: 0,
+            modificationTypes: [],
+            
+            // APR情報
+            aprProvider: 'Unknown',
+            aprModel: 'Unknown',
+            
+            // 評価情報
+            evaluationReasoning: '',
+            evaluationDetails: null,
+            
+            // タイムスタンプ
+            processedAt: new Date().toISOString()
+        };
+
+        // APRログからの情報抽出
+        if (pair.aprLogData) {
+            // 修正ファイル数とライン数の抽出
+            if (pair.aprLogData.interaction_log) {
+                const modStats = this.extractModificationStats(pair.aprLogData.interaction_log);
+                details.modifiedFiles = modStats.files;
+                details.modifiedLines = modStats.lines;
+                details.modificationTypes = modStats.types;
+            }
+
+            // APRメタデータの抽出（llmMetadataから取得）
+            if (pair.aprLogData.llmMetadata) {
+                details.aprProvider = pair.aprLogData.llmMetadata.provider || 'Unknown';
+                details.aprModel = pair.aprLogData.llmMetadata.model || 'Unknown';
+                console.log(`🔍 APRモデル情報取得: ${details.aprProvider}/${details.aprModel} (${pair.datasetEntry})`);
+            } else {
+                console.log(`⚠️ APRモデル情報なし: ${pair.datasetEntry}`);
+                console.log(`   - aprLogData存在: ${!!pair.aprLogData}`);
+                console.log(`   - llmMetadata存在: ${!!pair.aprLogData?.llmMetadata}`);
+                if (pair.aprLogData?.llmMetadata) {
+                    console.log(`   - llmMetadata内容: ${JSON.stringify(pair.aprLogData.llmMetadata, null, 2)}`);
+                }
+            }
+        }
+
+        // LLM評価情報の抽出
+        if (pair.finalModification && pair.finalModification.llmEvaluation) {
+            const evaluation = pair.finalModification.llmEvaluation;
+            
+            if (evaluation.correctness_evaluation) {
+                details.evaluationReasoning = evaluation.correctness_evaluation.reasoning || '';
+                details.evaluationDetails = evaluation.correctness_evaluation;
+            }
+            
+            if (evaluation.plausibility_evaluation) {
+                details.plausibilityReasoning = evaluation.plausibility_evaluation.reasoning || '';
+                details.plausibilityDetails = evaluation.plausibility_evaluation;
+            }
+        }
+
+        // エラー情報の抽出
+        if (pair.evaluationSkipReason) {
+            details.skipReason = pair.evaluationSkipReason;
+        }
+
+        return details;
+    }
+
+    /**
+     * プルリクエスト名を抽出
+     * @param {string} datasetEntryOrPullRequest - データセットエントリーまたはプルリクエスト名
+     * @returns {string} プルリクエスト名
+     */
+    extractPullRequestName(datasetEntryOrPullRequest) {
+        if (!datasetEntryOrPullRequest) return 'Unknown';
+        
+        // スラッシュが含まれている場合はパスとして処理
+        if (datasetEntryOrPullRequest.includes('/')) {
+            const parts = datasetEntryOrPullRequest.split('/');
+            if (parts.length >= 3) {
+                return parts[parts.length - 1]; // PR番号
+            }
+        }
+        
+        // スラッシュが含まれていない場合はそのまま返す
+        return datasetEntryOrPullRequest;
+    }
+
+    /**
+     * プロジェクト名を抽出
+     * @param {string} datasetEntryOrProject - データセットエントリーまたはプロジェクト名
+     * @returns {string} プロジェクト名
+     */
+    extractProjectName(datasetEntryOrProject) {
+        if (!datasetEntryOrProject) return 'Unknown';
+        
+        // スラッシュが含まれている場合はパスとして処理
+        if (datasetEntryOrProject.includes('/')) {
+            const parts = datasetEntryOrProject.split('/');
+            if (parts.length >= 1) {
+                return parts[0]; // プロジェクト名
+            }
+        }
+        
+        // スラッシュが含まれていない場合はそのまま返す
+        return datasetEntryOrProject;
+    }
+
+    /**
+     * 修正統計の抽出
+     * @param {Array} interactionLog - インタラクションログ
+     * @returns {Object} 修正統計
+     */
+    extractModificationStats(interactionLog) {
+        const stats = {
+            files: 0,
+            lines: 0,
+            types: []
+        };
+
+        if (!Array.isArray(interactionLog)) return stats;
+
+        const modifiedFiles = new Set();
+        let totalLines = 0;
+        const modTypes = new Set();
+
+        interactionLog.forEach(entry => {
+            if (entry.type === 'modification' && entry.content) {
+                // ファイル名の抽出
+                if (entry.content.file_path) {
+                    modifiedFiles.add(entry.content.file_path);
+                }
+
+                // 修正行数の推定（差分から）
+                if (entry.content.diff) {
+                    const lines = this.countModifiedLines(entry.content.diff);
+                    totalLines += lines;
+                }
+
+                // 修正タイプの分類
+                if (entry.content.description) {
+                    const type = this.classifyModificationType(entry.content.description);
+                    if (type) modTypes.add(type);
+                }
+            }
+        });
+
+        stats.files = modifiedFiles.size;
+        stats.lines = totalLines;
+        stats.types = Array.from(modTypes);
+
+        return stats;
+    }
+
+    /**
+     * 修正行数をカウント
+     * @param {string} diff - 差分文字列
+     * @returns {number} 修正行数
+     */
+    countModifiedLines(diff) {
+        if (!diff) return 0;
+        
+        const lines = diff.split('\n');
+        let modifiedCount = 0;
+        
+        lines.forEach(line => {
+            if (line.startsWith('+') && !line.startsWith('+++')) {
+                modifiedCount++;
+            } else if (line.startsWith('-') && !line.startsWith('---')) {
+                modifiedCount++;
+            }
+        });
+        
+        return modifiedCount;
+    }
+
+    /**
+     * 修正タイプの分類
+     * @param {string} description - 修正説明
+     * @returns {string} 修正タイプ
+     */
+    classifyModificationType(description) {
+        if (!description) return null;
+        
+        const desc = description.toLowerCase();
+        
+        if (desc.includes('null') || desc.includes('npe')) return 'null-check';
+        if (desc.includes('exception') || desc.includes('error')) return 'error-handling';
+        if (desc.includes('condition') || desc.includes('if')) return 'conditional';
+        if (desc.includes('loop') || desc.includes('iteration')) return 'loop';
+        if (desc.includes('return') || desc.includes('value')) return 'return-value';
+        if (desc.includes('method') || desc.includes('function')) return 'method-call';
+        if (desc.includes('variable') || desc.includes('assignment')) return 'variable';
+        if (desc.includes('import') || desc.includes('dependency')) return 'dependency';
+        
+        return 'other';
+    }
+
+    /**
+     * 詳細統計サマリーの計算
+     * @param {Object} detailedData - 詳細データ
+     * @returns {Object} 統計サマリー
+     */
+    calculateDetailedSummary(detailedData) {
+        const allEntries = [
+            ...detailedData.correctnessLevels.identical,
+            ...detailedData.correctnessLevels.semanticallyEquivalent,
+            ...detailedData.correctnessLevels.plausibleButDifferent,
+            ...detailedData.correctnessLevels.incorrect
+        ];
+
+        const summary = {
+            totalProcessed: allEntries.length,
+            avgModifiedLines: 0,
+            avgModifiedFiles: 0,
+            mostCommonProjects: [],
+            modificationPatterns: {},
+            difficultyAnalysis: {}
+        };
+
+        if (allEntries.length === 0) return summary;
+
+        // 平均値計算
+        const totalLines = allEntries.reduce((sum, entry) => sum + entry.modifiedLines, 0);
+        const totalFiles = allEntries.reduce((sum, entry) => sum + entry.modifiedFiles, 0);
+        
+        summary.avgModifiedLines = (totalLines / allEntries.length).toFixed(1);
+        summary.avgModifiedFiles = (totalFiles / allEntries.length).toFixed(1);
+
+        // プロジェクト別集計
+        const projectCounts = {};
+        allEntries.forEach(entry => {
+            projectCounts[entry.projectName] = (projectCounts[entry.projectName] || 0) + 1;
+        });
+        
+        summary.mostCommonProjects = Object.entries(projectCounts)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10)
+            .map(([name, count]) => ({ name, count }));
+
+        // 修正パターン分析
+        const modPatterns = {};
+        allEntries.forEach(entry => {
+            entry.modificationTypes.forEach(type => {
+                modPatterns[type] = (modPatterns[type] || 0) + 1;
+            });
+        });
+        
+        summary.modificationPatterns = Object.entries(modPatterns)
+            .sort(([,a], [,b]) => b - a)
+            .reduce((obj, [type, count]) => {
+                obj[type] = count;
+                return obj;
+            }, {});
+
+        // 難易度分析
+        summary.difficultyAnalysis = this.analyzeDifficulty(detailedData);
+
+        return summary;
+    }
+
+    /**
+     * 修正難易度の分析
+     * @param {Object} detailedData - 詳細データ
+     * @returns {Object} 難易度分析結果
+     */
+    analyzeDifficulty(detailedData) {
+        const analysis = {
+            byModifiedLines: { easy: [], medium: [], hard: [] },
+            byModifiedFiles: { single: [], multiple: [], complex: [] },
+            byModificationType: {},
+            recommendations: []
+        };
+
+        // 全エントリーを統合
+        const allEntries = [
+            ...detailedData.correctnessLevels.identical,
+            ...detailedData.correctnessLevels.semanticallyEquivalent,
+            ...detailedData.correctnessLevels.plausibleButDifferent,
+            ...detailedData.correctnessLevels.incorrect
+        ];
+
+        // 修正行数による分析
+        allEntries.forEach(entry => {
+            if (entry.modifiedLines <= 5) {
+                analysis.byModifiedLines.easy.push(entry);
+            } else if (entry.modifiedLines <= 20) {
+                analysis.byModifiedLines.medium.push(entry);
+            } else {
+                analysis.byModifiedLines.hard.push(entry);
+            }
+        });
+
+        // 修正ファイル数による分析
+        allEntries.forEach(entry => {
+            if (entry.modifiedFiles === 1) {
+                analysis.byModifiedFiles.single.push(entry);
+            } else if (entry.modifiedFiles <= 3) {
+                analysis.byModifiedFiles.multiple.push(entry);
+            } else {
+                analysis.byModifiedFiles.complex.push(entry);
+            }
+        });
+
+        // 修正タイプ別の成功率分析
+        const typeSuccessRates = {};
+        allEntries.forEach(entry => {
+            entry.modificationTypes.forEach(type => {
+                if (!typeSuccessRates[type]) {
+                    typeSuccessRates[type] = { total: 0, correct: 0 };
+                }
+                typeSuccessRates[type].total++;
+                if (entry.correctnessLevel === 'IDENTICAL' || entry.correctnessLevel === 'SEMANTICALLY_EQUIVALENT') {
+                    typeSuccessRates[type].correct++;
+                }
+            });
+        });
+
+        Object.entries(typeSuccessRates).forEach(([type, data]) => {
+            analysis.byModificationType[type] = {
+                successRate: ((data.correct / data.total) * 100).toFixed(1),
+                total: data.total,
+                correct: data.correct
+            };
+        });
+
+        // 推奨事項の生成
+        analysis.recommendations = this.generateRecommendations(analysis);
+
+        return analysis;
+    }
+
+    /**
+     * 改善推奨事項の生成
+     * @param {Object} analysis - 難易度分析結果
+     * @returns {Array} 推奨事項のリスト
+     */
+    generateRecommendations(analysis) {
+        const recommendations = [];
+
+        // 修正行数に基づく推奨
+        const easySuccess = analysis.byModifiedLines.easy.length;
+        const mediumSuccess = analysis.byModifiedLines.medium.length;
+        const hardSuccess = analysis.byModifiedLines.hard.length;
+
+        if (hardSuccess < easySuccess * 0.5) {
+            recommendations.push({
+                type: 'complexity',
+                priority: 'high',
+                title: '複雑な修正への対応改善',
+                description: '大規模な修正（20行以上）での成功率が低下しています。段階的な修正アプローチの導入を推奨します。'
+            });
+        }
+
+        // 修正タイプに基づく推奨
+        Object.entries(analysis.byModificationType).forEach(([type, data]) => {
+            if (data.total >= 5 && parseFloat(data.successRate) < 50) {
+                recommendations.push({
+                    type: 'pattern',
+                    priority: 'medium',
+                    title: `${type}パターンの改善`,
+                    description: `${type}タイプの修正で成功率が${data.successRate}%と低下しています。専用の学習データ拡充を検討してください。`
+                });
+            }
+        });
+
+        return recommendations;
+    }
+
+    /**
+     * 評価内訳の詳細分析
+     * @param {Object} stats - ProcessingStats オブジェクト
+     * @returns {Object} 評価内訳詳細
+     */
+    analyzeEvaluationBreakdown(stats) {
+        const breakdown = {
+            byProject: {},
+            bySkipReason: {},
+            evaluationSamples: {
+                correct: [],
+                plausible: [],
+                incorrect: [],
+                skipped: []
+            }
+        };
+
+        stats.matchedPairs.forEach(pair => {
+            const projectName = pair.project || pair.datasetEntry?.split('/')[0] || 'Unknown';
+            
+            // プロジェクト別集計
+            if (!breakdown.byProject[projectName]) {
+                breakdown.byProject[projectName] = {
+                    correct: 0,
+                    plausible: 0,
+                    incorrect: 0,
+                    skipped: 0,
+                    total: 0
+                };
+            }
+            breakdown.byProject[projectName].total++;
+
+            if (pair.evaluationSkipReason) {
+                breakdown.byProject[projectName].skipped++;
+                
+                // スキップ理由別集計
+                const reason = pair.evaluationSkipReason;
+                breakdown.bySkipReason[reason] = (breakdown.bySkipReason[reason] || 0) + 1;
+                
+                // スキップサンプルを追加
+                if (breakdown.evaluationSamples.skipped.length < 3) {
+                    breakdown.evaluationSamples.skipped.push({
+                        entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
+                        reason: reason,
+                        project: projectName
+                    });
+                }
+            } else if (pair.finalModification && pair.finalModification.llmEvaluation && !pair.finalModification.llmEvaluation.error) {
+                const evaluation = pair.finalModification.llmEvaluation;
+                const assessment = evaluation.overall_assessment;
+                
+                switch (assessment) {
+                    case 'CORRECT':
+                        breakdown.byProject[projectName].correct++;
+                        if (breakdown.evaluationSamples.correct.length < 3) {
+                            breakdown.evaluationSamples.correct.push({
+                                entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
+                                project: projectName,
+                                reasoning: evaluation.reasoning || 'N/A'
+                            });
+                        }
+                        break;
+                    case 'PLAUSIBLE_BUT_DIFFERENT':
+                        breakdown.byProject[projectName].plausible++;
+                        if (breakdown.evaluationSamples.plausible.length < 3) {
+                            breakdown.evaluationSamples.plausible.push({
+                                entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
+                                project: projectName,
+                                reasoning: evaluation.reasoning || 'N/A'
+                            });
+                        }
+                        break;
+                    case 'INCORRECT':
+                        breakdown.byProject[projectName].incorrect++;
+                        if (breakdown.evaluationSamples.incorrect.length < 3) {
+                            breakdown.evaluationSamples.incorrect.push({
+                                entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
+                                project: projectName,
+                                reasoning: evaluation.reasoning || 'N/A'
+                            });
+                        }
+                        break;
+                }
+            }
+        });
+
+        return breakdown;
+    }
+
+    /**
+     * 詳細分析レポートHTMLテンプレートの描画
+     * @param {Object} data - テンプレートデータ
+     * @returns {Promise<string>} 描画されたHTML
+     */
+    async renderDetailedAnalysisTemplate(data) {
+        const templatePath = path.join(this.templateDir, 'detailed_analysis_report.html');
+        try {
+            const template = await fs.readFile(templatePath, 'utf-8');
+            return this.processTemplate(template, data);
+        } catch (error) {
+            console.warn('詳細分析テンプレート読み込みエラー:', error.message);
+            return this.getDefaultDetailedAnalysisTemplate(data);
         }
     }
 
@@ -1104,5 +2080,273 @@ export class HTMLReportService {
     </div>
 </body>
 </html>`;
+    }
+
+    /**
+     * デフォルトの詳細分析テンプレート（フォールバック用）
+     * @param {Object} data - レポートデータ
+     * @returns {string} HTML文字列
+     */
+    getDefaultDetailedAnalysisTemplate(data) {
+        return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APRシステム詳細分析レポート</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { text-align: center; margin-bottom: 40px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; }
+        .title { font-size: 2.5em; margin: 0; }
+        .subtitle { font-size: 1.1em; margin: 10px 0 0 0; opacity: 0.9; }
+        .section { margin: 40px 0; }
+        .section-title { color: #333; font-size: 1.5em; margin-bottom: 20px; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
+        .metric-card { background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; border-left: 4px solid #667eea; }
+        .metric-value { font-size: 2em; font-weight: bold; color: #667eea; margin-bottom: 5px; }
+        .metric-label { color: #666; font-size: 0.9em; }
+        .data-table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; }
+        .data-table th { background: #667eea; color: white; padding: 12px; text-align: left; }
+        .data-table td { padding: 12px; border-bottom: 1px solid #ddd; }
+        .data-table tr:nth-child(even) { background: #f8f9fa; }
+        .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; }
+        .status-identical { background: #d4edda; color: #155724; }
+        .status-semantically-equivalent { background: #cce5ff; color: #004085; }
+        .status-plausible-but-different { background: #fff3cd; color: #856404; }
+        .status-incorrect { background: #f8d7da; color: #721c24; }
+        .tab-buttons { display: flex; gap: 5px; margin-bottom: 20px; }
+        .tab-button { padding: 10px 20px; border: none; background: #e9ecef; cursor: pointer; border-radius: 5px; }
+        .tab-button.active { background: #667eea; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .recommendation { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .recommendation.high { background: #f8d7da; border-color: #f5c6cb; }
+        .timestamp { text-align: center; margin-top: 40px; color: #666; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">🔬 APRシステム詳細分析レポート</h1>
+            <p class="subtitle">修正パフォーマンス・難易度・改善点の詳細分析</p>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">📊 分析サマリー</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value">${data.summary?.totalProcessed || 0}</div>
+                    <div class="metric-label">分析対象総数</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${data.summary?.avgModifiedLines || 0}</div>
+                    <div class="metric-label">平均修正行数</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${data.summary?.avgModifiedFiles || 0}</div>
+                    <div class="metric-label">平均修正ファイル数</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">${data.summary?.mostCommonProjects?.length || 0}</div>
+                    <div class="metric-label">分析プロジェクト数</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">🎯 正確性レベル別詳細分析</h2>
+            
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="showTab('identical')">🎯 完全一致 (${data.correctnessLevels?.identical?.length || 0})</button>
+                <button class="tab-button" onclick="showTab('semantically')">✅ 意味的同等 (${data.correctnessLevels?.semanticallyEquivalent?.length || 0})</button>
+                <button class="tab-button" onclick="showTab('plausible')">🟡 妥当だが異なる (${data.correctnessLevels?.plausibleButDifferent?.length || 0})</button>
+                <button class="tab-button" onclick="showTab('incorrect')">❌ 不正確 (${data.correctnessLevels?.incorrect?.length || 0})</button>
+                <button class="tab-button" onclick="showTab('skipped')">⏭️ スキップ (${data.correctnessLevels?.skipped?.length || 0})</button>
+            </div>
+
+            <div id="identical" class="tab-content active">
+                <h3>🎯 完全一致（IDENTICAL）</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>プロジェクト</th>
+                            <th>PR名</th>
+                            <th>修正ファイル数</th>
+                            <th>修正行数</th>
+                            <th>APRモデル</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.correctnessLevels?.identical?.map(item => `
+                            <tr>
+                                <td>${item.projectName || 'Unknown'}</td>
+                                <td>${item.pullRequestName || 'Unknown'}</td>
+                                <td>${item.modifiedFiles || 0}</td>
+                                <td>${item.modifiedLines || 0}</td>
+                                <td>${item.aprModel || 'Unknown'}</td>
+                            </tr>
+                        `).join('') || '<tr><td colspan="5">データなし</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="semantically" class="tab-content">
+                <h3>✅ 意味的同等（SEMANTICALLY_EQUIVALENT）</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>プロジェクト</th>
+                            <th>PR名</th>
+                            <th>修正ファイル数</th>
+                            <th>修正行数</th>
+                            <th>APRモデル</th>
+                            <th>評価理由</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.correctnessLevels?.semanticallyEquivalent?.map(item => `
+                            <tr>
+                                <td>${item.projectName || 'Unknown'}</td>
+                                <td>${item.pullRequestName || 'Unknown'}</td>
+                                <td>${item.modifiedFiles || 0}</td>
+                                <td>${item.modifiedLines || 0}</td>
+                                <td>${item.aprModel || 'Unknown'}</td>
+                                <td title="${item.evaluationReasoning || ''}">${(item.evaluationReasoning || '').substring(0, 50)}${(item.evaluationReasoning || '').length > 50 ? '...' : ''}</td>
+                            </tr>
+                        `).join('') || '<tr><td colspan="6">データなし</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="plausible" class="tab-content">
+                <h3>🟡 妥当だが異なる（PLAUSIBLE_BUT_DIFFERENT）</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>プロジェクト</th>
+                            <th>PR名</th>
+                            <th>修正ファイル数</th>
+                            <th>修正行数</th>
+                            <th>APRモデル</th>
+                            <th>評価理由</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.correctnessLevels?.plausibleButDifferent?.map(item => `
+                            <tr>
+                                <td>${item.projectName || 'Unknown'}</td>
+                                <td>${item.pullRequestName || 'Unknown'}</td>
+                                <td>${item.modifiedFiles || 0}</td>
+                                <td>${item.modifiedLines || 0}</td>
+                                <td>${item.aprModel || 'Unknown'}</td>
+                                <td title="${item.evaluationReasoning || ''}">${(item.evaluationReasoning || '').substring(0, 50)}${(item.evaluationReasoning || '').length > 50 ? '...' : ''}</td>
+                            </tr>
+                        `).join('') || '<tr><td colspan="6">データなし</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="incorrect" class="tab-content">
+                <h3>❌ 不正確（INCORRECT）</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>プロジェクト</th>
+                            <th>PR名</th>
+                            <th>修正ファイル数</th>
+                            <th>修正行数</th>
+                            <th>APRモデル</th>
+                            <th>評価理由</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.correctnessLevels?.incorrect?.map(item => `
+                            <tr>
+                                <td>${item.projectName || 'Unknown'}</td>
+                                <td>${item.pullRequestName || 'Unknown'}</td>
+                                <td>${item.modifiedFiles || 0}</td>
+                                <td>${item.modifiedLines || 0}</td>
+                                <td>${item.aprModel || 'Unknown'}</td>
+                                <td title="${item.evaluationReasoning || ''}">${(item.evaluationReasoning || '').substring(0, 50)}${(item.evaluationReasoning || '').length > 50 ? '...' : ''}</td>
+                            </tr>
+                        `).join('') || '<tr><td colspan="6">データなし</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="skipped" class="tab-content">
+                <h3>⏭️ スキップ（SKIPPED）</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>プロジェクト</th>
+                            <th>PR名</th>
+                            <th>APRモデル</th>
+                            <th>スキップ理由</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.correctnessLevels?.skipped?.map(item => `
+                            <tr>
+                                <td>${item.projectName || 'Unknown'}</td>
+                                <td>${item.pullRequestName || 'Unknown'}</td>
+                                <td>${item.aprModel || 'Unknown'}</td>
+                                <td>${item.skipReason || '理由不明'}</td>
+                            </tr>
+                        `).join('') || '<tr><td colspan="4">データなし</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">💡 改善推奨事項</h2>
+            ${data.summary?.difficultyAnalysis?.recommendations?.map(rec => `
+                <div class="recommendation ${rec.priority}">
+                    <h4>${rec.priority === 'high' ? '🚨' : rec.priority === 'medium' ? '⚠️' : '💡'} ${rec.title}</h4>
+                    <p>${rec.description}</p>
+                </div>
+            `).join('') || '<p>推奨事項なし</p>'}
+        </div>
+
+        <div class="timestamp">
+            レポート生成日時: ${data.timestamp}
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>`;
+    }
+
+    /**
+     * スキップ理由の日本語説明を取得
+     * @param {string} reason - スキップ理由コード
+     * @returns {string} 日本語説明
+     */
+    getSkipReasonDescription(reason) {
+        const descriptions = {
+            'NO_INTERACTION_LOG': 'APRログにinteraction_logが存在しない',
+            'EMPTY_INTERACTION_LOG': 'interaction_logが空',
+            'NO_MODIFICATION_PROPERTY': '全ターンでmodified_diffプロパティが見つからない',
+            'ALL_MODIFICATIONS_NULL': '全ターンでmodified_diffがnull（修正生成なし）',
+            'INVESTIGATION_PHASE': '調査フェーズ中（reply_requiredあり、修正生成なし）',
+            'FINAL_TURN_NO_MODIFICATION': '最終ターンに修正なし（途中ターンで修正あり）',
+            'EXTRACTION_LOGIC_ERROR': '抽出ロジックエラー（予期しない状態）'
+        };
+        
+        return descriptions[reason] || `未知の理由: ${reason}`;
     }
 }

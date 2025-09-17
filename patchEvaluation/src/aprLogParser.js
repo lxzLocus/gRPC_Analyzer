@@ -119,6 +119,13 @@ class APRLogParser {
     extractLLMDialogue(logData) {
         // 新しいログ形式のLLMメタデータを抽出
         const experimentMeta = logData.experiment_metadata;
+        
+        console.log('🔍 experiment_metadata存在:', !!experimentMeta);
+        if (experimentMeta) {
+            console.log('🔍 llm_provider:', experimentMeta.llm_provider);
+            console.log('🔍 llm_model:', experimentMeta.llm_model);
+        }
+        
         const llmMetadata = experimentMeta ? {
             provider: experimentMeta.llm_provider,
             model: experimentMeta.llm_model,

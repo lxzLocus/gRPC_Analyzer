@@ -195,9 +195,23 @@ export class ConsoleView {
 
     /**
      * LLM評価失敗メッセージの表示
+     * @param {Object} errorAnalysis - エラー解析結果
      */
-    showLLMEvaluationFailure() {
+    showLLMEvaluationFailure(errorAnalysis = null) {
         console.log(`  ⚠️ LLM評価に失敗しました`);
+        
+        if (errorAnalysis) {
+            console.log(`    - エラータイプ: ${errorAnalysis.type}`);
+            if (errorAnalysis.statusCode) {
+                console.log(`    - ステータスコード: ${errorAnalysis.statusCode}`);
+            }
+            if (errorAnalysis.retryable) {
+                console.log(`    - リトライ推奨: はい`);
+            }
+            if (errorAnalysis.suggestion) {
+                console.log(`    - 推奨対応: ${errorAnalysis.suggestion}`);
+            }
+        }
     }
 
     /**
@@ -210,9 +224,23 @@ export class ConsoleView {
     /**
      * LLM評価エラーメッセージの表示
      * @param {string} errorMessage - エラーメッセージ
+     * @param {Object} errorAnalysis - エラー解析結果
      */
-    showLLMEvaluationError(errorMessage) {
+    showLLMEvaluationError(errorMessage, errorAnalysis = null) {
         console.error(`  ❌ TemplateCompiler LLM評価エラー: ${errorMessage}`);
+        
+        if (errorAnalysis) {
+            console.error(`    - エラータイプ: ${errorAnalysis.type}`);
+            if (errorAnalysis.statusCode) {
+                console.error(`    - ステータスコード: ${errorAnalysis.statusCode}`);
+            }
+            if (errorAnalysis.retryable) {
+                console.error(`    - リトライ可能: はい`);
+            }
+            if (errorAnalysis.suggestion) {
+                console.error(`    - 推奨対応: ${errorAnalysis.suggestion}`);
+            }
+        }
     }
 
     /**

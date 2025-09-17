@@ -221,9 +221,31 @@ export class StatisticsReportView {
 
         console.log('\n🎯 成功マッチングサンプル (最初の3件):');
         stats.matchedPairs.slice(0, 3).forEach((pair, index) => {
-            console.log(`  ${index + 1}. ${pair.datasetEntry}`);
-            console.log(`     ターン数: ${pair.aprLogData.turns}, トークン: ${pair.aprLogData.totalTokens}, 修正: ${pair.aprLogData.modifications}`);
-            console.log(`     ログファイル: ${pair.latestLogFile} (${pair.logFiles ? pair.logFiles.length : '不明'} ファイル中)`);
+            const entryName = pair.datasetEntry || pair.datasetPath || 'Unknown Entry';
+            
+            // ターン数の適切な表示
+            let turnsDisplay = 'N/A';
+            if (pair.aprLogData?.turns) {
+                if (Array.isArray(pair.aprLogData.turns)) {
+                    turnsDisplay = pair.aprLogData.turns.length.toString();
+                } else if (typeof pair.aprLogData.turns === 'number') {
+                    turnsDisplay = pair.aprLogData.turns.toString();
+                }
+            }
+            
+            // 修正回数の適切な表示
+            let modsDisplay = 'N/A';
+            if (pair.aprLogData?.modifications !== undefined) {
+                if (Array.isArray(pair.aprLogData.modifications)) {
+                    modsDisplay = pair.aprLogData.modifications.length.toString();
+                } else if (typeof pair.aprLogData.modifications === 'number') {
+                    modsDisplay = pair.aprLogData.modifications.toString();
+                }
+            }
+            
+            console.log(`  ${index + 1}. ${entryName}`);
+            console.log(`     ターン数: ${turnsDisplay}, トークン: ${pair.aprLogData?.totalTokens || 0}, 修正: ${modsDisplay}`);
+            console.log(`     ログファイル: ${pair.latestLogFile || 'Unknown'} (${pair.logFiles ? pair.logFiles.length : '不明'} ファイル中)`);
             
             // スキップ理由を表示
             if (pair.evaluationSkipReason) {

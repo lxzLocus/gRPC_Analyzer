@@ -123,7 +123,13 @@ export class OpenAILLMClient extends LLMClient {
             });
         } catch (error) {
             console.error('❌ OpenAI API error:', error);
-            throw error;
+            
+            // エラー情報を標準化してスロー
+            const standardError = new Error(error.message);
+            standardError.originalError = error;
+            standardError.status = error.status;
+            standardError.provider = 'openai';
+            throw standardError;
         }
     }
 }

@@ -133,6 +133,7 @@ export class APRLogService {
 
     /**
      * diffからファイルパスリストを抽出
+     * APRの独自diff形式（*** Update File: path）と標準diff形式の両方に対応
      * @param {string} diffText - diff文字列
      * @returns {string[]} ファイルパスの配列
      */
@@ -141,24 +142,58 @@ export class APRLogService {
         const diffLines = diffText.split('\n');
         
         for (const line of diffLines) {
-            // diffのファイル開始行例: "diff --git a/src/foo.js b/src/foo.js"
-            const match = line.match(/^diff --git a\/(.+?) b\//);
-            if (match) {
-                filePaths.push(match[1]);
+            // APRの独自形式: "*** Update File: path/to/file.ext"
+            const aprMatch = line.match(/^\*\*\* Update File: (.+)$/);
+            if (aprMatch) {
+                filePaths.push(aprMatch[1]);
+                continue;
             }
-            // 追加: "--- a/path" や "+++ b/path" も考慮
-            const match2 = line.match(/^--- a\/(.+)$/);
-            if (match2) {
-                filePaths.push(match2[1]);
+            
+            // APRの作成形式: "*** Create File: path/to/file.ext"
+            const aprCreateMatch = line.match(/^\*\*\* Create File: (.+)$/);
+            if (aprCreateMatch) {
+                filePaths.push(aprCreateMatch[1]);
+                continue;
             }
-            const match3 = line.match(/^\+\+\+ b\/(.+)$/);
-            if (match3) {
-                filePaths.push(match3[1]);
+            
+            // APRの削除形式: "*** Delete File: path/to/file.ext"
+            const aprDeleteMatch = line.match(/^\*\*\* Delete File: (.+)$/);
+            if (aprDeleteMatch) {
+                filePaths.push(aprDeleteMatch[1]);
+                continue;
+            }
+            
+            // 標準diff形式: "diff --git a/src/foo.js b/src/foo.js"
+            const gitMatch = line.match(/^diff --git a\/(.+?) b\//);
+            if (gitMatch) {
+                filePaths.push(gitMatch[1]);
+                continue;
+            }
+            
+            // 標準diff形式: "--- a/path" や "+++ b/path"
+            const oldFileMatch = line.match(/^--- a\/(.+)$/);
+            if (oldFileMatch) {
+                filePaths.push(oldFileMatch[1]);
+                continue;
+            }
+            
+            const newFileMatch = line.match(/^\+\+\+ b\/(.+)$/);
+            if (newFileMatch) {
+                filePaths.push(newFileMatch[1]);
+                continue;
             }
         }
         
         // 重複除去
-        return [...new Set(filePaths)];
+        const uniquePaths = [...new Set(filePaths)];
+        
+        // デバッグ情報
+        console.log(`🔍 extractFilePathsFromDiff結果:`);
+        console.log(`   - 元diff長: ${diffText.length}文字`);
+        console.log(`   - 抽出ファイル数: ${uniquePaths.length}`);
+        console.log(`   - ファイル一覧: ${JSON.stringify(uniquePaths)}`);
+        
+        return uniquePaths;
     }
 
     /**

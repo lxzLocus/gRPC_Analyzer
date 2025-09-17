@@ -13,6 +13,7 @@ dotenvConfig({ path: '/app/.env' });
 if (import.meta.url === `file://${process.argv[1]}`) {
     // コマンドライン引数の解析
     function parseArgs() {
+        
         const args = process.argv.slice(2);
         const parsed = {};
         const positional = [];
@@ -78,6 +79,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const useCache = commandLineArgs.cache !== 'false' && commandLineArgs.noCache !== 'true'; // デフォルト: true
     const clearCacheFirst = commandLineArgs.clearCache === 'true' || commandLineArgs.clearCacheFirst === 'true';
     
+    // レポート生成オプションの解析
+    const generateDetailReports = commandLineArgs.detailReports === 'true' || 
+                                  commandLineArgs.generateDetailReports === 'true' ||
+                                  commandLineArgs.details === 'true'; // デフォルト: false（処理時間考慮）
+    
+    const maxDetailReports = parseInt(commandLineArgs.maxDetailReports) || 
+                            parseInt(commandLineArgs.maxDetails) || 10; // デフォルト: 10件
+
+    const generateDetailedAnalysis = commandLineArgs.detailedAnalysis !== 'false' && 
+                                   commandLineArgs.noDetailedAnalysis !== 'true'; // デフォルト: true
+    
     // キャッシュ管理コマンドの処理（CacheManagerは必要な時のみ作成）
     if (commandLineArgs.showCacheStats) {
         console.log('📈 キャッシュ統計を表示中...');
@@ -113,11 +125,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
     // HTMLレポート生成オプション + キャッシュオプション
     const reportOptions = {
-        generateHTMLReport: true,       // HTMLレポート生成
-        generateErrorReport: true,      // エラーレポート生成
-        generateDetailReports: false,   // 詳細レポート生成（最初の10件）
-        useCache,                      // キャッシュ使用
-        clearCacheFirst                // 実行前キャッシュクリア
+        generateHTMLReport: true,           // HTMLレポート生成
+        generateErrorReport: true,          // エラーレポート生成
+        generateDetailReports,              // 詳細レポート生成（コマンドライン引数で制御）
+        generateDetailedAnalysis,           // 詳細分析レポート生成
+        maxDetailReports,                   // 詳細レポート生成数
+        useCache,                          // キャッシュ使用
+        clearCacheFirst                    // 実行前キャッシュクリア
 
     };
 
@@ -126,8 +140,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`📁 APRログパス: ${aprOutputPath}`);
     console.log(`📊 HTMLレポート生成: ${reportOptions.generateHTMLReport ? '有効' : '無効'}`);
     console.log(`❌ エラーレポート生成: ${reportOptions.generateErrorReport ? '有効' : '無効'}`);
-    console.log(`📝 詳細レポート生成: ${reportOptions.generateDetailReports ? '有効' : '無効'}`);
-    console.log(`📈 キャッシュ機能: ${reportOptions.useCache ? '有効' : '無効'}`);
+    console.log(`📝 詳細レポート生成: ${reportOptions.generateDetailReports ? '有効' : '無効'}${reportOptions.generateDetailReports ? ` (最大${reportOptions.maxDetailReports}件)` : ''}`);
+    console.log(`� 詳細分析レポート生成: ${reportOptions.generateDetailedAnalysis ? '有効' : '無効'}`);
+    console.log(`�📈 キャッシュ機能: ${reportOptions.useCache ? '有効' : '無効'}`);
     if (reportOptions.clearCacheFirst) {
         console.log(`🗑️ 実行前キャッシュクリア: 有効`);
     }

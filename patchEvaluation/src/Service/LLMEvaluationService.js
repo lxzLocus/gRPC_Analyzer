@@ -4,6 +4,7 @@ import { config as dotenvConfig } from 'dotenv';
 import { TemplateRenderer } from './TemplateCompiler.js';
 import { CodeContextExtractor } from './CodeContextExtractor.js';
 import { LLMClientController } from '../Controller/LLMClientController.js';
+import LLMErrorHandler from './LLMErrorHandler.js';
 import { createLLMRequest } from '../Repository/llmClient.js';
 import Config from '../Config/config.js';
 
@@ -14,9 +15,10 @@ dotenvConfig({ path: '/app/.env' });
  * LLM評価処理を担当するサービスクラス
  */
 export class LLMEvaluationService {
-    constructor() {
-        this.templateRenderer = null;
-        this.llmClient = null;
+    constructor(llmClient, templateRenderer) {
+        this.llmClient = llmClient;
+        this.templateRenderer = templateRenderer;
+        this.errorHandler = new LLMErrorHandler();
         this.codeContextExtractor = new CodeContextExtractor();
     }
 
@@ -170,7 +172,11 @@ export class LLMEvaluationService {
                 { role: 'user', content: renderedPrompt }
             ], {
                 temperature: config.getConfigValue('llm.temperature', 0.1),
-                maxTokens: config.getConfigValue('llm.maxTokens', 4000)
+                maxTokens: config.getConfigValue('llm.maxTokens', 4000),
+                // Gemini思考制御パラメータ
+                reasoningEffort: config.getConfigValue('gemini.reasoningEffort') || config.getConfigValue('llm.reasoningEffort'),
+                thinkingBudget: config.getConfigValue('gemini.thinkingBudget') || config.getConfigValue('llm.thinkingBudget'),
+                includeThoughts: config.getConfigValue('gemini.includeThoughts', false) || config.getConfigValue('llm.includeThoughts', false)
             });
             
             // LLMクライアントでの評価実行
@@ -204,10 +210,20 @@ export class LLMEvaluationService {
             }
             
         } catch (error) {
+            // 共通エラーハンドラーでエラーを解析
+            const errorAnalysis = this.errorHandler.analyzeLLMError(error);
+            
+            // エラー詳細をログ出力
+            this.errorHandler.logErrorDetails(errorAnalysis);
+            
             return {
                 success: false,
-                error: error.message,
-                result: { error: error.message, templateUsed: false }
+                error: errorAnalysis.message,
+                result: { 
+                    error: errorAnalysis.message, 
+                    templateUsed: false,
+                    errorAnalysis: errorAnalysis
+                }
             };
         }
     }
@@ -247,3 +263,5 @@ export class LLMEvaluationService {
         }
     }
 }
+
+export default LLMEvaluationService;

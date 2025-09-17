@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APRシステム詳細分析レポート</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container { 
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .title { 
+            font-size: 3em;
+            margin: 0;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .subtitle { 
+            font-size: 1.2em;
+            margin: 15px 0 0 0;
+            opacity: 0.9;
+            font-weight: 300;
+        }
+        .content { padding: 40px 30px; }
+        
+        /* セクション */
+        .section { 
+            margin: 50px 0;
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 30px;
+        }
+        .section-title { 
+            color: #1f2937;
+            font-size: 1.8em;
+            margin: 0 0 25px 0;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .section-icon { font-size: 1.2em; }
+        
+        /* タブ */
+        .tab-container {
+            margin: 25px 0;
+        }
+        .tab-buttons {
+            display: flex;
+            gap: 2px;
+            margin-bottom: 20px;
+            background: #e5e7eb;
+            border-radius: 8px;
+            padding: 4px;
+        }
+        .tab-button {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            background: transparent;
+            color: #6b7280;
+            font-weight: 500;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .tab-button.active {
+            background: white;
+            color: #374151;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* テーブル */
+        .data-table { 
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .data-table th { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .data-table td { 
+            padding: 16px 20px;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 0.95em;
+        }
+        .data-table tr:nth-child(even) { background: #f9fafb; }
+        .data-table tr:hover { background: #f3f4f6; }
+        
+        /* ステータスバッジ */
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-identical { background: #ecfdf5; color: #059669; }
+        .status-semantically-equivalent { background: #f0fdf4; color: #10b981; }
+        .status-plausible-but-different { background: #fffbeb; color: #f59e0b; }
+        .status-incorrect { background: #fef2f2; color: #ef4444; }
+        .status-skipped { background: #f8fafc; color: #6b7280; }
+        
+        /* メトリクスカード */
+        .metrics-grid { 
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
+        }
+        .metric-card { 
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            border-left: 5px solid var(--accent-color);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .metric-card:hover { 
+            transform: translateY(-5px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+        }
+        .metric-card.success { --accent-color: #10b981; }
+        .metric-card.warning { --accent-color: #f59e0b; }
+        .metric-card.error { --accent-color: #ef4444; }
+        .metric-card.info { --accent-color: #3b82f6; }
+        
+        .metric-value { 
+            font-size: 3em;
+            font-weight: 700;
+            color: var(--accent-color);
+            margin: 0;
+            line-height: 1;
+        }
+        .metric-label { 
+            color: #6b7280;
+            font-size: 0.95em;
+            margin-top: 10px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* 推奨事項 */
+        .recommendation {
+            background: #fffbeb;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        .recommendation.high { background: #fef2f2; border-color: #ef4444; }
+        .recommendation.medium { background: #fffbeb; border-color: #f59e0b; }
+        .recommendation.low { background: #f0fdf4; border-color: #10b981; }
+        
+        .recommendation-title {
+            font-weight: 600;
+            color: #374151;
+            margin: 0 0 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .recommendation-description {
+            color: #6b7280;
+            line-height: 1.6;
+            margin: 0;
+        }
+        
+        /* レスポンシブ */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .content { padding: 20px 15px; }
+            .title { font-size: 2.2em; }
+            .metrics-grid { grid-template-columns: 1fr; }
+            .tab-buttons { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">🔬 APRシステム詳細分析レポート</h1>
+            <p class="subtitle">修正パフォーマンス・難易度・改善点の詳細分析</p>
+        </div>
+
+        <div class="content">
+            <!-- サマリー統計 -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">📊</span>
+                    分析サマリー
+                </h2>
+                <div class="metrics-grid">
+                    <div class="metric-card info">
+                        <div class="metric-value">{{summary.totalProcessed}}</div>
+                        <div class="metric-label">📁 分析対象総数</div>
+                    </div>
+                    <div class="metric-card success">
+                        <div class="metric-value">{{summary.avgModifiedLines}}</div>
+                        <div class="metric-label">📝 平均修正行数</div>
+                    </div>
+                    <div class="metric-card warning">
+                        <div class="metric-value">{{summary.avgModifiedFiles}}</div>
+                        <div class="metric-label">📄 平均修正ファイル数</div>
+                    </div>
+                    <div class="metric-card error">
+                        <div class="metric-value">{{summary.mostCommonProjects.length}}</div>
+                        <div class="metric-label">🎯 分析プロジェクト数</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 正確性レベル別詳細分析 -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">🎯</span>
+                    正確性レベル別詳細分析
+                </h2>
+                
+                <div class="tab-container">
+                    <div class="tab-buttons">
+                        <button class="tab-button active" onclick="showTab('identical')">🎯 完全一致</button>
+                        <button class="tab-button" onclick="showTab('semantically')">✅ 意味的同等</button>
+                        <button class="tab-button" onclick="showTab('plausible')">🟡 妥当だが異なる</button>
+                        <button class="tab-button" onclick="showTab('incorrect')">❌ 不正確</button>
+                        <button class="tab-button" onclick="showTab('skipped')">⏭️ スキップ</button>
+                    </div>
+
+                    <!-- 完全一致タブ -->
+                    <div id="identical" class="tab-content active">
+                        <h3>🎯 完全一致（IDENTICAL）</h3>
+                        <p>Ground Truthと文字通り完全に同一の修正が生成されたケース</p>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>プロジェクト</th>
+                                    <th>PR名</th>
+                                    <th>修正ファイル数</th>
+                                    <th>修正行数</th>
+                                    <th>修正タイプ</th>
+                                    <th>APRモデル</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{#each correctnessLevels.identical}}
+                                <tr>
+                                    <td>{{projectName}}</td>
+                                    <td>{{pullRequestName}}</td>
+                                    <td>{{modifiedFiles}}</td>
+                                    <td>{{modifiedLines}}</td>
+                                    <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
+                                    <td>{{aprModel}}</td>
+                                </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 意味的同等タブ -->
+                    <div id="semantically" class="tab-content">
+                        <h3>✅ 意味的同等（SEMANTICALLY_EQUIVALENT）</h3>
+                        <p>異なる実装だが機能的に同等の修正が生成されたケース</p>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>プロジェクト</th>
+                                    <th>PR名</th>
+                                    <th>修正ファイル数</th>
+                                    <th>修正行数</th>
+                                    <th>修正タイプ</th>
+                                    <th>APRモデル</th>
+                                    <th>評価理由</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{#each correctnessLevels.semanticallyEquivalent}}
+                                <tr>
+                                    <td>{{projectName}}</td>
+                                    <td>{{pullRequestName}}</td>
+                                    <td>{{modifiedFiles}}</td>
+                                    <td>{{modifiedLines}}</td>
+                                    <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
+                                    <td>{{aprModel}}</td>
+                                    <td title="{{evaluationReasoning}}">{{#if evaluationReasoning}}{{evaluationReasoning}}{{else}}評価理由なし{{/if}}</td>
+                                </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 妥当だが異なるタブ -->
+                    <div id="plausible" class="tab-content">
+                        <h3>🟡 妥当だが異なる（PLAUSIBLE_BUT_DIFFERENT）</h3>
+                        <p>妥当性はあるが最適解ではない修正が生成されたケース</p>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>プロジェクト</th>
+                                    <th>PR名</th>
+                                    <th>修正ファイル数</th>
+                                    <th>修正行数</th>
+                                    <th>修正タイプ</th>
+                                    <th>APRモデル</th>
+                                    <th>評価理由</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{#each correctnessLevels.plausibleButDifferent}}
+                                <tr>
+                                    <td>{{projectName}}</td>
+                                    <td>{{pullRequestName}}</td>
+                                    <td>{{modifiedFiles}}</td>
+                                    <td>{{modifiedLines}}</td>
+                                    <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
+                                    <td>{{aprModel}}</td>
+                                    <td title="{{evaluationReasoning}}">{{#if evaluationReasoning}}{{evaluationReasoning}}{{else}}評価理由なし{{/if}}</td>
+                                </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 不正確タブ -->
+                    <div id="incorrect" class="tab-content">
+                        <h3>❌ 不正確（INCORRECT）</h3>
+                        <p>問題を解決していない、または有害な修正が生成されたケース</p>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>プロジェクト</th>
+                                    <th>PR名</th>
+                                    <th>修正ファイル数</th>
+                                    <th>修正行数</th>
+                                    <th>修正タイプ</th>
+                                    <th>APRモデル</th>
+                                    <th>評価理由</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{#each correctnessLevels.incorrect}}
+                                <tr>
+                                    <td>{{projectName}}</td>
+                                    <td>{{pullRequestName}}</td>
+                                    <td>{{modifiedFiles}}</td>
+                                    <td>{{modifiedLines}}</td>
+                                    <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
+                                    <td>{{aprModel}}</td>
+                                    <td title="{{evaluationReasoning}}">{{#if evaluationReasoning}}{{evaluationReasoning}}{{else}}評価理由なし{{/if}}</td>
+                                </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- スキップタブ -->
+                    <div id="skipped" class="tab-content">
+                        <h3>⏭️ スキップ（SKIPPED）</h3>
+                        <p>技術的な理由で評価できなかったケース</p>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>プロジェクト</th>
+                                    <th>PR名</th>
+                                    <th>APRモデル</th>
+                                    <th>スキップ理由</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{#each correctnessLevels.skipped}}
+                                <tr>
+                                    <td>{{projectName}}</td>
+                                    <td>{{pullRequestName}}</td>
+                                    <td>{{aprModel}}</td>
+                                    <td>{{#if skipReason}}{{skipReason}}{{else}}理由不明{{/if}}</td>
+                                </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 難易度分析 -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">📈</span>
+                    修正難易度分析
+                </h2>
+                
+                <div class="metrics-grid">
+                    <div class="metric-card success">
+                        <div class="metric-value">{{summary.difficultyAnalysis.byModifiedLines.easy.length}}</div>
+                        <div class="metric-label">🟢 簡単（≤5行）</div>
+                    </div>
+                    <div class="metric-card warning">
+                        <div class="metric-value">{{summary.difficultyAnalysis.byModifiedLines.medium.length}}</div>
+                        <div class="metric-label">🟡 中程度（6-20行）</div>
+                    </div>
+                    <div class="metric-card error">
+                        <div class="metric-value">{{summary.difficultyAnalysis.byModifiedLines.hard.length}}</div>
+                        <div class="metric-label">🔴 困難（≥21行）</div>
+                    </div>
+                    <div class="metric-card info">
+                        <div class="metric-value">{{summary.difficultyAnalysis.byModifiedFiles.single.length}}</div>
+                        <div class="metric-label">📄 単一ファイル</div>
+                    </div>
+                </div>
+
+                <h3>修正タイプ別成功率</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>修正タイプ</th>
+                            <th>総数</th>
+                            <th>成功数</th>
+                            <th>成功率</th>
+                            <th>推奨アクション</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each summary.difficultyAnalysis.byModificationType}}
+                        <tr>
+                            <td><span class="status-badge">{{@key}}</span></td>
+                            <td>{{total}}</td>
+                            <td>{{correct}}</td>
+                            <td>
+                                <span class="status-badge {{#if (gt successRate 70)}}status-identical{{else if (gt successRate 50)}}status-plausible-but-different{{else}}status-incorrect{{/if}}">
+                                    {{successRate}}%
+                                </span>
+                            </td>
+                            <td>
+                                {{#if (lt successRate 50)}}
+                                    ⚠️ 改善が必要
+                                {{else if (lt successRate 70)}}
+                                    🔄 最適化推奨
+                                {{else}}
+                                    ✅ 良好
+                                {{/if}}
+                            </td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 改善推奨事項 -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">💡</span>
+                    改善推奨事項
+                </h2>
+                
+                {{#each summary.difficultyAnalysis.recommendations}}
+                <div class="recommendation {{priority}}">
+                    <div class="recommendation-title">
+                        {{#if (eq priority 'high')}}🚨{{else if (eq priority 'medium')}}⚠️{{else}}💡{{/if}}
+                        {{title}}
+                        <span style="font-size: 0.8em; background: rgba(0,0,0,0.1); padding: 2px 8px; border-radius: 12px;">{{priority}}</span>
+                    </div>
+                    <p class="recommendation-description">{{description}}</p>
+                </div>
+                {{/each}}
+            </div>
+
+            <!-- プロジェクト別分析 -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="section-icon">🏢</span>
+                    プロジェクト別分析
+                </h2>
+                
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>プロジェクト名</th>
+                            <th>修正数</th>
+                            <th>平均修正行数</th>
+                            <th>平均ファイル数</th>
+                            <th>主要修正タイプ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each summary.mostCommonProjects}}
+                        <tr>
+                            <td><strong>{{name}}</strong></td>
+                            <td>{{count}}</td>
+                            <td>-</td>
+                            <td>-</td>
+                            <td>-</td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div style="text-align: center; padding: 30px; background: #f9fafb; border-top: 1px solid #e5e7eb;">
+            <div style="color: #6b7280; font-size: 0.9em;">
+                レポート生成日時: {{timestamp}}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            // すべてのタブコンテンツを非表示
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // すべてのタブボタンを非アクティブ
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // 選択されたタブを表示
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Handlebarsヘルパー関数のエミュレーション（クライアント側）
+        function gt(a, b) {
+            return a > b;
+        }
+        
+        function lt(a, b) {
+            return a < b;
+        }
+        
+        function eq(a, b) {
+            return a === b;
+        }
+    </script>
+</body>
+</html>

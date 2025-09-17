@@ -2,10 +2,14 @@
  * キャッシュ機能付きDatasetAnalysisController
  * 元のDatasetAnalysisControllerにキャッシュ機能を統合
  */
+import fs from 'fs/promises';
 import path from 'path';
 import { CachedDatasetRepository } from '../Repository/CachedDatasetRepository.js';
 import { APRLogService } from '../Service/APRLogService.js';
-import { LLMEvaluationService } from '../Service/LLMEvaluationService.js';
+import LLMErrorHandler from '../Service/LLMErrorHandler.js';
+import LLMEvaluationService from '../Service/LLMEvaluationService.js';
+import { LLMClientController } from '../Controller/LLMClientController.js';
+import { TemplateRenderer } from '../Service/TemplateCompiler.js';
 import { ProcessingStats } from '../Model/ProcessingStats.js';
 import { ConsoleView } from '../View/ConsoleView.js';
 import { StatisticsReportView } from '../View/StatisticsReportView.js';
@@ -26,7 +30,8 @@ export class CachedDatasetAnalysisController {
         
         // Service層
         this.aprLogService = new APRLogService();
-        this.llmEvaluationService = new LLMEvaluationService();
+        // LLMEvaluationServiceは後でexecuteAnalysisで適切に初期化される
+        this.llmEvaluationService = null;
         
         // View層
         this.consoleView = new ConsoleView();
@@ -38,6 +43,9 @@ export class CachedDatasetAnalysisController {
         
         // Model
         this.stats = new ProcessingStats();
+        
+        // 共通エラーハンドラー
+        this.errorHandler = new LLMErrorHandler();
         
         // キャッシュ設定
         this.cacheEnabled = cacheEnabled;
@@ -65,6 +73,30 @@ export class CachedDatasetAnalysisController {
     }
 
     /**
+     * LLMEvaluationServiceを初期化
+     */
+    async initializeLLMEvaluationService() {
+        try {
+            // LLMクライアントの初期化
+            const llmClient = LLMClientController.create(this.config);
+            await llmClient.waitForInitialization();
+            
+            // テンプレートレンダラーの初期化
+            const templatePath = '/app/prompt/00_evaluationPrompt.txt';
+            const templateString = await fs.readFile(templatePath, 'utf-8');
+            const templateRenderer = new TemplateRenderer(templateString);
+            
+            // LLMEvaluationServiceの初期化
+            this.llmEvaluationService = new LLMEvaluationService(llmClient, templateRenderer);
+            
+            console.log('✅ LLMEvaluationService初期化完了');
+        } catch (error) {
+            console.error('❌ LLMEvaluationService初期化失敗:', error.message);
+            throw error;
+        }
+    }
+
+    /**
      * データセット解析のメイン実行メソッド（キャッシュ機能付き）
      * @param {string} datasetDir - データセットディレクトリのパス
      * @param {string} aprOutputPath - APRログディレクトリのパス
@@ -81,12 +113,18 @@ export class CachedDatasetAnalysisController {
             generateHTMLReport = true,
             generateErrorReport = true,
             generateDetailReports = false,
+            generateDetailedAnalysis = false,
             useCache = true,
             clearCacheFirst = false
         } = options;
         
         // Repository層を正しいパラメータで再初期化
         this.datasetRepository = new CachedDatasetRepository(datasetDir, aprOutputPath, useCache);
+        
+        // LLMEvaluationServiceを初期化
+        if (!this.llmEvaluationService) {
+            await this.initializeLLMEvaluationService();
+        }
         
         // 初回キャッシュクリア（オプション）
         if (clearCacheFirst) {
@@ -142,7 +180,7 @@ export class CachedDatasetAnalysisController {
             
             // HTMLレポート生成
             if (generateHTMLReport) {
-                const htmlReportResult = await this.generateHTMLReports(generateErrorReport, generateDetailReports);
+                const htmlReportResult = await this.generateHTMLReports(generateErrorReport, generateDetailReports, generateDetailedAnalysis, options);
                 this.stats.htmlReportResult = htmlReportResult;
             }
             
@@ -379,6 +417,7 @@ export class CachedDatasetAnalysisController {
 
             // 成功した処理の統計に追加
             this.stats.addMatchedPair({
+                datasetEntry: pullRequestKey, // 追加: datasetEntryフィールド
                 project: projectName,
                 category: categoryName,
                 pullRequest: pullRequestName,
@@ -412,24 +451,36 @@ export class CachedDatasetAnalysisController {
         this.consoleView.showGroundTruthDiffStart(aprDiffFiles.length);
         
         try {
-            // キャッシュ機能付き統合機能を使用
-            const result = await this.datasetRepository.getChangedFilesWithDiff(
+            // APRで修正されたファイルのみを対象にするため、
+            // 指定されたファイルリストのdiffを生成
+            if (!aprDiffFiles || aprDiffFiles.length === 0) {
+                console.log('⚠️ APR差分ファイルリストが空のため、Ground Truth Diffを生成できません');
+                return null;
+            }
+
+            // キャッシュ機能付きの generateGroundTruthDiff を直接使用
+            const { generateGroundTruthDiff } = await import('../GenerateFileChanged_Cached.js');
+            const groundTruthDiff = await generateGroundTruthDiff(
                 premergePath, 
                 mergePath, 
-                null // 全ファイル対象
+                aprDiffFiles,
+                true // useCache = true
             );
             
-            if (result.groundTruthDiff) {
-                const diffLines = result.groundTruthDiff.split('\n').length;
+            if (groundTruthDiff && groundTruthDiff.trim()) {
+                const diffLines = groundTruthDiff.split('\n').length;
                 this.consoleView.showGroundTruthDiffSuccess(diffLines);
-                this.consoleView.showGroundTruthDiffInfo(result.changedFiles.length, result.changedFiles);
+                this.consoleView.showGroundTruthDiffInfo(aprDiffFiles.length, aprDiffFiles);
+                console.log(`✅ Ground Truth Diff生成成功: ${diffLines}行, ${aprDiffFiles.length}ファイル`);
             } else {
                 this.consoleView.showGroundTruthDiffFailure();
+                console.log('⚠️ Ground Truth Diffが空または生成失敗');
             }
             
-            return result.groundTruthDiff;
+            return groundTruthDiff;
         } catch (error) {
             this.consoleView.showGroundTruthDiffError(error.message);
+            console.error('❌ Ground Truth Diff生成エラー:', error);
             return null;
         }
     }
@@ -440,7 +491,7 @@ export class CachedDatasetAnalysisController {
      * @param {boolean} generateDetailReports - 詳細レポート生成の有無
      * @returns {Promise<Object>} HTMLレポート生成結果
      */
-    async generateHTMLReports(generateErrorReport, generateDetailReports) {
+    async generateHTMLReports(generateErrorReport, generateDetailReports, generateDetailedAnalysis, reportOptions = {}) {
         try {
             const sessionId = this.getJSTTimestamp();
             const reportResults = [];
@@ -451,19 +502,33 @@ export class CachedDatasetAnalysisController {
 
             // エラーレポート生成
             if (generateErrorReport && this.stats.errorEntries.length > 0) {
+                console.log('🔍 generateHTMLReports - this.stats.errorEntries type:', typeof this.stats.errorEntries);
+                console.log('🔍 generateHTMLReports - this.stats.errorEntries isArray:', Array.isArray(this.stats.errorEntries));
+                console.log('🔍 generateHTMLReports - this.stats.errorEntries length:', this.stats.errorEntries.length);
+                console.log('🔍 generateHTMLReports - this.stats.errorEntries sample:', this.stats.errorEntries[0]);
+                
                 const errorResult = await this.htmlReportController.generateErrorReport(this.stats.errorEntries, sessionId);
                 reportResults.push(errorResult);
             }
 
             // 詳細レポート生成（最初の数件）
             if (generateDetailReports && this.stats.matchedPairs.length > 0) {
-                const maxDetailReports = 10;
+                const maxDetailReports = reportOptions?.maxDetailReports || 10;
                 const detailPairs = this.stats.matchedPairs.slice(0, maxDetailReports);
+                
+                console.log(`📝 詳細レポート生成開始: ${detailPairs.length}件`);
                 
                 for (const pair of detailPairs) {
                     const detailResult = await this.htmlReportController.generateEntryDetailReport(pair, sessionId);
                     reportResults.push(detailResult);
                 }
+            }
+
+            // 詳細分析レポート生成
+            if (generateDetailedAnalysis && this.stats.matchedPairs.length > 0) {
+                console.log('🔬 詳細分析レポートを生成中...');
+                const detailedAnalysisReport = await this.htmlReportController.generateDetailedAnalysisReport(this.stats, sessionId);
+                reportResults.push(detailedAnalysisReport);
             }
 
             // サマリーページの生成
@@ -545,7 +610,7 @@ export class CachedDatasetAnalysisController {
                 }).join('\n\n')
             };
 
-            const evaluationResult = await this.llmEvaluationService.evaluateWithTemplate(evaluationContext);
+            const evaluationResult = await this.executeLLMEvaluationWithRetry(evaluationContext);
 
             if (evaluationResult.success) {
                 this.consoleView.showPromptGenerated(evaluationResult.result.promptLength || 0);
@@ -560,7 +625,8 @@ export class CachedDatasetAnalysisController {
                 console.error('  - エラー:', evaluationResult.error);
                 console.error('  - 結果:', JSON.stringify(evaluationResult.result, null, 2));
                 
-                this.consoleView.showLLMEvaluationFailure();
+                const errorAnalysis = evaluationResult.result?.errorAnalysis;
+                this.consoleView.showLLMEvaluationFailure(errorAnalysis);
                 finalModInfo.llmEvaluation = { error: evaluationResult.error };
                 
                 // 評価パイプライン失敗
@@ -572,7 +638,9 @@ export class CachedDatasetAnalysisController {
             console.error('  - エラーメッセージ:', error.message);
             console.error('  - スタックトレース:', error.stack);
             
-            this.consoleView.showLLMEvaluationError(error.message);
+            // 標準化エラーからエラー解析を取得
+            const errorAnalysis = error.errorAnalysis || this.errorHandler.analyzeLLMError(error);
+            this.consoleView.showLLMEvaluationError(error.message, errorAnalysis);
             finalModInfo.llmEvaluation = { error: error.message, templateUsed: false };
             
             // 評価パイプライン失敗
@@ -711,5 +779,92 @@ export class CachedDatasetAnalysisController {
                 hasInteractionLog
             }
         };
+    }
+
+    /**
+     * リトライ機能付きのLLM評価実行
+     * @param {Object} evaluationContext - 評価コンテキスト
+     * @param {number} maxRetries - 最大リトライ回数（デフォルト: 2）
+     * @param {number} baseDelayMs - 基本待機時間（デフォルト: 1000ms）
+     * @returns {Promise<Object>} 評価結果
+     */
+    async executeLLMEvaluationWithRetry(evaluationContext, maxRetries = 2, baseDelayMs = 1000) {
+        let lastError = null;
+        
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`🔄 LLM評価実行 (試行 ${attempt + 1}/${maxRetries + 1})`);
+                
+                const result = await this.llmEvaluationService.evaluateWithTemplate(evaluationContext);
+                
+                if (result.success) {
+                    if (attempt > 0) {
+                        console.log(`✅ LLM評価成功 (${attempt + 1}回目で成功)`);
+                    }
+                    return result;
+                }
+                
+                // 失敗した場合のエラー解析
+                const errorAnalysis = result.result?.errorAnalysis;
+                if (errorAnalysis && !this.errorHandler.isRetryable(errorAnalysis)) {
+                    console.log(`❌ リトライ不可能なエラーのため中断: ${errorAnalysis.type}`);
+                    return result;
+                }
+                
+                lastError = result;
+                
+                // 最後の試行でなければ待機
+                if (attempt < maxRetries) {
+                    const delayMs = baseDelayMs * Math.pow(2, attempt); // 指数バックオフ
+                    console.log(`⏳ ${delayMs}ms 待機してリトライします...`);
+                    await this.sleep(delayMs);
+                }
+                
+            } catch (error) {
+                console.error(`❌ LLM評価例外 (試行 ${attempt + 1}):`, error.message);
+                
+                // 共通エラーハンドラーでエラーを解析
+                const errorAnalysis = this.errorHandler.analyzeLLMError(error);
+                this.errorHandler.logErrorDetails(errorAnalysis);
+                
+                if (!this.errorHandler.isRetryable(errorAnalysis)) {
+                    console.log(`❌ リトライ不可能なエラーのため中断: ${errorAnalysis.type}`);
+                    
+                    // 標準化エラーを作成してスロー
+                    const standardError = this.errorHandler.createStandardError(error, errorAnalysis);
+                    throw standardError;
+                }
+                
+                lastError = error;
+                
+                // 最後の試行でなければ待機
+                if (attempt < maxRetries) {
+                    const delayMs = baseDelayMs * Math.pow(2, attempt);
+                    console.log(`⏳ ${delayMs}ms 待機してリトライします...`);
+                    await this.sleep(delayMs);
+                } else {
+                    // 最後の試行で失敗した場合はエラーをスロー
+                    throw error;
+                }
+            }
+        }
+        
+        // すべての試行が失敗した場合
+        if (lastError && lastError.success !== undefined) {
+            // LLMEvaluationServiceからの結果の場合
+            return lastError;
+        } else {
+            // 例外の場合
+            throw lastError;
+        }
+    }
+
+    /**
+     * 指定された時間だけ待機する
+     * @param {number} ms - 待機時間（ミリ秒）
+     * @returns {Promise<void>}
+     */
+    async sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
