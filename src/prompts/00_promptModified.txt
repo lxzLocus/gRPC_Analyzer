@@ -27,6 +27,7 @@ You are tasked with re-checking and refining the previous code modifications mad
 ## Your Task & Response Format ##
 1.  **Analyze & Think**: Confirm that the modification was applied. Based on your current plan, decide your next action and explain your reasoning in a `%_Thought_%` section.
 2.  **Act**: Proceed with the next action by using ONE of the following action tags: `%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`.
+    **Guideline for `%_Modified_%`**: Before generating a patch, you MUST re-verify that all variables, functions, and types you use are defined or imported within the provided code context. If a definition is not found, request additional files.
 
 // Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
 

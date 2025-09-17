@@ -30,6 +30,7 @@ You are tasked with retrieving and reviewing specific source code files that wer
 1.  **Analyze & Think**: Review the new information I've provided. Analyze how this impacts your original plan in a `%_Thought_%` section.
 2.  **Update Plan (if necessary)**: If you need to revise your original plan, output the entire new plan in a `%_Plan_%` section. If no changes to the plan are needed, omit this tag.
 3.  **Act**: Proceed with the next action according to your plan by using ONE of the following action tags: `%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`.
+    **Guideline for `%_Modified_%`**: Before generating a patch, you MUST re-verify that all variables, functions, and types you use are defined or imported within the provided code context. If a definition is not found, request additional files.
 
 // Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
 

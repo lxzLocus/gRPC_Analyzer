@@ -182,13 +182,42 @@ sequenceDiagram
         BatchController->>Services: validateDataset()
         BatchController->>Services: getRepositories()
         
+    
         loop プルリクエスト毎
             BatchController->>Services: processPullRequest()
-            Services->>LLMFlow: new LLMFlowController()
-            LLMFlow->>OpenAI: analyze request
-            OpenAI-->>LLMFlow: response
-            LLMFlow-->>Services: processed result
-            Services-->>BatchController: success/failure
+            Services->>LLMFlow: executeLLMController(premergeDir)
+            
+            Note over LLMFlow: Phase 1: 初期コンテキスト準備
+            LLMFlow->>LLMFlow: prepareInitialContext()
+            LLMFlow->>LLMFlow: generatePrompts(01-05_*.txt)
+            
+            Note over LLMFlow: Phase 2: LLM分析・計画
+            LLMFlow->>OpenAI: sendInitialInfoToLLM()
+            OpenAI-->>LLMFlow: 分析結果(%_Thought_%, %_Plan_%)
+            
+            alt 追加情報が必要
+                LLMFlow->>LLMFlow: systemAnalyzeRequest()
+                LLMFlow->>LLMFlow: getFileContent() / getDirectoryListing()
+                LLMFlow->>OpenAI: sendInfoToLLM()
+                OpenAI-->>LLMFlow: 更新された分析
+            end
+            
+            Note over LLMFlow: Phase 3: パッチ生成・適用
+            LLMFlow->>OpenAI: 修正要求
+            OpenAI-->>LLMFlow: パッチ提案(%_Modified_%)
+            LLMFlow->>LLMFlow: systemParseDiff()
+            LLMFlow->>LLMFlow: systemApplyDiff()
+            
+            alt パッチ適用成功
+                LLMFlow->>OpenAI: sendResultToLLM(成功)
+                OpenAI-->>LLMFlow: 完了確認(%%_Fin_%%)
+            else パッチ適用失敗
+                LLMFlow->>OpenAI: sendErrorToLLM(エラー詳細)
+                OpenAI-->>LLMFlow: 修正再試行
+            end
+            
+            LLMFlow-->>Services: 処理結果
+            Services-->>BatchController: ProcessingResult
         end
     end
     
@@ -196,6 +225,57 @@ sequenceDiagram
     Controller->>MainScript: statistics
     MainScript->>User: 🎉 Success: 2/2 (100%)
 ```
+
+### 🔄 パッチ生成フローの詳細
+
+#### Phase 1: 初期コンテキスト準備
+MainScript実行時、各プルリクエストに対して以下のコンテキストファイルが自動生成されます：
+
+| ファイル | 内容 | 生成基準 |
+|:--|:--|:--|
+| `01_proto.txt` | Protoファイル情報 | 変更・依存関係・その他のprotoファイル |
+| `02_protoFileChanges.txt` | Proto差分 | premerge/merge間の.proto変更 |
+| `03_fileChanges.txt` | 全変更ファイル | 変更されたファイルパス一覧 |
+| `04_surroundedFilePath.txt` | プロジェクト構造 | 5階層ディレクトリ + ファイル分類 |
+| `05_suspectedFiles.txt` | 疑わしいファイル | スコアリング上位3件の変更前内容 |
+
+#### Phase 2: LLM分析・計画サイクル
+```
+1. 初期プロンプト送信 → LLM分析(%_Thought_%)
+2. 実行計画生成(%_Plan_%)
+3. 追加情報要求(%_Reply Required_%)
+   ├── FILE_CONTENT: 特定ファイルの内容取得
+   ├── DIRECTORY_LISTING: ディレクトリ構造詳細
+   └── その他の分析要求
+4. 情報追加 → 再分析サイクル
+```
+
+#### Phase 3: パッチ生成・適用・検証
+```
+1. パッチ提案(%_Modified_%)
+2. Diff解析・バリデーション
+3. バックアップ作成
+4. パッチ適用実行
+5. 適用結果検証
+   ├── 成功 → LLMに成功結果送信
+   └── 失敗 → エラーコンテキスト収集・LLMに送信
+6. 完了確認(%%_Fin_%%) または 修正再試行
+```
+
+#### パッチ品質検証基準
+| 検証項目 | 必須 | 説明 |
+|:--|:--:|:--|
+| %%_Fin_%%タグ存在 | ✅ | 処理完了の明確な指示 |
+| JSON構造妥当性 | ✅ | パース可能な応答形式 |
+| 修正内容存在 | ✅ | 実際のコード変更が含まれる |
+| 構文有効性 | 推奨 | 生成されたコードの構文チェック |
+| コンテキスト適合性 | 推奨 | 元の問題に対する適切な修正 |
+
+#### リトライ・エラーハンドリング
+- **最大リトライ回数**: 3回（設定可能）
+- **指数バックオフ**: 1秒→2秒→4秒の待機時間
+- **リトライ対象エラー**: ネットワーク、API制限、一時的障害
+- **リトライ除外エラー**: 構文エラー、認証エラー、形式エラー
 ## 🚀 クイックスタート
 
 ### 前提条件
@@ -265,8 +345,26 @@ nohup node scripts/MainScript.js 1 /app/output > processing.log 2>&1 &
 
 ```
 🚀 MVC Batch Processing Starting...
+========================================
 📂 Selected Dataset: /app/dataset/test (index: 4)
 📁 Output Directory: /tmp/output
+🐛 Process ID: 12345
+📝 Node.js Version: v18.17.0
+🗑️ Garbage Collection: Available
+
+🤖 LLM Configuration:
+   Provider: openai
+   Model: gpt-4
+   Temperature: 0.7
+   Max Tokens: 4000
+   API Key Length: 51
+
+⚙️ Processing Options:
+   Max Retries: 3
+   Memory Cleanup Interval: 5
+   Timeout: 300s
+   Garbage Collection: Enabled
+========================================
 
 🎮 MVC Controller Integration: Starting full implementation...
 🚀 Starting MVC batch processing...
@@ -274,7 +372,16 @@ nohup node scripts/MainScript.js 1 /app/output > processing.log 2>&1 &
 
 🔄 Processing repository: servantes
   📁 Category servantes/pullrequest
+    🔄 Processing (attempt 1/4): servantes/pullrequest/add_Secrets_service-_global_yaml
+      📝 Phase 1: コンテキスト準備中...
+      📝 Phase 2: LLM分析中...
+      📝 Phase 3: パッチ生成・適用中...
     ✅ add_Secrets_service-_global_yaml (27s)
+    
+    🔄 Processing (attempt 1/4): servantes/pullrequest/fix_up_protobufs_and_improve_ci
+      📝 Phase 1: コンテキスト準備中...
+      📝 Phase 2: LLM分析中...
+      📝 Phase 3: パッチ生成・適用中...
     ✅ fix_up_protobufs_and_improve_ci (29s)
 
 🎉 MVC batch processing completed successfully!
@@ -284,7 +391,41 @@ nohup node scripts/MainScript.js 1 /app/output > processing.log 2>&1 &
 ❌ Failed: 0
 ⏭️ Skipped: 0
 ⏱️ Total Duration: 55s
+📊 Final report generated successfully
 ========================================
+```
+
+### 🔍 パッチ生成プロセスの詳細ログ例
+
+各プルリクエスト処理中に生成される詳細なログ：
+
+```
+🔄 Processing (attempt 1/4): servantes/pullrequest/add_Secrets_service-_global_yaml
+
+📝 Phase 1: 初期コンテキスト準備
+  ✅ 01_proto.txt - Protoファイル分析完了 (3 files found, 1 changed)
+  ✅ 02_protoFileChanges.txt - Proto差分抽出完了 (15 lines changed)
+  ✅ 03_fileChanges.txt - 変更ファイル一覧生成完了 (7 files)
+  ✅ 04_surroundedFilePath.txt - プロジェクト構造分析完了 (5 levels deep)
+  ✅ 05_suspectedFiles.txt - 疑わしいファイル特定完了 (top 3 scored files)
+
+📝 Phase 2: LLM分析・計画
+  🤖 初期プロンプト送信中...
+  ✅ LLM分析完了 (%_Thought_%, %_Plan_% タグ検出)
+  🔍 追加情報要求: FILE_CONTENT (main.go, service.yaml)
+  🤖 追加情報付きで再分析中...
+  ✅ 最終分析・計画完了
+
+📝 Phase 3: パッチ生成・適用
+  🔧 パッチ提案受信 (%_Modified_% タグ検出)
+  ✅ Diff解析・バリデーション完了
+  💾 バックアップ作成完了
+  🔧 パッチ適用実行中...
+  ✅ パッチ適用成功 (3 files modified, 12 lines changed)
+  🤖 成功結果をLLMに送信中...
+  ✅ LLM完了確認 (%%_Fin_%% タグ検出)
+
+✅ Processing completed successfully (27s)
 ```
 
 ## 🛠️ 開発ガイド
@@ -1185,7 +1326,131 @@ dataset/
 
 ---
 
-## 📈 パフォーマンスメトリクス
+### � 生成されるファイルとログ
+
+#### MainScript実行時の出力構造
+```
+/app/output/                          # または指定した出力ディレクトリ
+├── processing_summary_*.json         # 処理統計・サマリー
+├── error_report_*.json              # エラーレポート（エラー発生時）
+└── individual_results/              # 個別プルリクエスト結果
+    └── repository_name/
+        └── category/
+            └── pullrequest_title/
+                ├── 01_proto.txt           # Protoファイル情報
+                ├── 02_protoFileChanges.txt # Proto差分
+                ├── 03_fileChanges.txt     # 全変更ファイル
+                ├── 04_surroundedFilePath.txt # プロジェクト構造
+                ├── 05_suspectedFiles.txt  # 疑わしいファイル
+                ├── llm_interaction_log.json # LLM対話ログ
+                ├── generated_patches/     # 生成されたパッチ
+                │   ├── patch_001.diff
+                │   ├── patch_002.diff
+                │   └── final_patch.diff
+                └── backups/              # バックアップファイル
+                    ├── pre_apply_backup_*.tar.gz
+                    └── file_snapshots/
+
+/app/logs/                           # システムログ
+├── diff_errors/                     # パッチ適用エラー
+├── parsing_errors/                  # LLM応答解析エラー
+├── file_errors/                     # ファイル操作エラー
+└── performance/                     # パフォーマンスログ
+```
+
+#### 統計・レポートファイル詳細
+
+##### processing_summary_*.json
+```json
+{
+  "summary": {
+    "totalPullRequests": 2,
+    "successfulPullRequests": 2,
+    "failedPullRequests": 0,
+    "skippedPullRequests": 0,
+    "successRate": 100.0,
+    "totalDuration": "55s",
+    "startTime": "2025-09-17T10:30:00Z",
+    "endTime": "2025-09-17T10:30:55Z"
+  },
+  "performance": {
+    "averageProcessingTime": "27.5s",
+    "minProcessingTime": "27s",
+    "maxProcessingTime": "29s",
+    "memoryUsage": {
+      "peak": "512MB",
+      "average": "256MB"
+    }
+  },
+  "llmUsage": {
+    "totalPromptTokens": 12500,
+    "totalCompletionTokens": 3200,
+    "totalCost": "$0.45",
+    "averageTokensPerRequest": 1970
+  },
+  "errorAnalysis": {
+    "totalErrors": 0,
+    "errorsByType": {},
+    "recoveryRate": "N/A"
+  }
+}
+```
+
+##### llm_interaction_log.json（個別PR用）
+```json
+{
+  "experiment_metadata": {
+    "experiment_id": "servantes/pullrequest/add_Secrets_service",
+    "start_time": "2025-09-17T10:30:15Z",
+    "end_time": "2025-09-17T10:30:42Z",
+    "processing_phase": "COMPLETED",
+    "success": true
+  },
+  "context_generation": {
+    "proto_files_analyzed": 3,
+    "changed_files_detected": 7,
+    "suspected_files_scored": 12,
+    "top_suspected_files": [
+      {"file": "main.go", "score": 65},
+      {"file": "service.yaml", "score": 45},
+      {"file": "client.py", "score": 30}
+    ]
+  },
+  "interaction_log": [
+    {
+      "turn": 1,
+      "timestamp": "2025-09-17T10:30:18Z",
+      "prompt_template": "initial_analysis",
+      "llm_request": {
+        "full_prompt_content": "...",
+        "prompt_length": 4500
+      },
+      "llm_response": {
+        "raw_content": "%_Thought_%: ...",
+        "parsed_content": {
+          "thought": "Analysis of proto changes...",
+          "plan": "Will need to update main.go and client.py",
+          "reply_required": ["FILE_CONTENT:main.go"],
+          "has_fin_tag": false
+        },
+        "usage": {
+          "prompt_tokens": 3200,
+          "completion_tokens": 450
+        }
+      }
+    }
+  ],
+  "patches_generated": [
+    {
+      "patch_id": "001",
+      "target_files": ["main.go", "client.py"],
+      "diff_content": "...",
+      "application_result": "SUCCESS",
+      "validation_passed": true
+    }
+  ]
+}
+```
 
 ### 📊 処理速度と品質指標
 
