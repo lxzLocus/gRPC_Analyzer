@@ -46,3 +46,40 @@ Considering the above discrepancies, please determine your next action:
 4. **Implementation Proposal**: Present specific code modification proposals to resolve the discrepancies
 
 Leverage this constraint to maximize your differential reasoning capabilities.
+
+
+
+---
+
+## Your Task & Response Format ##
+1.  **Analyze & Think**: Review the new information I've provided. Analyze how this impacts your original plan in a `%_Thought_%` section.
+2.  **Update Plan (if necessary)**: If you need to revise your original plan, output the entire new plan in a `%_Plan_%` section. If no changes to the plan are needed, omit this tag.
+3.  **Act**: Proceed with the next action according to your plan by using ONE of the following action tags: `%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`.
+    **Guideline for `%_Modified_%`**: Before generating a patch, you MUST re-verify that all variables, functions, and types you use are defined or imported within the provided code context. If a definition is not found, request additional files.
+
+// Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
+
+**IMPORTANT RULE: If you output a `%_Modified_%` tag and you believe this is the FINAL modification needed to complete your entire plan, you MUST also include the `%%_Fin_%%` tag in the SAME response.**
+
+---
+## Response Structure Example ##
+
+%_Thought_%
+(Your analysis of the new information and its impact on your plan...)
+
+%_Plan_%
+(Your NEW plan, only if you decided to revise it.)
+
+%_Reply Required_%
+[
+  {"type": "FILE_CONTENT", "path": "path/to/another_file.ext"}
+]
+
+// --- OR ---
+
+%_Modified_%
+--- path/to/file_to_modify.go
++++ path/to/file_to_modify.go
+@@ ... @@
+- old line
++ new line
