@@ -136,6 +136,43 @@
         .status-plausible-but-different { background: #fffbeb; color: #f59e0b; }
         .status-incorrect { background: #fef2f2; color: #ef4444; }
         .status-skipped { background: #f8fafc; color: #6b7280; }
+
+        /* 意味的類似度スコアバッジ */
+        .score-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            min-width: 40px;
+            text-align: center;
+            color: white;
+            background: #6b7280;
+        }
+        .score-badge.perfect {
+            background: linear-gradient(135deg, #059669, #10b981);
+            box-shadow: 0 2px 4px rgba(5, 150, 105, 0.3);
+        }
+        .score-badge.near-perfect {
+            background: linear-gradient(135deg, #0d9488, #14b8a6);
+            box-shadow: 0 2px 4px rgba(13, 148, 136, 0.3);
+        }
+        .score-badge.high {
+            background: linear-gradient(135deg, #0891b2, #06b6d4);
+            box-shadow: 0 2px 4px rgba(8, 145, 178, 0.3);
+        }
+        .score-badge.medium {
+            background: linear-gradient(135deg, #d97706, #f59e0b);
+            box-shadow: 0 2px 4px rgba(217, 119, 6, 0.3);
+        }
+        .score-badge.low {
+            background: linear-gradient(135deg, #dc2626, #ef4444);
+            box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+        }
+        .score-badge.very-low {
+            background: linear-gradient(135deg, #991b1b, #dc2626);
+            box-shadow: 0 2px 4px rgba(153, 27, 27, 0.3);
+        }
         
         /* メトリクスカード */
         .metrics-grid { 
@@ -276,6 +313,7 @@
                                     <th>修正行数</th>
                                     <th>修正タイプ</th>
                                     <th>APRモデル</th>
+                                    <th>類似度スコア</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -287,6 +325,7 @@
                                     <td>{{modifiedLines}}</td>
                                     <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
                                     <td>{{aprModel}}</td>
+                                    <td><span class="score-badge perfect">{{semanticSimilarityScore}}</span></td>
                                 </tr>
                                 {{/each}}
                             </tbody>
@@ -306,6 +345,7 @@
                                     <th>修正行数</th>
                                     <th>修正タイプ</th>
                                     <th>APRモデル</th>
+                                    <th>類似度スコア</th>
                                     <th>評価理由</th>
                                 </tr>
                             </thead>
@@ -318,6 +358,7 @@
                                     <td>{{modifiedLines}}</td>
                                     <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
                                     <td>{{aprModel}}</td>
+                                    <td><span class="score-badge near-perfect">{{semanticSimilarityScore}}</span></td>
                                     <td title="{{evaluationReasoning}}">{{#if evaluationReasoning}}{{evaluationReasoning}}{{else}}評価理由なし{{/if}}</td>
                                 </tr>
                                 {{/each}}
@@ -326,9 +367,10 @@
                     </div>
 
                     <!-- 妥当だが異なるタブ -->
+                    <!-- 妥当だが異なるタブ -->
                     <div id="plausible" class="tab-content">
                         <h3>🟡 妥当だが異なる（PLAUSIBLE_BUT_DIFFERENT）</h3>
-                        <p>妥当性はあるが最適解ではない修正が生成されたケース</p>
+                        <p>構文的に正しく妥当性はあるが、Ground Truthとは異なるアプローチの修正</p>
                         <table class="data-table">
                             <thead>
                                 <tr>
@@ -338,6 +380,7 @@
                                     <th>修正行数</th>
                                     <th>修正タイプ</th>
                                     <th>APRモデル</th>
+                                    <th>類似度スコア</th>
                                     <th>評価理由</th>
                                 </tr>
                             </thead>
@@ -350,6 +393,7 @@
                                     <td>{{modifiedLines}}</td>
                                     <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
                                     <td>{{aprModel}}</td>
+                                    <td><span class="score-badge {{#gte semanticSimilarityScore 0.7}}high{{else}}{{#gte semanticSimilarityScore 0.5}}medium{{else}}low{{/gte}}{{/gte}}">{{semanticSimilarityScore}}</span></td>
                                     <td title="{{evaluationReasoning}}">{{#if evaluationReasoning}}{{evaluationReasoning}}{{else}}評価理由なし{{/if}}</td>
                                 </tr>
                                 {{/each}}
@@ -358,6 +402,23 @@
                     </div>
 
                     <!-- 不正確タブ -->
+                    <div id="incorrect" class="tab-content">
+                        <h3>❌ 不正確（INCORRECT）</h3>
+                        <p>問題を解決していない、または有害な修正が生成されたケース</p>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>プロジェクト</th>
+                                    <th>PR名</th>
+                                    <th>修正ファイル数</th>
+                                    <th>修正行数</th>
+                                    <th>修正タイプ</th>
+                                    <th>APRモデル</th>
+                                    <th>類似度スコア</th>
+                                    <th>評価理由</th>
+                                </tr>
+                            </thead>
+                            <tbody>                    <!-- 不正確タブ -->
                     <div id="incorrect" class="tab-content">
                         <h3>❌ 不正確（INCORRECT）</h3>
                         <p>問題を解決していない、または有害な修正が生成されたケース</p>
@@ -382,6 +443,7 @@
                                     <td>{{modifiedLines}}</td>
                                     <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
                                     <td>{{aprModel}}</td>
+                                    <td><span class="score-badge {{#gte semanticSimilarityScore 0.2}}low{{else}}very-low{{/gte}}">{{semanticSimilarityScore}}</span></td>
                                     <td title="{{evaluationReasoning}}">{{#if evaluationReasoning}}{{evaluationReasoning}}{{else}}評価理由なし{{/if}}</td>
                                 </tr>
                                 {{/each}}

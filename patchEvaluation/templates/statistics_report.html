@@ -657,6 +657,68 @@
                     </div>
                 </div>
 
+                <!-- 意味的類似度統計セクション -->
+                <h3 style="margin-top: 40px; color: #1f2937; font-size: 1.6em;">📊 意味的類似度統計（Semantic Similarity Analysis）</h3>
+                <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px; border-left: 4px solid #3b82f6;">
+                    <p style="margin: 0; color: #475569; font-size: 14px; line-height: 1.6;">
+                        <strong>意味的類似度スコア</strong>は、生成されたパッチがGround Truthとどれだけ意味的に近いかを0.0-1.0の連続値で評価します。
+                        厳密な正確性（正解/不正解）では捉えきれない「惜しい修正」や「部分的に正しい修正」の品質を定量化し、
+                        APRシステムの性能をより細かく分析できます。
+                    </p>
+                </div>
+
+                <div class="metrics-grid">
+                    <!-- 平均スコア -->
+                    <div class="metric-card info" style="grid-column: span 2;">
+                        <div class="metric-value" style="font-size: 3em; color: #3b82f6;">{{stats.llmEvaluationResults.semanticSimilarity.averageScore}}</div>
+                        <div class="metric-label">📈 平均類似度スコア</div>
+                        <div class="metric-description">全評価対象パッチの意味的類似度の平均値（{{stats.llmEvaluationResults.semanticSimilarity.totalWithScore}}件）</div>
+                        <div class="progress-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" data-width="{{multiply stats.llmEvaluationResults.semanticSimilarity.averageScore 100}}" data-accent-color="#3b82f6" data-accent-color-light="#93c5fd"></div>
+                            </div>
+                            <div class="progress-text">{{multiply stats.llmEvaluationResults.semanticSimilarity.averageScore 100}}% 品質</div>
+                        </div>
+                    </div>
+
+                    <!-- スコア分布 -->
+                    <div class="metric-card success">
+                        <div class="metric-value">{{stats.llmEvaluationResults.semanticSimilarity.scoreBreakdown.perfect}}</div>
+                        <div class="metric-label">🎯 完璧 (1.0)</div>
+                        <div class="metric-description">R0-R15基準を満たす完全正解</div>
+                    </div>
+
+                    <div class="metric-card success">
+                        <div class="metric-value">{{stats.llmEvaluationResults.semanticSimilarity.scoreBreakdown.nearPerfect}}</div>
+                        <div class="metric-label">🌟 ほぼ完璧 (0.9-0.99)</div>
+                        <div class="metric-description">些細な違いのみの高品質修正</div>
+                    </div>
+
+                    <div class="metric-card warning">
+                        <div class="metric-value">{{stats.llmEvaluationResults.semanticSimilarity.scoreBreakdown.high}}</div>
+                        <div class="metric-label">🟢 高類似度 (0.7-0.89)</div>
+                        <div class="metric-description">核心ロジックは正しいが軽微な問題</div>
+                    </div>
+
+                    <div class="metric-card warning">
+                        <div class="metric-value">{{stats.llmEvaluationResults.semanticSimilarity.scoreBreakdown.medium}}</div>
+                        <div class="metric-label">🟡 中程度 (0.5-0.69)</div>
+                        <div class="metric-description">正しいファイル・関数だが実装に欠陥</div>
+                    </div>
+
+                    <div class="metric-card error">
+                        <div class="metric-value">{{stats.llmEvaluationResults.semanticSimilarity.scoreBreakdown.low}}</div>
+                        <div class="metric-label">🟠 低類似度 (0.2-0.49)</div>
+                        <div class="metric-description">正しい箇所だが実装が根本的に間違い</div>
+                    </div>
+
+                    <div class="metric-card error">
+                        <div class="metric-value">{{stats.llmEvaluationResults.semanticSimilarity.scoreBreakdown.veryLow}}</div>
+                        <div class="metric-label">🔴 極低 (0.0-0.19)</div>
+                        <div class="metric-description">間違ったファイルまたは無関係</div>
+                    </div>
+                </div>
+
                 <!-- 妥当性評価詳細セクション -->
                 <h3 style="margin-top: 40px; color: #1f2937; font-size: 1.6em;">🔍 妥当性評価詳細（Plausibility Evaluation）</h3>
                 <div class="metrics-grid">

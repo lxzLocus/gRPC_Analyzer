@@ -276,6 +276,667 @@ MainScript実行時、各プルリクエストに対して以下のコンテキ�
 - **指数バックオフ**: 1秒→2秒→4秒の待機時間
 - **リトライ対象エラー**: ネットワーク、API制限、一時的障害
 - **リトライ除外エラー**: 構文エラー、認証エラー、形式エラー
+
+#### エラーコンテキストの詳細内容
+
+パッチ適用が失敗した場合、LLMに送信される「エラーコンテキスト」には以下の情報が含まれます：
+
+##### 1. 基本エラー情報
+```typescript
+{
+  message: string,           // 基本エラーメッセージ
+  timestamp: string,         // エラー発生時刻
+  phase: 'DIFF_APPLICATION' // 処理フェーズ
+}
+```
+
+##### 2. 詳細エラーコンテキスト（ErrorContext）
+| 項目 | 内容 | 例 |
+|:--|:--|:--|
+| **diffPreview** | 失敗したdiffの最初の100文字 | `--- a/main.go\n+++ b/main.go\n@@ -15,7 +15,7 @@\n package main\n\n import (\n-\t"context"...` |
+| **affectedFiles** | 影響を受けるファイルパス一覧 | `["main.go", "service.yaml", "client.py"]` |
+| **systemState** | システム状態スナップショット | `"Phase: DIFF_APPLICATION, Turn: 3, Errors: 1"` |
+| **possibleCauses** | 推定される原因リスト | `["File not found - target file may not exist", "Line number mismatch - file may have been modified"]` |
+
+##### 3. 推定原因の自動判定ロジック
+| エラータイプ | 検出条件 | 推定原因 |
+|:--|:--|:--|
+| **ファイル不存在** | `ENOENT` を含む | "File not found - target file may not exist" |
+| **権限エラー** | `EACCES` を含む | "Permission denied - insufficient file system permissions" |
+| **diff形式エラー** | `diff` or `patch` を含む | "Invalid diff format or corrupted patch data" |
+| **行番号不一致** | `line` を含む | "Line number mismatch - file may have been modified" |
+| **その他** | 上記以外 | "Unknown error - check diff format and file accessibility" |
+
+##### 4. LLMへの送信形式例
+```
+エラーが発生しました: {
+  "message": "Error applying diff: patch failed at line 23 in main.go",
+  "errorContext": {
+    "diffPreview": "--- a/main.go\n+++ b/main.go\n@@ -15,7 +15,7 @@\n package main\n\n import (\n-\t\"context\"...",
+    "affectedFiles": ["main.go", "service.yaml"],
+    "systemState": "Phase: DIFF_APPLICATION, Turn: 3, Errors: 1",
+    "possibleCauses": [
+      "Line number mismatch - file may have been modified",
+      "Invalid diff format or corrupted patch data"
+    ]
+  },
+  "timestamp": "2025-09-17T10:30:35Z",
+  "phase": "DIFF_APPLICATION"
+}
+
+修正案を再検討してください。
+
+【現在の状況分析】
+- 対象ファイル: main.go（23行目周辺でエラー）
+- エラータイプ: パッチ適用失敗
+- 推定原因: ファイルが既に変更されている可能性
+- 影響範囲: main.go, service.yaml
+
+【修正方針の提案】
+1. ファイルの現在の状態を確認
+2. 行番号ズレを考慮した修正
+3. より安全な差分適用方法の検討
+```
+
+##### 5. エラー回復戦略
+LLMがエラーコンテキストを受け取った後の典型的な回復パターン：
+
+| 戦略 | 適用条件 | アクション例 |
+|:--|:--|:--|
+| **行番号調整** | Line mismatch エラー | 周辺コンテキストを利用した修正位置の再特定 |
+| **ファイル分割** | 複数ファイル同時変更失敗 | 一つずつ順次適用するアプローチに変更 |
+| **フォールバック手法** | diff形式エラー | より単純な文字列置換アプローチへ変更 |
+| **追加情報要求** | ファイル不存在 | FILE_CONTENT要求で現状確認 |
+| **処理中断** | 権限エラー | 修正不可能と判断して安全に終了 |
+
+この包括的なエラーコンテキストにより、LLMは：
+- **具体的な失敗原因を理解**
+- **影響範囲を把握**  
+- **代替アプローチを検討**
+- **より適切な修正案を再生成**
+
+することが可能になります。
+
+##### 6. エラーコンテキスト収集プロセス
+```typescript
+// collectErrorContext()メソッドの処理フロー
+1. diffPreviewの生成
+   └─ 元のdiffの最初の100文字を抽出
+
+2. 影響ファイルの特定  
+   └─ diff内の "---" と "+++" 行からファイルパスを抽出
+
+3. システム状態のスナップショット
+   └─ 現在のフェーズ、ターン数、累積エラー数を記録
+
+4. エラータイプ別の原因推定
+   ├─ ENOENT → ファイル不存在
+   ├─ EACCES → 権限不足  
+   ├─ diff/patch → 形式エラー
+   ├─ line → 行番号不一致
+   └─ その他 → 未知のエラー
+
+5. 詳細ログへの記録
+   └─ logDiffApplicationError()で完全なコンテキスト保存
+```
+
+この仕組みにより、単純な「エラーが発生しました」ではなく、**診断情報付きの建設的なフィードバック**をLLMに提供し、より効果的な修正再試行を実現しています。
+
+### 🔄 複数ターンにわたる累積パッチの扱い
+
+#### 現在の実装方針: **「最新パッチ上書き方式」**
+
+複数のターンで`%_Modified_%`が提案される場合の処理ルールは以下の通りです：
+
+##### 1. 基本的な上書きルール
+```typescript
+// llmFlowController.ts の処理ロジック
+if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
+    // 新しいパッチが提案された場合
+    this.state = State.SystemParseDiff;  // 即座に処理開始
+}
+
+// systemApplyDiff()での実装
+this.context.diff = finalContent;        // 常に最新のdiffで上書き
+this.context.error = undefined;          // エラー状態もリセット
+```
+
+| ターン | LLM提案 | システム動作 | context.diff の状態 |
+|:--:|:--|:--|:--|
+| Turn 1 | `%_Modified_%` file_A修正 | 即座にパッチ適用実行 | file_A修正パッチで上書き |
+| Turn 2 | `%_Reply Required_%` 追加情報要求 | 情報提供、パッチ適用なし | 前回のfile_A修正パッチ保持 |
+| Turn 3 | `%_Modified_%` file_B修正 | 即座にパッチ適用実行 | file_B修正パッチで**完全上書き** |
+| Turn 4 | `%%_Fin_%%` 完了宣言 | 処理終了 | 最終的にfile_B修正のみ適用済み |
+
+#### 2. 上書き方式の利点・欠点
+
+##### ✅ 利点
+- **シンプルな実装**: 複雑な統合ロジック不要
+- **エラー処理が明確**: 失敗時は該当パッチのみ影響
+- **LLMの意図反映**: 最新の判断を重視
+- **デバッグが容易**: 1つのパッチのみ追跡
+
+##### ⚠️ 欠点・制限事項
+- **段階的修正の制約**: Turn 1のfile_A修正がTurn 3で消失
+- **作業の重複**: 同じファイルを複数回修正する非効率性
+- **意図しない上書き**: LLMが前回の修正を忘れる可能性
+
+#### 3. 実際の動作例
+
+```
+Turn 1: LLM提案
+%_Modified_%
+--- a/main.go
++++ b/main.go
+@@ -10,7 +10,7 @@
+-    return "old_value"
++    return "new_value"
+
+→ システム: main.go修正を即座に適用
+
+Turn 3: LLM提案  
+%_Modified_%
+--- a/service.yaml
++++ b/service.yaml
+@@ -5,7 +5,7 @@
+-  port: 8080
++  port: 9090
+
+→ システム: context.diffを完全上書き
+→ 結果: main.goの修正は消失、service.yamlのみ適用
+```
+
+#### 4. 累積パッチ方式との比較
+
+| 項目 | 現在の上書き方式 | 累積パッチ方式 |
+|:--|:--|:--|
+| **実装複雑度** | 低 | 高（マージ競合処理必要） |
+| **LLM負荷** | 低（単一パッチ集中） | 高（全体整合性考慮） |
+| **エラー処理** | 簡潔 | 複雑（部分失敗対応） |
+| **修正範囲** | 明確（最新のみ） | 曖昧（累積効果） |
+| **デバッグ** | 容易 | 困難（依存関係追跡） |
+
+#### 5. 現在の設計哲学
+
+**「1ターン1パッチ」原則**: 
+```
+- LLMは各ターンで完結した修正を提案
+- システムは即座に適用・検証
+- 成功/失敗を明確にフィードバック
+- 次ターンではその結果を踏まえた新たな修正
+```
+
+この設計により、**複雑な状態管理を回避**し、**LLMとシステム間の明確な対話**を実現しています。
+
+#### 6. 制限事項への対応策
+
+LLMプロンプトでの明示的な指示：
+```
+「複数ファイルを修正する場合は、1回の%_Modified_%で全てのファイルを含む統合パッチとして提案してください」
+「前回の修正を踏まえる場合は、それらも含めた完全なパッチを再生成してください」
+```
+
+これにより、システムの制約をLLM側で吸収し、実用的な修正プロセスを実現しています。
+
+### 🔍 パッチ検証（Validation）の詳細
+
+#### 現在の検証レベル: **「基本的な形式・整合性チェック」**
+
+パッチ適用プロセスにおける検証は以下の2段階で実施されます：
+
+##### 1. 適用前検証（systemParseDiff）
+```typescript
+// 基本的なDiff形式チェック
+- Diff構文の妥当性確認
+- ファイルヘッダーの存在確認  
+- 最低限の変更内容検証
+```
+
+**検証内容**: 現在は**構文チェックのみ**で、実際のビルドやリンターは実行されていません。
+
+##### 2. 適用後検証（validateDiffApplication）
+
+| 検証項目 | 検証内容 | レベル |
+|:--|:--|:--:|
+| **形式チェック** | diffヘッダー（---/+++）の存在 | 基本 |
+| **変更統計** | 追加行・削除行・コンテキスト行の計数 | 基本 |
+| **マージ競合検出** | `<<<<<<< HEAD` 等の競合マーカー検索 | 基本 |
+| **エンコーディング** | UTF-8形式の妥当性確認 | 基本 |
+| **コンテンツ整合性** | 復元内容の空チェック | 基本 |
+
+##### 3. 現在実装されている検証の詳細
+```typescript
+// validateDiffApplication()の主要チェック
+const result: DiffValidationResult = {
+    isValid: boolean,        // 全体的な妥当性
+    errors: string[],        // 致命的エラー（処理停止）
+    warnings: string[],      // 警告（処理継続）
+    appliedChanges: number,  // 適用された変更数
+    skippedChanges: number   // スキップされた変更数
+};
+
+// エラー条件（処理停止）
+- マージ競合マーカーの存在
+- 不正なUTF-8エンコーディング
+- 検証処理自体の例外
+
+// 警告条件（処理継続）
+- 変更内容が空のdiff
+- コンテキスト行不足
+- 復元内容が空（差分ありの場合）
+```
+
+#### 🚫 現在実装されていない高度な検証
+
+| 未実装の検証 | 内容 | 効果 |
+|:--|:--|:--|
+| **構文チェック** | 言語固有のlinter実行 | 構文エラーの早期検出 |
+| **ビルド検証** | コンパイル・ビルドコマンド実行 | ビルド失敗の検出 |
+| **テスト実行** | 単体・統合テストの自動実行 | 機能退行の検出 |
+| **依存関係チェック** | import/include文の整合性 | 未定義参照の検出 |
+| **型チェック** | TypeScript/静的型解析 | 型エラーの検出 |
+
+#### 💡 検証機能拡張の提案実装
+
+##### Phase 1: 基本ビルド検証
+```typescript
+// 提案: validateDiffApplication() 拡張
+async validateWithBuild(targetFiles: string[]): Promise<BuildValidationResult> {
+    const result = { 
+        syntaxValid: false, 
+        buildPassed: false, 
+        testsPassed: false,
+        errors: [],
+        warnings: []
+    };
+    
+    // 1. 構文チェック
+    for (const file of targetFiles) {
+        if (file.endsWith('.go')) {
+            await this.runCommand('go vet', file);
+        } else if (file.endsWith('.ts')) {
+            await this.runCommand('tsc --noEmit', file);
+        } else if (file.endsWith('.py')) {
+            await this.runCommand('python -m py_compile', file);
+        }
+    }
+    
+    // 2. プロジェクトビルド
+    const buildCommands = this.detectBuildSystem();
+    for (const cmd of buildCommands) {
+        const buildResult = await this.runCommand(cmd);
+        if (buildResult.exitCode !== 0) {
+            result.errors.push(`Build failed: ${buildResult.stderr}`);
+            return result;
+        }
+    }
+    
+    // 3. テスト実行（オプション）
+    if (this.config.testing.integrationTestEnabled) {
+        const testResult = await this.runCommand('npm test');
+        result.testsPassed = testResult.exitCode === 0;
+    }
+    
+    return result;
+}
+```
+
+##### Phase 2: 言語別検証サポート
+| 言語 | 構文チェック | ビルド | テスト |
+|:--|:--|:--|:--|
+| **Go** | `go vet`, `golint` | `go build` | `go test` |
+| **TypeScript** | `tsc --noEmit` | `npm run build` | `npm test` |
+| **Python** | `py_compile`, `flake8` | `pip install -e .` | `pytest` |
+| **Java** | `javac` | `mvn compile` | `mvn test` |
+| **C++** | `g++ -fsyntax-only` | `make` | `make test` |
+
+##### Phase 3: 設定可能な検証レベル
+```json
+// config.json 拡張提案
+{
+  "validation": {
+    "enabled": true,
+    "level": "full",              // "basic" | "syntax" | "build" | "full"
+    "stopOnBuildFailure": true,
+    "runTests": false,
+    "timeoutMs": 120000,
+    "languageSpecific": {
+      "go": { "vet": true, "lint": true },
+      "typescript": { "strict": true },
+      "python": { "flake8": true, "mypy": false }
+    }
+  }
+}
+```
+
+#### 🎯 検証機能の段階的導入戦略
+
+1. **Phase 1（基本）**: 構文チェック導入
+2. **Phase 2（中級）**: ビルド検証追加  
+3. **Phase 3（上級）**: テスト自動実行
+4. **Phase 4（完全）**: CI/CD統合
+
+これにより、「構文は正しいが、ビルドは通らない」といった低品質なパッチを早期に検出し、システムの堅牢性を飛躍的に向上させることができます。
+
+## 4. 失敗タイプの詳細分類
+
+### 現状の問題: `%%_Fin_%%`タグ忘れは確実に「失敗」扱い
+
+**疑問**: 完璧なパッチを生成したにもかかわらず、単に`%%_Fin_%%`タグを付け忘れた場合、その試行は「失敗（Failed）」としてカウントされるか？
+
+**回答**: **YES** - 現在の実装では確実に「失敗」として扱われます。
+
+#### 現在の成功判定ロジック（LLMProcessingService.ts）
+
+```typescript
+// 成功条件: %%_Fin_%%タグがあり、重大なエラーがない
+const isSuccess = hasFinTag && !hasErrors;
+
+console.log(`📊 Processing result for ${pullRequestTitle}:`);
+console.log(`   %%_Fin_%% tag: ${hasFinTag ? 'YES' : 'NO'}`);
+console.log(`   Has errors: ${hasErrors ? 'YES' : 'NO'}`);
+console.log(`   Final result: ${isSuccess ? 'SUCCESS' : 'FAILURE'}`);
+```
+
+**厳密な必須条件**:
+- **必須**: `%%_Fin_%%`タグの存在
+- **除外**: 重大なエラー（JSON parse failed、context length exceeded、Incomplete/Error/Failed status）の不存在
+
+#### 現在の失敗分類の限界
+
+現在の`errorsByType`は非常に粗い分類しかできません：
+
+```typescript
+// 現在の統計更新
+private updateStatistics(type: 'success' | 'failure' | 'skip', errorType?: string): void {
+    switch (type) {
+        case 'failure':
+            this.statistics.failedPullRequests++;
+            if (errorType) {
+                this.statistics.errorsByType[errorType] = 
+                    (this.statistics.errorsByType[errorType] || 0) + 1;
+            }
+            break;
+    }
+}
+```
+
+**問題**: `%%_Fin_%%`タグ忘れと実際のコード生成失敗が同じ「ProcessingFailure」として一括処理される
+
+### 提案する改善案: 詳細失敗分類システム
+
+#### 1. 新しい失敗分類体系
+
+```typescript
+export interface DetailedFailureTypes {
+    // コード生成関連の失敗
+    codeGenerationFailures: {
+        syntaxErrors: number;           // 構文エラー
+        compilationFailures: number;    // コンパイル失敗
+        logicErrors: number;            // ロジックエラー
+        incompletePatches: number;      // 不完全なパッチ
+        invalidDiffs: number;           // 適用不可能なdiff
+    };
+    
+    // プロトコル遵守関連の失敗
+    protocolViolations: {
+        missingFinTag: number;          // %%_Fin_%%タグ忘れ
+        malformedResponse: number;      // 不正な応答フォーマット
+        unexpectedTermination: number;  // 予期しない終了
+        timeoutViolations: number;      // タイムアウト違反
+        tagParsingErrors: number;       // タグ解析エラー
+    };
+    
+    // システム関連の失敗
+    systemFailures: {
+        apiErrors: number;              // LLM API エラー
+        fileSystemErrors: number;       // ファイルシステムエラー
+        memoryExhaustion: number;       // メモリ不足
+        networkFailures: number;        // ネットワーク障害
+        configurationErrors: number;    // 設定エラー
+    };
+}
+```
+
+#### 2. 成功判定ロジックの改良
+
+```typescript
+interface ProcessingAnalysis {
+    codeQuality: 'excellent' | 'good' | 'poor' | 'failed';
+    protocolCompliance: 'compliant' | 'minor_violation' | 'major_violation';
+    overallSuccess: boolean;
+    failureCategory?: 'code_generation' | 'protocol_violation' | 'system_error';
+    specificFailureType?: string;
+    warningMessages?: string[];
+}
+
+function analyzeProcessingResult(logContent: string, status: string): ProcessingAnalysis {
+    const hasFinTag = logContent.includes('%%_Fin_%%');
+    const hasValidPatch = extractAndValidatePatch(logContent);
+    const hasSystemErrors = checkForSystemErrors(logContent);
+    
+    // コード品質の評価
+    let codeQuality: ProcessingAnalysis['codeQuality'];
+    if (hasValidPatch && hasValidSyntax(logContent) && !hasSystemErrors) {
+        codeQuality = 'excellent';
+    } else if (hasValidPatch && !hasSystemErrors) {
+        codeQuality = 'good';
+    } else if (attemptedPatchGeneration(logContent)) {
+        codeQuality = 'poor';
+    } else {
+        codeQuality = 'failed';
+    }
+    
+    // プロトコル遵守の評価
+    let protocolCompliance: ProcessingAnalysis['protocolCompliance'];
+    if (hasFinTag) {
+        protocolCompliance = 'compliant';
+    } else if (hasValidPatch) {
+        protocolCompliance = 'minor_violation'; // ⭐ コードは良いがタグ忘れ
+    } else {
+        protocolCompliance = 'major_violation';
+    }
+    
+    // 総合判定: 品質優先のアプローチ
+    const overallSuccess = codeQuality === 'excellent' || 
+                          (codeQuality === 'good' && protocolCompliance !== 'major_violation');
+    
+    // 失敗カテゴリの特定
+    let failureCategory: ProcessingAnalysis['failureCategory'];
+    let specificFailureType: string | undefined;
+    let warningMessages: string[] = [];
+    
+    if (!overallSuccess) {
+        if (codeQuality === 'failed' || codeQuality === 'poor') {
+            failureCategory = 'code_generation';
+            specificFailureType = determineCodeFailureType(logContent);
+        } else if (protocolCompliance === 'major_violation') {
+            failureCategory = 'protocol_violation';
+            specificFailureType = 'malformed_response';
+        } else if (hasSystemErrors) {
+            failureCategory = 'system_error';
+            specificFailureType = determineSystemErrorType(logContent);
+        }
+    } else if (protocolCompliance === 'minor_violation') {
+        // 成功だが警告を追加
+        warningMessages.push('%%_Fin_%% tag missing but valid patch generated');
+    }
+    
+    return {
+        codeQuality,
+        protocolCompliance,
+        overallSuccess,
+        failureCategory,
+        specificFailureType,
+        warningMessages
+    };
+}
+```
+
+#### 3. 統計レポートの拡張
+
+```typescript
+export interface EnhancedProcessingStatistics extends ProcessingStatistics {
+    // 詳細な成功分類
+    successBreakdown: {
+        perfectExecution: number;        // コード完璧 + プロトコル遵守
+        codeSuccessProtocolMinor: number; // コード成功 + 軽微なプロトコル違反
+        qualityIndex: number;            // 全体的な品質スコア (0-100)
+    };
+    
+    // 詳細な失敗分類
+    failureBreakdown: DetailedFailureTypes;
+    
+    // 品質メトリクス
+    qualityMetrics: {
+        averageCodeQuality: number;      // 0-100スコア
+        protocolComplianceRate: number;  // プロトコル遵守率
+        recoverableFailureRate: number;  // 回復可能な失敗率
+        warningsGenerated: number;       // 警告数
+    };
+    
+    // パフォーマンス分析
+    performanceAnalysis: {
+        avgTimeToFirstPatch: number;     // 初回パッチまでの平均時間
+        avgRecoveryTime: number;         // エラー回復時間
+        successfulRetryRate: number;     // リトライ成功率
+    };
+}
+```
+
+#### 4. 改良されたレポート出力例
+
+```json
+{
+  "summary": {
+    "totalPullRequests": 100,
+    "successfulPullRequests": 87,
+    "failedPullRequests": 13,
+    "successRate": 87.0
+  },
+  "successBreakdown": {
+    "perfectExecution": 75,              // 75% が完璧
+    "codeSuccessProtocolMinor": 12,      // 12% がコード成功だがタグ忘れ
+    "qualityIndex": 91.2
+  },
+  "failureBreakdown": {
+    "codeGenerationFailures": {
+      "syntaxErrors": 3,
+      "compilationFailures": 2,
+      "invalidDiffs": 1
+    },
+    "protocolViolations": {
+      "missingFinTag": 0,              // ⭐ 上記12件は成功扱いのため0
+      "malformedResponse": 4,
+      "timeoutViolations": 1
+    },
+    "systemFailures": {
+      "apiErrors": 2,
+      "fileSystemErrors": 0
+    }
+  },
+  "qualityMetrics": {
+    "averageCodeQuality": 84.3,
+    "protocolComplianceRate": 86.2,     // 86.2% がプロトコル完全遵守
+    "recoverableFailureRate": 76.9,     // 76.9% が回復可能なエラー
+    "warningsGenerated": 12              // タグ忘れ等の警告
+  }
+}
+```
+
+### 実装における考慮点
+
+#### 1. 段階的導入戦略
+
+```typescript
+// Phase 1: 既存システムとの互換性を保持
+interface BackwardCompatibleStats {
+    // 既存の統計 (変更なし)
+    successfulPullRequests: number;
+    failedPullRequests: number;
+    
+    // 新しい詳細分析 (追加)
+    detailedAnalysis?: EnhancedProcessingStatistics;
+    migrationPhase: 'legacy' | 'hybrid' | 'enhanced';
+}
+
+// Phase 2: 新しい判定ロジックの並列実行
+function dualAnalysisMode(logContent: string): {
+    legacyResult: boolean;
+    enhancedResult: ProcessingAnalysis;
+    recommendation: 'use_legacy' | 'use_enhanced' | 'manual_review';
+} {
+    const legacyResult = hasFinTag && !hasErrors;
+    const enhancedResult = analyzeProcessingResult(logContent, status);
+    
+    let recommendation: string;
+    if (legacyResult === enhancedResult.overallSuccess) {
+        recommendation = 'use_enhanced';  // 結果が一致
+    } else if (enhancedResult.codeQuality === 'good' && !legacyResult) {
+        recommendation = 'manual_review'; // 判定が分かれるケース
+    } else {
+        recommendation = 'use_legacy';    // 保守的アプローチ
+    }
+    
+    return { legacyResult, enhancedResult, recommendation };
+}
+```
+
+#### 2. 分析の自動化
+
+```typescript
+// パッチ品質の自動評価
+function validatePatchQuality(diffContent: string, projectPath: string): {
+    syntaxValid: boolean;
+    buildable: boolean;
+    testsPassing: boolean;
+    qualityScore: number;
+} {
+    // 段階的検証
+    const syntaxValid = checkSyntax(diffContent, projectPath);
+    const buildable = syntaxValid ? attemptBuild(projectPath) : false;
+    const testsPassing = buildable ? runTests(projectPath) : false;
+    
+    const qualityScore = calculateQualityScore(syntaxValid, buildable, testsPassing);
+    
+    return { syntaxValid, buildable, testsPassing, qualityScore };
+}
+```
+
+#### 3. ユーザビリティ向上
+
+```bash
+# 詳細レポートの確認
+📊 Enhanced Processing Report
+========================================
+✅ Perfect Execution: 75/100 (75.0%)
+⚠️  Code Success (Minor Protocol Issues): 12/100 (12.0%)
+   └─ Missing %%_Fin_%% tags: 12 cases
+❌ Failed: 13/100 (13.0%)
+   ├─ Code Generation Issues: 6 cases
+   ├─ Protocol Violations: 5 cases
+   └─ System Errors: 2 cases
+
+💡 Recommendations:
+   • 87% overall success rate (including quality code with minor protocol issues)
+   • Focus on improving prompt templates to ensure %%_Fin_%% tag consistency
+   • Review malformed response patterns for protocol optimization
+========================================
+```
+
+### 結論
+
+この改良により、以下の利点が得られます：
+
+1. **技術的能力と手順遵守の分離**: 完璧なコードを生成したがタグを忘れたケースを「品質の高い成功（警告付き）」として適切に評価
+
+2. **詳細な失敗分析**: 失敗の根本原因を特定し、システム改善の優先順位を明確化
+
+3. **段階的品質改善**: プロトコル遵守率とコード品質を独立して追跡・改善可能
+
+4. **保守性の向上**: 既存システムとの互換性を保ちながら段階的に高度な分析機能を導入
+
+**最も重要な変更**: 「`%%_Fin_%%`タグ忘れ」を**失敗**ではなく**成功（警告付き）**として扱うことで、真の技術的能力を正確に測定できるようになります。
 ## 🚀 クイックスタート
 
 ### 前提条件

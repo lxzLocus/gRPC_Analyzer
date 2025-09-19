@@ -11,8 +11,21 @@ You are an expert software engineering researcher specializing in Automated Prog
     2.  **Dependency Resolution**: Does the patch reference variables, functions, or classes that are defined or imported within the provided `Code Context`?
     3.  **Logical Soundness**: Does the patch introduce any obvious logical flaws or contradictions?
 
-### 2. Correctness ###
-- A patch is "Correct" if it is Plausible AND either **identical** or **semantically equivalent** to the Ground Truth Patch. Semantic equivalence is determined by the following rules (R0-R11):
+### 2. Correctness and Semantic Similarity ###
+- A patch is "Correct" if it is Plausible AND either **identical** or **semantically equivalent** to the Ground Truth Patch, as defined by rules R0-R15.
+- **CRITICAL: You MUST ALWAYS provide a 'Semantic Similarity Score' (0.0 to 1.0) based on the following rubric.** This score is essential for distinguishing between different levels of quality and provides a more granular measure of performance, especially for patches that are not strictly correct.
+
+#### Rubric for Semantic Similarity Score (MANDATORY):
+| Score | Level | Description |
+| :--- | :--- | :--- |
+| **1.0** | **Perfect** | The patch is `Correct` (meets R0-R15 criteria). |
+| **0.9** | **Near Perfect** | Achieves the goal with only trivial, harmless differences not covered by R1-R15 (e.g., different log messages). |
+| **0.7-0.8**| **High Similarity** | Modifies the correct functions/files with the correct core logic, but misses a minor edge case or has a small side effect. |
+| **0.5-0.6**| **Partial Match** | Modifies the correct files/functions, but the implementation logic is flawed or incomplete. |
+| **0.2-0.4**| **Correct Locus** | Identifies the correct *location* for the fix, but the implementation logic is fundamentally wrong. |
+| **0.0-0.1**| **Incorrect** | Modifies the wrong files or the logic is completely unrelated. |
+
+#### Rules for Strict Correctness (R0-R15):
     - **R0: Identical Patch**: The patch is identical to the developer's patch (ignoring formatting and comments).
     - **R1: Different fields with the same value (or alias)**: Uses different field names or aliases for the same value.
     - **R2: Same exception but different messages**: Throws the same type of exception with a different message.
@@ -57,11 +70,9 @@ You are an expert software engineering researcher specializing in Automated Prog
 {{agent_thought_process}}
 ```
 
------
-
-## Your Task: Provide Evaluation in JSON Format
-
-Based on all the provided information and the strict criteria above, provide your evaluation. Your entire response MUST be a single, valid JSON object.
+---
+## Your Task: Provide Evaluation in JSON Format ##
+Based on all the provided information and the strict criteria above (including the rubric for the similarity score), provide your evaluation. Your entire response MUST be a single, valid JSON object.
 
 ```json
 {
@@ -70,13 +81,14 @@ Based on all the provided information and the strict criteria above, provide you
     "reasoning": "Plausibility check passed: 1. Syntactically correct. 2. All dependencies are resolved within the code context. 3. No logical flaws were introduced."
   },
   "correctness_evaluation": {
-    "is_correct": true,
-    "semantic_equivalence_level": "IDENTICAL", 
-    "reasoning": "The agent's patch is identical to the ground truth patch, satisfying rule R0.",
-    "semantic_similarity_rules_applied": ["R0"]
+    "is_correct": false,
+    "semantic_equivalence_level": "PLAUSIBLE_BUT_DIFFERENT",
+    "reasoning": "The agent correctly modified the target function, but missed a crucial null check that was in the ground truth.",
+    "semantic_similarity_rules_applied": [],
+    "semantic_similarity_score": 0.8,
+    "similarity_reasoning": "The core logic of the fix is correct and targets the right location. The score is high (0.8) because it almost solves the problem, but it's not perfect because it fails to handle a potential null pointer exception."
   }
 }
-```
 
 ### JSON Field Definitions
 
@@ -87,3 +99,5 @@ Based on all the provided information and the strict criteria above, provide you
       - `"PLAUSIBLE_BUT_DIFFERENT"`: If the patch is plausible but not semantically equivalent to the ground truth.
       - `"INCORRECT"`: If the patch is not plausible or logically flawed.
   - **semantic_similarity_rules_applied**: An array listing all R-rules that apply (e.g., `["R4", "R9"]`).
+  - **semantic_similarity_score**: A score from 0.0 to 1.0 indicating how semantically close the agent's patch is to the ground truth, based on the provided rubric.
+  - **similarity_reasoning**: A brief explanation justifying the assigned similarity score.

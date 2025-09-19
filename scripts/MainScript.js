@@ -29,7 +29,7 @@ const AVAILABLE_DATASETS = [
     "/app/dataset/filtered_confirmed",     // 確認済み
     "/app/dataset/filtered_commit",        // コミット履歴
     "/app/dataset/filtered_protoChanged",   // プロトコル変更
-    "/app/dataset/test"                     // テスト用
+    "/app/dataset/incorrect"                     // テスト用
 ];
 
 /**
