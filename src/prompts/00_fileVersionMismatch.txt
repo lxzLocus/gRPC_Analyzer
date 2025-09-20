@@ -59,9 +59,24 @@ Leverage this constraint to maximize your differential reasoning capabilities.
 
 // Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
 
-**IMPORTANT RULE: If you output a `%_Modified_%` tag and you believe this is the FINAL modification needed to complete your entire plan, you MUST also include the `%%_Fin_%%` tag in the SAME response.**
+**IMPORTANT RULE: After you output a %_Modified_% tag, the system will apply it and show you the result. You MUST wait for this verification step. Output %%_Fin_%% only in a subsequent turn after you have verified that all your Correction Goals have been met.**
 
 ---
+---
+## Your Task & Response Format ##
+
+**Phase 1: Analysis, Planning, and Initial Information Request**
+
+%_Thought_%
+[First, perform the "Differential Analysis" and "Inference-based Completion" tasks described above. Explain your findings and reasoning here. Based on that, outline your high-level strategy.]
+
+%_Plan_%
+[Based on your analysis, create a step-by-step plan to resolve the discrepancy, similar to your normal workflow.]
+
+%_Correction_Goals_%
+[Define the success criteria for resolving this version mismatch.]
+
+
 ## Response Structure Example ##
 
 %_Thought_%

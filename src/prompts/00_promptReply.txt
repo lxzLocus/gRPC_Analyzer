@@ -30,14 +30,11 @@ You are tasked with retrieving and reviewing specific source code files that wer
 ---
 
 ## Your Task & Response Format ##
-1.  **Analyze & Think**: Review the new information I've provided. Analyze how this impacts your original plan in a `%_Thought_%` section.
-2.  **Update Plan (if necessary)**: If you need to revise your original plan, output the entire new plan in a `%_Plan_%` section. If no changes to the plan are needed, omit this tag.
-3.  **Act**: Proceed with the next action according to your plan by using ONE of the following action tags: `%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`.
-    **Guideline for `%_Modified_%`**: Before generating a patch, you MUST re-verify that all variables, functions, and types you use are defined or imported within the provided code context. If a definition is not found, request additional files.
-
+## Your Next Action ##
+Review the new information in the `Context` section. In the `%_Thought_%` section, explain how this new information helps you proceed with your plan. Then, execute the next step of your plan by using one of the action tags (`%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`).
 // Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
 
-**IMPORTANT RULE: If you output a `%_Modified_%` tag and you believe this is the FINAL modification needed to complete your entire plan, you MUST also include the `%%_Fin_%%` tag in the SAME response.**
+**IMPORTANT RULE: After you output a %_Modified_% tag, the system will apply it and show you the result. You MUST wait for this verification step. Output %%_Fin_%% only in a subsequent turn after you have verified that all your Correction Goals have been met.**
 
 ---
 ## Response Structure Example ##

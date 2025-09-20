@@ -13,10 +13,10 @@ You are tasked with re-checking and refining the previous code modifications mad
 ## Context ##
 
 ### Your Current Analysis ###
-{{current_thought}}
+{{currentThought}}
 
 ### Your Current Plan ###
-{{current_plan}}
+{{currentPlan}}
 
 ### Modified files from previous request ###
 {{modifiedFiles}}
@@ -31,7 +31,7 @@ You are tasked with re-checking and refining the previous code modifications mad
 You previously generated a patch which has now been applied. Review the code in `### Modified files from previous request ###` and verify if it fully satisfies EACH of the **Correction Goals** you defined at the start of this task.
 
 ### Correction Goals (Your original success criteria) ###
-{{correction_goals}}
+{{correctionGoals}}
 
 ---
 

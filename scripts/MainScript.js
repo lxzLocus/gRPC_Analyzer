@@ -36,7 +36,7 @@ const AVAILABLE_DATASETS = [
  * デフォルト設定
  */
 const DEFAULT_CONFIG = {
-    selectedDatasetIndex: 0,    // filtered_fewChanged をデフォルト選択
+    selectedDatasetIndex: 4,    // filtered_fewChanged をデフォルト選択
     outputDir: "/app/output",
     processingOptions: {
         baseOutputDir: "/app/output",

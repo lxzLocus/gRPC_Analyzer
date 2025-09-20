@@ -369,26 +369,48 @@ class Config {
         this.debugLog(`Config updated: ${key} = ${value}`);
     }
 
-    readPromptReplyFile(filesRequested: string, modifiedDiff: string, commentText: string, previousThought?: string, previousPlan?: string): string {
+    readPromptReplyFile(
+        filesRequested: string, 
+        modifiedDiff: string, 
+        commentText: string, 
+        previousThought?: string, 
+        previousPlan?: string,
+        correctionGoals?: string
+    ): string {
         const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptReply.txt'), 'utf-8');
 
         const context = {
             filesRequested: filesRequested, // required section from previous message
             previousModifications: modifiedDiff, // diff from previous step
             previousThought: previousThought || '', // 前回の思考内容
-            previousPlan: previousPlan || '' // 前回の計画内容
+            previousPlan: previousPlan || '', // 前回の計画内容
+            correctionGoals: correctionGoals || '' // 修正目標
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
     }
 
-    readPromptModifiedFile(modifiedFiles: string, currentPlan?: string, currentThought?: string): string {
+    readPromptModifiedFile(
+        modifiedFiles: string, 
+        currentPlan?: string, 
+        currentThought?: string,
+        filesRequested?: string,
+        previousModifications?: string,
+        previousThought?: string,
+        previousPlan?: string,
+        correctionGoals?: string
+    ): string {
         const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified.txt'), 'utf-8');
 
         const context = {
             modifiedFiles: modifiedFiles, // diff that was just applied or restored
-            current_plan: currentPlan || '', // 現在のプラン
-            current_thought: currentThought || '' // 現在の思考
+            currentPlan: currentPlan || '', // 現在のプラン
+            currentThought: currentThought || '', // 現在の思考
+            filesRequested: filesRequested || '', // リクエストされたファイル
+            previousModifications: previousModifications || '', // 過去の修正
+            previousThought: previousThought || '', // 過去の思考
+            previousPlan: previousPlan || '', // 過去のプラン
+            correctionGoals: correctionGoals || '' // 修正目標
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);

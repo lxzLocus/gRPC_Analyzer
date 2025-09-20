@@ -79,6 +79,9 @@ class LLMFlowController {
     private startTime: string = '';
     private totalPromptTokens: number = 0;
     private totalCompletionTokens: number = 0;
+    
+    // 対話状態管理
+    private correctionGoals: string = ''; // 修正目標を保持
 
     constructor(pullRequestPath: string) {
         this.inputPremergeDir = pullRequestPath;
@@ -330,7 +333,14 @@ class LLMFlowController {
         const commentText = parsed?.commentText || '';
         const previousThought = parsed?.thought || '';
         const previousPlan = parsed?.plan || '';
-        const promptReply = this.config.readPromptReplyFile(filesRequested, modifiedDiff, commentText, previousThought, previousPlan);
+        const promptReply = this.config.readPromptReplyFile(
+            filesRequested, 
+            modifiedDiff, 
+            commentText, 
+            previousThought, 
+            previousPlan,
+            this.correctionGoals // correctionGoals
+        );
         this.currentMessages = this.messageHandler.attachMessages("user", promptReply);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
@@ -450,6 +460,12 @@ class LLMFlowController {
         }
         const content = this.context.llmResponse.choices[0].message.content;
         this.context.llmParsed = this.messageHandler.analyzeMessages(content);
+        
+        // correctionGoalsが初回で設定された場合、保存する
+        if (this.context.llmParsed.correctionGoals && !this.correctionGoals) {
+            this.correctionGoals = this.context.llmParsed.correctionGoals;
+            console.log('📋 Correction Goals extracted and saved from llmNextStep:', this.correctionGoals.substring(0, 200) + '...');
+        }
     }
 
     private async llmErrorReanalyze() {
@@ -770,7 +786,16 @@ class LLMFlowController {
             this.logger.logInfo(`Current Step: ${planProgress.currentStep}`);
         }
         
-        const promptModified = this.config.readPromptModifiedFile(modifiedFiles, enhancedPlan, currentThought);
+        const promptModified = this.config.readPromptModifiedFile(
+            modifiedFiles, 
+            enhancedPlan, 
+            currentThought,
+            '', // filesRequested (必要に応じて設定)
+            '', // previousModifications (必要に応じて設定)
+            '', // previousThought (必要に応じて設定)
+            '', // previousPlan (必要に応じて設定)
+            this.correctionGoals // correctionGoals
+        );
         this.currentMessages = this.messageHandler.attachMessages("user", promptModified);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;

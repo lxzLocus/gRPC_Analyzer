@@ -30,6 +30,7 @@ class MessageHandler {
         const sections = {
             thought: null as string | null,
             plan: null as string | null,
+            correctionGoals: null as string | null, // 新しいフィールド
             requiredFilepaths: [] as string[],
             requiredFileInfos: [] as RequiredFileInfo[], // 新しいフィールド
             modifiedDiff: '',
@@ -97,6 +98,7 @@ class MessageHandler {
         const buffers: { [key: string]: string[] } = {
             thought: [],
             plan: [],
+            correctionGoals: [], // 新しいバッファ
             modified: [],
             comment: [],
             required: []
@@ -115,6 +117,8 @@ class MessageHandler {
                     currentTag = 'thought';
                 } else if (tagName === 'Plan') {
                     currentTag = 'plan';
+                } else if (tagName === 'Correction_Goals') {
+                    currentTag = 'correctionGoals';
                 } else if (tagName === 'Reply Required') {
                     currentTag = 'required';
                 } else if (tagName === 'Modified') {
@@ -124,7 +128,7 @@ class MessageHandler {
                 } else {
                     // 従来形式のサポート（小文字変換）
                     currentTag = tagName.toLowerCase().replace(/ /g, '_');
-                    if (currentTag !== 'modified' && currentTag !== 'comment' && currentTag !== 'thought' && currentTag !== 'plan') {
+                    if (currentTag !== 'modified' && currentTag !== 'comment' && currentTag !== 'thought' && currentTag !== 'plan' && currentTag !== 'correctiongoals') {
                         currentTag = 'required'; // その他は required として扱う
                     }
                 }
@@ -151,6 +155,7 @@ class MessageHandler {
 
         sections.thought = buffers.thought.join('\n').trim() || null;
         sections.plan = buffers.plan.join('\n').trim() || null;
+        sections.correctionGoals = buffers.correctionGoals.join('\n').trim() || null;
         sections.modifiedDiff = buffers.modified.join('\n').trim();
         sections.commentText = buffers.comment.join('\n').trim();
 
@@ -164,6 +169,7 @@ class MessageHandler {
         console.log('📊 Buffer contents summary:');
         console.log('  - thought:', buffers.thought.length, 'lines');
         console.log('  - plan:', buffers.plan.length, 'lines');
+        console.log('  - correctionGoals:', buffers.correctionGoals.length, 'lines');
         console.log('  - modified:', buffers.modified.length, 'lines');
         console.log('  - comment:', buffers.comment.length, 'lines');
         console.log('  - required:', buffers.required.length, 'lines');

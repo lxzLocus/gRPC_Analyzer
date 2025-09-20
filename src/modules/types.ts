@@ -63,6 +63,7 @@ export type InternalProgressState = {
 export type LLMParsed = {
     thought: string | null;
     plan: string | null;
+    correctionGoals: string | null; // 新しいフィールド
     requiredFilepaths: string[];
     requiredFileInfos: RequiredFileInfo[]; // 新しいフィールド
     modifiedDiff: string;
