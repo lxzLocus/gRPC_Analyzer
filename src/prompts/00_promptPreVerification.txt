@@ -1,0 +1,63 @@
+## Your Task: Act as a Devil's Advocate ##
+
+You will now act as a critical code reviewer to find flaws in the plan you just created. Your goal is to anticipate potential failures *before* any action is taken.
+
+---
+## Context ##
+
+### The Original Goal (Proto Changes) ###
+{{protoFileChanges}}
+
+### Your Initial Analysis (Thought) ###
+{{previousThought}}
+
+### Your Proposed Plan ###
+{{previousPlan}}
+
+### Your Defined Correction Goals ###
+{{correctionGoals}}
+
+---
+## Your Task & Response Format ##
+
+**1. Critique Your Plan (`%_Thought_%`)**:
+   - Critically analyze your proposed plan. What are its potential weaknesses?
+   - **Flaw Identification**: Why might this plan fail or lead to an incomplete solution? (e.g., "This plan overlooks the client-side code," "This approach might break backward compatibility.")
+   - **Alternative Strategies**: Is there a safer or more comprehensive approach to achieve the `Correction Goals`?
+
+**2. Refine Your Plan (`%_Plan_%`)**:
+   - Based on your critique, output a new, refined plan in the `%_Plan_%` tag.
+   - If you believe your original plan is robust and needs no changes after critical review, you may omit this tag and explain your reasoning in the `%_Thought_%` section.
+
+   ## Response Structure Example ##
+
+%_Thought_%
+I am acting as a Devil's Advocate. My original plan was to request the content of `ra/ra.go` and `sa/sa.go` and then modify `ra/ra.go`.
+
+**Potential Weakness**: The plan correctly identifies the core files, but it overlooks a potential side effect. The original commit changed not only `ra/ra.go` but also `wfe/wfe.go`. This suggests that `wfe` might be a consumer of the `ra` service. My current plan doesn't include verifying the impact on `wfe/wfe.go`.
+
+**Failure Scenario**: If I proceed with the current plan, I might fix the logic in `ra.go` but leave a compile error in `wfe/wfe.go` because a function signature it depends on has changed. This would be an incomplete solution.
+
+**Refinement**: A more robust plan would be to gather information on all potentially affected consumer services (`ra.go` and `wfe/wfe.go`) *before* generating any patch. This ensures I have the full context.
+
+%_Plan_%
+[
+  {
+    "step": 1,
+    "action": "REQUEST_FILE_CONTENT",
+    "filePath": "ra/ra.go",
+    "reason": "Analyze the direct impact of the proto change and identify function signatures to be modified."
+  },
+  {
+    "step": 2,
+    "action": "REQUEST_FILE_CONTENT",
+    "filePath": "wfe/wfe.go",
+    "reason": "This file was also changed in the original commit. I need to verify how it uses the services in `ra.go` to prevent breaking changes."
+  },
+  {
+    "step": 3,
+    "action": "MODIFY_FILES",
+    "filePaths": ["ra/ra.go", "wfe/wfe.go"],
+    "reason": "After gathering all necessary information, generate a complete patch for all affected files."
+  }
+]

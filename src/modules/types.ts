@@ -111,6 +111,7 @@ export enum State {
     PrepareInitialContext = 'PrepareInitialContext',
     SendInitialInfoToLLM = 'SendInitialInfoToLLM',
     LLMAnalyzePlan = 'LLMAnalyzePlan',
+    LLMPreVerification = 'LLMPreVerification',  // 新しい事前検証ステップ
     LLMDecision = 'LLMDecision',
     SystemAnalyzeRequest = 'SystemAnalyzeRequest',
     GetFileContent = 'GetFileContent',
@@ -229,5 +230,32 @@ export type ErrorContext = {
     affectedFiles: string[];
     systemState: string;
     possibleCauses: string[];
+};
+
+// 対話履歴要約機能の型定義
+export type ConversationSummary = {
+    original_goal_summary: string;
+    progress_summary: string[];
+    current_status: string;
+    open_correction_goals: string[];
+};
+
+export type ConversationHistoryManager = {
+    messages: Array<{ role: string, content: string }>;
+    totalTokens: number;
+    summaryThreshold: number; // トークン数の閾値
+    lastSummaryTurn: number;  // 最後に要約した時のターン
+};
+
+export type SummarizeRequest = {
+    fullConversationHistory: string;
+    model?: string;          // 要約に使用するLLMモデル
+    temperature?: number;    // 要約時の温度設定
+};
+
+export type SummarizeResponse = {
+    summary: ConversationSummary;
+    success: boolean;
+    error?: string;
 };
 

@@ -33,6 +33,9 @@ interface ExternalConfig {
         temperature?: number;
         timeout?: number;
         retryAttempts?: number;
+        summaryThreshold?: number;
+        summaryModel?: string;
+        summaryTemperature?: number;
         qualityCheck?: {
             enabled?: boolean;
             requireModifiedContent?: boolean;
@@ -205,6 +208,20 @@ class Config {
         if (process.env.LLM_RETRY_ATTEMPTS) {
             if (!this.externalConfig.llm) this.externalConfig.llm = {};
             this.externalConfig.llm.retryAttempts = parseInt(process.env.LLM_RETRY_ATTEMPTS);
+        }
+        
+        // LLM要約設定
+        if (process.env.LLM_SUMMARY_THRESHOLD) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            this.externalConfig.llm.summaryThreshold = parseInt(process.env.LLM_SUMMARY_THRESHOLD);
+        }
+        if (process.env.LLM_SUMMARY_MODEL) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            this.externalConfig.llm.summaryModel = process.env.LLM_SUMMARY_MODEL;
+        }
+        if (process.env.LLM_SUMMARY_TEMPERATURE) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            this.externalConfig.llm.summaryTemperature = parseFloat(process.env.LLM_SUMMARY_TEMPERATURE);
         }
         
         // LLM品質チェック設定
@@ -390,6 +407,24 @@ class Config {
         return template(context);
     }
 
+    readPromptPreVerificationFile(
+        protoFileChanges: string,
+        previousThought: string,
+        previousPlan: string,
+        correctionGoals: string
+    ): string {
+        const promptPreVerificationText = fs.readFileSync(path.join(this.promptDir, '00_promptPreVerification.txt'), 'utf-8');
+
+        const context = {
+            protoFileChanges: protoFileChanges, // 元のプロト変更
+            previousThought: previousThought, // 初回の思考内容
+            previousPlan: previousPlan, // 初回の計画内容
+            correctionGoals: correctionGoals // 修正目標
+        };
+        const template = Handlebars.compile(promptPreVerificationText, { noEscape: true });
+        return template(context);
+    }
+
     readPromptModifiedFile(
         modifiedFiles: string, 
         currentPlan?: string, 
@@ -413,6 +448,36 @@ class Config {
             correctionGoals: correctionGoals || '' // 修正目標
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
+        return template(context);
+    }
+
+    /**
+     * 対話履歴要約用プロンプトファイルを読み込み
+     */
+    readPromptSummarizeFile(fullConversationHistory: string): string {
+        const promptSummarizeText = fs.readFileSync(path.join(this.promptDir, '00_prompt_summarize.txt'), 'utf-8');
+
+        const context = {
+            full_conversation_history: fullConversationHistory
+        };
+        const template = Handlebars.compile(promptSummarizeText, { noEscape: true });
+        return template(context);
+    }
+
+    /**
+     * 要約からの対話再開用プロンプトファイルを読み込み
+     */
+    readPromptResumeFromSummaryFile(
+        summaryOfHistory: string,
+        previousActionResult: string
+    ): string {
+        const promptResumeText = fs.readFileSync(path.join(this.promptDir, '00_prompt_resume_from_summary.txt'), 'utf-8');
+
+        const context = {
+            summary_of_history: summaryOfHistory,
+            previous_action_result: previousActionResult
+        };
+        const template = Handlebars.compile(promptResumeText, { noEscape: true });
         return template(context);
     }
 }

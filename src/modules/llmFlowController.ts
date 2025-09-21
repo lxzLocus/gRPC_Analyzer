@@ -17,6 +17,7 @@ import MessageHandler from './messageHandler.js';
 import FileManager from './fileManager.js';
 import OpenAIClient from './openAIClient.js';
 import LLMRetryEnhancer from './llmRetryEnhancer.js';
+import ConversationSummarizer from './conversationSummarizer.js';
 import { 
     LLMParsed, 
     ParsedContentLog, 
@@ -68,6 +69,7 @@ class LLMFlowController {
     private openAIClient!: OpenAIClient;
     private logger: Logger = new Logger();
     private retryEnhancer: LLMRetryEnhancer;
+    private conversationSummarizer!: ConversationSummarizer;
 
     // 作業用データ
     private currentMessages: Array<{ role: string, content: string }> = [];
@@ -82,6 +84,9 @@ class LLMFlowController {
     
     // 対話状態管理
     private correctionGoals: string = ''; // 修正目標を保持
+    private initialThought: string = ''; // 初回の思考内容
+    private initialPlan: string = ''; // 初回の計画内容
+    private protoFileChanges: string = ''; // プロト変更内容
 
     constructor(pullRequestPath: string) {
         this.inputPremergeDir = pullRequestPath;
@@ -187,6 +192,11 @@ class LLMFlowController {
 
                 case State.LLMAnalyzePlan:
                     await this.llmAnalyzePlan();
+                    this.state = State.LLMPreVerification;
+                    break;
+
+                case State.LLMPreVerification:
+                    await this.llmPreVerification();
                     this.state = State.LLMDecision;
                     break;
 
@@ -284,10 +294,25 @@ class LLMFlowController {
         // OpenAIClientの初期化完了を待機
         await (this.openAIClient as any).initPromise;
 
+        // 対話履歴要約機能を初期化
+        this.conversationSummarizer = new ConversationSummarizer(this.config, this.openAIClient);
+
         // 初期プロンプト生成
         this.next_prompt_content = this.fileManager.readFirstPromptFile();
         this.prompt_template_name = this.config.promptTextfile;
-        this.currentMessages = this.messageHandler.attachMessages("user", this.next_prompt_content);
+        
+        // ConversationSummarizer に初期メッセージを追加
+        this.currentMessages = await this.sendMessageWithSummarizer("user", this.next_prompt_content);
+        
+        // プロト変更内容を取得して保存（事前検証で使用）
+        try {
+            const protoChangesFilePath = path.join(this.config.inputProjectDir, '02_protoFileChanges.txt');
+            if (fs.existsSync(protoChangesFilePath)) {
+                this.protoFileChanges = fs.readFileSync(protoChangesFilePath, 'utf-8');
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not read proto file changes:', error);
+        }
     }
 
     // =============================================================================
@@ -341,7 +366,7 @@ class LLMFlowController {
             previousPlan,
             this.correctionGoals // correctionGoals
         );
-        this.currentMessages = this.messageHandler.attachMessages("user", promptReply);
+        this.currentMessages = await this.sendMessageWithSummarizer("user", promptReply);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
 
@@ -389,6 +414,18 @@ class LLMFlowController {
                 'LLM_Response_Analysis',
                 async () => this.messageHandler.analyzeMessages(llm_content)
             );
+
+            // 初回の思考と計画を保存（事前検証で使用）
+            if (this.context.llmParsed.thought) {
+                this.initialThought = this.context.llmParsed.thought;
+            }
+            if (this.context.llmParsed.plan) {
+                this.initialPlan = this.context.llmParsed.plan;
+            }
+            if (this.context.llmParsed.correctionGoals && !this.correctionGoals) {
+                this.correctionGoals = this.context.llmParsed.correctionGoals;
+            }
+
         } catch (error) {
             // 解析エラーの詳細ログ
             this.logger.logLLMParsingError(
@@ -399,6 +436,78 @@ class LLMFlowController {
                 error instanceof Error ? error : undefined
             );
             throw error;
+        }
+    }
+
+    private async llmPreVerification() {
+        // LLM: 事前検証 - Devil's Advocate approach
+        // 初回の計画を自己批判し、改善されたプランを生成
+        
+        if (!this.initialThought || !this.initialPlan || !this.correctionGoals) {
+            console.warn('⚠️ Pre-verification skipped: Missing initial analysis data');
+            return;
+        }
+
+        try {
+            // 事前検証プロンプトを生成
+            const preVerificationPrompt = this.config.readPromptPreVerificationFile(
+                this.protoFileChanges,
+                this.initialThought,
+                this.initialPlan,
+                this.correctionGoals
+            );
+
+            // LLMに事前検証プロンプトを送信
+            this.currentMessages = await this.sendMessageWithSummarizer("user", preVerificationPrompt);
+            const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
+            this.context.llmResponse = llm_response;
+
+            // ターン数とトークン数を更新
+            this.currentTurn++;
+            const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
+            this.totalPromptTokens += usage.prompt_tokens;
+            this.totalCompletionTokens += usage.completion_tokens;
+
+            // LLM応答を解析
+            if (llm_response?.choices?.[0]?.message?.content) {
+                const content = llm_response.choices[0].message.content;
+                const parsedPreVerification = this.messageHandler.analyzeMessages(content);
+                
+                // 改善されたプランがある場合は更新
+                if (parsedPreVerification.plan && this.context.llmParsed) {
+                    this.context.llmParsed.plan = parsedPreVerification.plan;
+                    console.log('📋 Plan refined through pre-verification');
+                }
+                
+                // 改善された思考がある場合は更新
+                if (parsedPreVerification.thought && this.context.llmParsed) {
+                    this.context.llmParsed.thought = parsedPreVerification.thought;
+                    console.log('📋 Thought refined through pre-verification');
+                }
+
+                // ログ記録
+                this.logger.addInteractionLog(
+                    this.currentTurn,
+                    new Date().toISOString(),
+                    {
+                        prompt_template: '00_promptPreVerification.txt',
+                        full_prompt_content: preVerificationPrompt
+                    },
+                    {
+                        raw_content: content,
+                        parsed_content: this.convertToLogFormat(parsedPreVerification),
+                        usage: usage
+                    },
+                    {
+                        type: 'PRE_VERIFICATION',
+                        details: 'Devil\'s Advocate review of initial plan'
+                    }
+                );
+            }
+
+        } catch (error) {
+            console.error('❌ Pre-verification failed:', error);
+            // 事前検証が失敗しても処理を続行
         }
     }
 
@@ -437,8 +546,14 @@ class LLMFlowController {
             this.state = State.End;
             return;
         }
-        if (parsed.has_fin_tag) {
-            // タスク完了
+
+        // 早期終了の防止: 最低限の処理フローを保証
+        const hasProcessedFiles = this.internalProgress.contextAccumulated.sourceFiles.length > 0;
+        const hasGeneratedDiff = this.currentTurn >= 2; // 最低2ターンは実行
+
+        if (parsed.has_fin_tag && hasProcessedFiles && hasGeneratedDiff) {
+            // タスク完了（ただし最低限の処理が完了している場合のみ）
+            console.log('📋 Task completion confirmed after proper processing flow');
             this.state = State.End;
         } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
             // 追加情報要求
@@ -446,8 +561,19 @@ class LLMFlowController {
         } else if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
             // 修正案(diff)生成
             this.state = State.SystemParseDiff;
+        } else if (!hasProcessedFiles && this.currentTurn <= 3) {
+            // 初回または2回目で、まだファイル処理していない場合は情報要求を強制
+            console.log('📋 Forcing file content analysis to prevent early termination');
+            // プロト関連ファイルのデフォルト要求を生成
+            if (this.context.llmParsed) {
+                this.context.llmParsed.requiredFilepaths = this.generateDefaultFileRequests();
+                this.state = State.SystemAnalyzeRequest;
+            } else {
+                this.state = State.End;
+            }
         } else {
-            // その他（エラーや不明な場合は終了）
+            // その他（最低限の処理完了後のみ終了）
+            console.log('📋 Ending after processing flow completion');
             this.state = State.End;
         }
     }
@@ -796,7 +922,7 @@ class LLMFlowController {
             '', // previousPlan (必要に応じて設定)
             this.correctionGoals // correctionGoals
         );
-        this.currentMessages = this.messageHandler.attachMessages("user", promptModified);
+        this.currentMessages = await this.sendMessageWithSummarizer("user", promptModified);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
 
@@ -830,7 +956,7 @@ class LLMFlowController {
         // エラー情報をLLMへ送信
         const errorMessage = this.context.error || 'Unknown error occurred';
         const errorPrompt = `エラーが発生しました: ${errorMessage}\n\n修正案を再検討してください。`;
-        this.currentMessages = this.messageHandler.attachMessages("user", errorPrompt);
+        this.currentMessages = await this.sendMessageWithSummarizer("user", errorPrompt);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
 
@@ -891,6 +1017,17 @@ class LLMFlowController {
         const llmProvider = process.env.LLM_PROVIDER || 'openai';
         const llmModel = this.getCurrentLLMModel();
         const llmConfig = this.getLLMConfig();
+
+        // 要約機能の統計を出力
+        if (this.conversationSummarizer) {
+            const summaryStats = this.conversationSummarizer.getStats();
+            console.log('\n📊 Conversation Summarization Stats:');
+            console.log(`   Total Messages: ${summaryStats.totalMessages}`);
+            console.log(`   Estimated Tokens: ${summaryStats.estimatedTokens}`);
+            console.log(`   Summary Threshold: ${summaryStats.summaryThreshold}`);
+            console.log(`   Times Summarized: ${summaryStats.timesExceededThreshold}`);
+            console.log(`   Last Summary Turn: ${summaryStats.lastSummaryTurn}`);
+        }
         
         this.logger.setExperimentMetadata(
             experimentId,
@@ -2358,6 +2495,15 @@ class LLMFlowController {
     }
 
     /**
+     * ConversationSummarizer を使用してメッセージを送信
+     */
+    private async sendMessageWithSummarizer(role: string, content: string): Promise<Array<{ role: string, content: string }>> {
+        // ConversationSummarizer にメッセージを追加（自動要約チェック付き）
+        this.currentMessages = await this.conversationSummarizer.addMessage(role, content);
+        return this.currentMessages;
+    }
+
+    /**
      * 品質チェック付きLLM実行メソッド
      * modified: 0 lines などの不完全応答を検出してリトライする
      */
@@ -2390,8 +2536,11 @@ class LLMFlowController {
 
                 const content = llm_response.choices[0].message.content;
                 const parsed = this.messageHandler.analyzeMessages(content);
+
+                // アシスタントの応答をConversationSummarizerに追加
+                await this.sendMessageWithSummarizer('assistant', content);
                 
-                // 品質チェック
+                // 品質チェック（初回フェーズでは修正内容を要求しない）
                 const metrics = this.retryEnhancer.checkResponseQuality(parsed);
                 this.retryEnhancer.logQualityMetrics(metrics);
 
@@ -2402,9 +2551,15 @@ class LLMFlowController {
                     this.context.llmParsed = parsed;
                 }
 
+                // 初回フェーズ ('initial') では修正内容がなくても合格とする
+                const isInitialPhase = context === 'initial';
+                const shouldRetry = isInitialPhase 
+                    ? this.shouldRetryInitialPhase(metrics, attempt)
+                    : this.retryEnhancer.shouldRetry(metrics, attempt);
+
                 // 品質チェック合格の場合は即座に返す
-                if (!this.retryEnhancer.shouldRetry(metrics, attempt)) {
-                    console.log(`✅ Quality check passed (score: ${metrics.completionScore}%)`);
+                if (!shouldRetry) {
+                    console.log(`✅ Quality check passed (score: ${metrics.completionScore}%) - Phase: ${context}`);
                     return bestResponse;
                 }
 
@@ -2469,6 +2624,78 @@ class LLMFlowController {
         
         // 空の設定オブジェクトの場合はundefinedを返す
         return Object.keys(config).length > 0 ? config : undefined;
+    }
+
+    /**
+     * デフォルトのファイル要求を生成（早期終了防止用）
+     */
+    private generateDefaultFileRequests(): string[] {
+        const defaultFiles: string[] = [];
+        
+        // プロト関連ファイルの一般的なパターンを追加
+        try {
+            const protoDir = path.join(this.config.inputProjectDir);
+            
+            // よく変更されるファイルパターンを推測
+            const commonPatterns = [
+                '**/*.proto',
+                '**/*.go',
+                '**/*.py',
+                '**/*.java',
+                '**/*.ts',
+                '**/*.js',
+                'Makefile',
+                'BUILD',
+                'build.gradle'
+            ];
+            
+            // 実際にプロジェクトディレクトリから一部のファイルを探す
+            if (fs.existsSync(protoDir)) {
+                const files = fs.readdirSync(protoDir, { recursive: false });
+                for (const file of files) {
+                    if (typeof file === 'string' && 
+                        (file.endsWith('.go') || file.endsWith('.proto') || 
+                         file.endsWith('.py') || file.endsWith('.java'))) {
+                        defaultFiles.push(file);
+                        if (defaultFiles.length >= 3) break; // 最大3ファイル
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not generate default file requests:', error);
+        }
+        
+        // 最低限1つのファイルは要求する
+        if (defaultFiles.length === 0) {
+            defaultFiles.push('main.go'); // フォールバック
+        }
+        
+        console.log('📁 Generated default file requests:', defaultFiles);
+        return defaultFiles;
+    }
+
+    /**
+     * 初回フェーズ専用の品質チェック（修正内容を要求しない）
+     */
+    private shouldRetryInitialPhase(metrics: any, attempt: number): boolean {
+        // 初回フェーズでは以下の条件で合格
+        // 1. プランまたは思考内容がある
+        // 2. ファイル要求がある、または完了タグがある
+        const hasValidContent = metrics.planLines > 0 || metrics.thoughtLines > 0;
+        const hasActionPlan = (metrics.fileRequestCount > 0) || metrics.hasCompletionTag;
+        
+        if (hasValidContent && hasActionPlan) {
+            return false; // リトライ不要
+        }
+        
+        // 最後の試行では最善の結果を受け入れる
+        if (attempt >= 2) {
+            console.log(`⚠️ Accepting result after final attempt (attempt ${attempt + 1})`);
+            return false;
+        }
+        
+        console.log(`🔄 Initial phase retry needed: hasValidContent=${hasValidContent}, hasActionPlan=${hasActionPlan}`);
+        return true; // リトライ
     }
 }
 
