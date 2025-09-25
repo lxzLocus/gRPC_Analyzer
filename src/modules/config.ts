@@ -407,24 +407,6 @@ class Config {
         return template(context);
     }
 
-    readPromptPreVerificationFile(
-        protoFileChanges: string,
-        previousThought: string,
-        previousPlan: string,
-        correctionGoals: string
-    ): string {
-        const promptPreVerificationText = fs.readFileSync(path.join(this.promptDir, '00_promptPreVerification.txt'), 'utf-8');
-
-        const context = {
-            protoFileChanges: protoFileChanges, // 元のプロト変更
-            previousThought: previousThought, // 初回の思考内容
-            previousPlan: previousPlan, // 初回の計画内容
-            correctionGoals: correctionGoals // 修正目標
-        };
-        const template = Handlebars.compile(promptPreVerificationText, { noEscape: true });
-        return template(context);
-    }
-
     readPromptModifiedFile(
         modifiedFiles: string, 
         currentPlan?: string, 
@@ -469,15 +451,65 @@ class Config {
      */
     readPromptResumeFromSummaryFile(
         summaryOfHistory: string,
-        previousActionResult: string
+        previousActionResult: string,
+        correctionGoals: string = ''
     ): string {
         const promptResumeText = fs.readFileSync(path.join(this.promptDir, '00_prompt_resume_from_summary.txt'), 'utf-8');
 
         const context = {
             summary_of_history: summaryOfHistory,
-            previous_action_result: previousActionResult
+            previous_action_result: previousActionResult,
+            correctionGoals: correctionGoals
         };
         const template = Handlebars.compile(promptResumeText, { noEscape: true });
+        return template(context);
+    }
+
+    /**
+     * 改善された検証プロンプトファイルを読み込み（相互参照コンテキスト付き）
+     */
+    readPromptModifiedEnhancedFile(
+        modifiedFiles: string, 
+        currentPlan?: string, 
+        currentThought?: string,
+        filesRequested?: string,
+        previousModifications?: string,
+        previousThought?: string,
+        previousPlan?: string,
+        correctionGoals?: string,
+        crossReferenceContext?: string
+    ): string {
+        const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified_enhanced.txt'), 'utf-8');
+
+        const context = {
+            modifiedFiles: modifiedFiles, // diff that was just applied or restored
+            currentPlan: currentPlan || '', // 現在のプラン
+            currentThought: currentThought || '', // 現在の思考
+            filesRequested: filesRequested || '', // リクエストされたファイル
+            previousModifications: previousModifications || '', // 過去の修正
+            previousThought: previousThought || '', // 過去の思考
+            previousPlan: previousPlan || '', // 過去のプラン
+            correctionGoals: correctionGoals || '', // 修正目標
+            crossReferenceContext: crossReferenceContext || '' // 相互参照コンテキスト
+        };
+        const template = Handlebars.compile(promptRefineText, { noEscape: true });
+        return template(context);
+    }
+
+    /**
+     * 最終確認プロンプトファイルを読み込み
+     */
+    readPromptFinalCheckFile(
+        verificationSummary: string,
+        modifiedFilesStatus: string
+    ): string {
+        const promptFinalCheckText = fs.readFileSync(path.join(this.promptDir, '00_promptFinalCheck.txt'), 'utf-8');
+
+        const context = {
+            verificationSummary: verificationSummary,
+            modifiedFilesStatus: modifiedFilesStatus
+        };
+        const template = Handlebars.compile(promptFinalCheckText, { noEscape: true });
         return template(context);
     }
 }

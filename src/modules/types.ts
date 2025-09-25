@@ -69,6 +69,7 @@ export type LLMParsed = {
     modifiedDiff: string;
     commentText: string;
     has_fin_tag: boolean;
+    ready_for_final_check?: boolean; // 最終確認フラグ
     // 新しいフィールド：LLMからの進行状況指示
     suggestedPhase?: ProcessingPhase;
     confidenceLevel?: 'HIGH' | 'MEDIUM' | 'LOW';
@@ -111,7 +112,6 @@ export enum State {
     PrepareInitialContext = 'PrepareInitialContext',
     SendInitialInfoToLLM = 'SendInitialInfoToLLM',
     LLMAnalyzePlan = 'LLMAnalyzePlan',
-    LLMPreVerification = 'LLMPreVerification',  // 新しい事前検証ステップ
     LLMDecision = 'LLMDecision',
     SystemAnalyzeRequest = 'SystemAnalyzeRequest',
     GetFileContent = 'GetFileContent',
@@ -124,6 +124,8 @@ export enum State {
     CheckApplyResult = 'CheckApplyResult',
     SendResultToLLM = 'SendResultToLLM',
     LLMNextStep = 'LLMNextStep',
+    SendFinalCheckToLLM = 'SendFinalCheckToLLM', // 最終確認状態
+    LLMFinalDecision = 'LLMFinalDecision', // 最終判断状態
     SendErrorToLLM = 'SendErrorToLLM',
     LLMErrorReanalyze = 'LLMErrorReanalyze',
     End = 'End',

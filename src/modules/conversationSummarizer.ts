@@ -16,14 +16,16 @@ class ConversationSummarizer {
     private config: Config;
     private openAIClient: OpenAIClient;
     private historyManager: ConversationHistoryManager;
+    private correctionGoalsCallback: () => string; // correctionGoalsを取得するコールバック
     
     // 設定
     private readonly DEFAULT_SUMMARY_THRESHOLD = 30000; // デフォルトのトークン閾値
     private readonly TOKEN_ESTIMATION_RATIO = 4; // 1トークン ≈ 4文字の近似
 
-    constructor(config: Config, openAIClient: OpenAIClient) {
+    constructor(config: Config, openAIClient: OpenAIClient, correctionGoalsCallback: () => string) {
         this.config = config;
         this.openAIClient = openAIClient;
+        this.correctionGoalsCallback = correctionGoalsCallback;
         
         this.historyManager = {
             messages: [],
@@ -112,9 +114,11 @@ class ConversationSummarizer {
             const lastActionResult = this.extractLastActionResult();
             
             // 4. 対話再開用のプロンプトを生成
+            const correctionGoals = this.correctionGoalsCallback();
             const resumePrompt = this.config.readPromptResumeFromSummaryFile(
                 JSON.stringify(summaryResponse.summary, null, 2),
-                lastActionResult
+                lastActionResult,
+                correctionGoals
             );
             
             // 5. 新しい短い対話履歴に置き換え

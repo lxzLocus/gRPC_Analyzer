@@ -64,7 +64,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     
     // データセット選択（利用可能なデータセット）
     const availableDatasets = [
-        path.join(projectRoot, "dataset", "incorrect"),         // 小規模テストデータセット（利用可能）
+        path.join(projectRoot, "dataset", "incorrect_few"),         // 小規模テストデータセット（利用可能）
         path.join(projectRoot, "dataset", "filtered_fewChanged"),     // 少数変更ファイル（アンマウント）
         path.join(projectRoot, "dataset", "filtered_confirmed"),     // 確認済み（アンマウント）
         path.join(projectRoot, "dataset", "filtered_commit"),        // コミット履歴（アンマウント）
@@ -72,7 +72,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ];
     
     // 現在選択されているデータセット（コマンドライン引数または デフォルト）
-    const selectedDataset = commandLineArgs.datasetPath || availableDatasets[0];
+    const selectedDataset = commandLineArgs.datasetPath || availableDatasets[1];
     const aprOutputPath = commandLineArgs.aprLogRootPath || commandLineArgs.aprOutputPath || path.join(projectRoot, "apr-logs");
 
     // キャッシュオプションの解析

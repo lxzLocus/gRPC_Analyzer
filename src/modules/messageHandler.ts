@@ -35,7 +35,8 @@ class MessageHandler {
             requiredFileInfos: [] as RequiredFileInfo[], // 新しいフィールド
             modifiedDiff: '',
             commentText: '',
-            has_fin_tag: false
+            has_fin_tag: false,
+            ready_for_final_check: false // 最終確認フラグ
         };
 
         // 生JSONの検出と直接処理
@@ -137,6 +138,10 @@ class MessageHandler {
             } else if (trimmed === '%%_Fin_%%') {
                 sections.has_fin_tag = true;
                 console.log('🏁 Found %%_Fin_%% tag');
+                break;
+            } else if (trimmed === '%_Ready_For_Final_Check_%') {
+                sections.ready_for_final_check = true;
+                console.log('✅ Found %_Ready_For_Final_Check_% tag');
                 break;
             }
 

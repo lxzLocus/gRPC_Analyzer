@@ -411,7 +411,9 @@ async function main() {
         status,
         turn_count,
         totalPromptTokens,
-        totalCompletionTokens
+        totalCompletionTokens,
+        'openai', // llmProvider
+        'gpt-4o-mini' // llmModel
     );
 
     const finalLog = logger.getFinalJSON();

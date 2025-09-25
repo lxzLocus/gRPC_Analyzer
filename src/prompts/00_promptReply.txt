@@ -31,7 +31,9 @@ You are tasked with retrieving and reviewing specific source code files that wer
 
 ## Your Task & Response Format ##
 ## Your Next Action ##
-Review the new information in the `Context` section. In the `%_Thought_%` section, explain how this new information helps you proceed with your plan. Then, execute the next step of your plan by using one of the action tags (`%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`).
+Review the new information in the `Context` section. In the `%_Thought_%` section, explain how this new information helps you proceed with your **plan**. Then, execute the **next step of your plan** by using one of the action tags (`%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`).
+
+**CRITICAL**: Stay focused on your **correction goals** and follow your **plan** systematically. Don't deviate unless new information requires plan revision.
 // Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
 
 **IMPORTANT RULE: After you output a %_Modified_% tag, the system will apply it and show you the result. You MUST wait for this verification step. Output %%_Fin_%% only in a subsequent turn after you have verified that all your Correction Goals have been met.**

@@ -5,6 +5,9 @@ The conversation has become long, so I have prepared a summary of our progress s
 ## Context Summary ##
 {{summary_of_history}} 
 
+---
+## Your Correction Goals (To maintain context) ##
+{{correctionGoals}}
 
 ---
 ## Previous Action's Result ##

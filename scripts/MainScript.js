@@ -36,14 +36,15 @@ const AVAILABLE_DATASETS = [
  * デフォルト設定
  */
 const DEFAULT_CONFIG = {
-    selectedDatasetIndex: 4,    // filtered_fewChanged をデフォルト選択
+    selectedDatasetIndex: 0,    // filtered_confirmed をデフォルト選択（より小さなファイル）
     outputDir: "/app/output",
     processingOptions: {
         baseOutputDir: "/app/output",
         maxRetries: 3,
         memoryCleanupInterval: 5,
-        timeoutMs: 5 * 60 * 1000,       // 5分 (300秒) - APIタイムアウトを考慮した現実的な値
-        enableGarbageCollection: true
+        timeoutMs: 15 * 60 * 1000,      // 15分 (900秒) - 巨大プロンプト対応
+        enableGarbageCollection: true,
+        enablePreVerification: false    // 引数無しの場合は事前検証を無効化
     }
 };
 
@@ -51,9 +52,37 @@ const DEFAULT_CONFIG = {
  * メイン実行関数
  */
 async function main() {
-    // コマンドライン引数の処理
-    const datasetIndex = parseInt(process.argv[2]) || DEFAULT_CONFIG.selectedDatasetIndex;
-    const outputDir = process.argv[3] || DEFAULT_CONFIG.outputDir;
+    // コマンドライン引数の解析
+    const args = process.argv.slice(2);
+    let datasetIndex = DEFAULT_CONFIG.selectedDatasetIndex;
+    let outputDir = DEFAULT_CONFIG.outputDir;
+    let enablePreVerification = DEFAULT_CONFIG.processingOptions.enablePreVerification;
+    
+    // 引数の処理
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        
+        if (arg === '--help' || arg === '-h') {
+            showUsage();
+            process.exit(0);
+        } else if (arg === '--enable-pre-verification') {
+            enablePreVerification = true;
+        } else if (arg === '--no-pre-verification') {
+            enablePreVerification = false;
+        } else if (!isNaN(parseInt(arg)) && datasetIndex === DEFAULT_CONFIG.selectedDatasetIndex) {
+            // 最初の数値引数をdatasetIndexとして使用
+            datasetIndex = parseInt(arg);
+        } else if (arg.startsWith('/') || arg.startsWith('./') || arg.startsWith('../')) {
+            // パスっぽい引数をoutputDirとして使用
+            outputDir = arg;
+        }
+    }
+    
+    // 引数無しの場合の特別処理
+    if (args.length === 0) {
+        console.log('🔧 No arguments provided - using defaults with pre-verification disabled');
+        enablePreVerification = false;
+    }
     
     // データセット選択の検証
     if (datasetIndex < 0 || datasetIndex >= AVAILABLE_DATASETS.length) {
@@ -87,7 +116,8 @@ async function main() {
     // 処理オプションの表示
     const options = {
         ...DEFAULT_CONFIG.processingOptions,
-        baseOutputDir: outputDir
+        baseOutputDir: outputDir,
+        enablePreVerification: enablePreVerification
     };
     
     console.log('\n⚙️ Processing Options:');
@@ -95,6 +125,7 @@ async function main() {
     console.log(`   Memory Cleanup Interval: ${options.memoryCleanupInterval}`);
     console.log(`   Timeout: ${options.timeoutMs / 1000}s`);
     console.log(`   Garbage Collection: ${options.enableGarbageCollection ? 'Enabled' : 'Disabled'}`);
+    console.log(`   Pre-Verification: ${options.enablePreVerification ? 'Enabled' : 'Disabled'}`);
     console.log('========================================\n');
 
     let controller = null;
@@ -237,23 +268,26 @@ function getLLMApiKeyLength() {
  * 使用方法の表示
  */
 function showUsage() {
-    console.log('📖 Usage: node scripts/MainScript.js [dataset_index] [output_dir]');
+    console.log('📖 Usage: node scripts/MainScript.js [dataset_index] [output_dir] [options]');
     console.log('\n📂 Available datasets:');
     AVAILABLE_DATASETS.forEach((dataset, index) => {
         console.log(`   ${index}: ${dataset}`);
     });
     console.log('\n📁 Default output directory: /app/output');
+    console.log('\n🔧 Options:');
+    console.log('   --enable-pre-verification   Enable Devil\'s Advocate pre-verification step');
+    console.log('   --no-pre-verification       Disable pre-verification step (default for no args)');
+    console.log('   --help, -h                  Show this help message');
+    console.log('\n⚠️  Dataset 4 (incorrect_few) uses large prompt files and has 15-minute timeout');
     console.log('\n🚀 Examples:');
-    console.log('   node scripts/MainScript.js                    # Use default settings');
-    console.log('   node scripts/MainScript.js 0                  # Use filtered_fewChanged');
-    console.log('   node scripts/MainScript.js 4 /tmp/output      # Use test dataset with custom output');
+    console.log('   node scripts/MainScript.js                              # Use defaults, no pre-verification');
+    console.log('   node scripts/MainScript.js --enable-pre-verification    # Use defaults with pre-verification');
+    console.log('   node scripts/MainScript.js 0                            # Use filtered_fewChanged, no pre-verification');
+    console.log('   node scripts/MainScript.js 0 --enable-pre-verification  # Use filtered_fewChanged with pre-verification');
+    console.log('   node scripts/MainScript.js 4 /tmp/output                # Use test dataset with custom output');
 }
 
-// ヘルプオプションの処理
-if (process.argv.includes('--help') || process.argv.includes('-h')) {
-    showUsage();
-    process.exit(0);
-}
+// ヘルプオプションの処理は main() 関数内で行うため、ここでは削除
 
 // 直接実行された場合のみメイン関数を実行
 if (import.meta.url === `file://${process.argv[1]}`) {

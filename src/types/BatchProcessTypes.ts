@@ -48,6 +48,7 @@ export interface BatchProcessingOptions {
     memoryCleanupInterval?: number;
     timeoutMs?: number;
     enableGarbageCollection?: boolean;
+    enablePreVerification?: boolean;
 }
 
 // 処理統計の型

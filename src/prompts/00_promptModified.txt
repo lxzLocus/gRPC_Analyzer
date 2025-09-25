@@ -26,38 +26,64 @@ You are tasked with re-checking and refining the previous code modifications mad
 
 ## Your Task: Verification and Next Steps ##
 
-**Mandatory Step: Verify your work against the Correction Goals.**
+**Mandatory Step: Create a detailed Verification Report.**
 
-You previously generated a patch which has now been applied. Review the code in `### Modified files from previous request ###` and verify if it fully satisfies EACH of the **Correction Goals** you defined at the start of this task.
+Act as a skeptical QA engineer. Your patch has been applied. You must now prove that your changes are correct by completing the following verification report.
 
-### Correction Goals (Your original success criteria) ###
+### Correction Goals ###
 {{correctionGoals}}
 
 ---
 
 ### Your Response Format ###
 
-**1. Analyze & Think (`%_Thought_%`)**:
-   - For each goal in the checklist above, explicitly state whether your modification achieved it (e.g., "Goal 1: Achieved.", "Goal 2: Partially achieved, still need to...").
-   - If a goal is not fully met, or if your patch introduced a new problem, explain the issue.
-   - Based on this verification, decide your next action (refine the patch, modify another file from your plan, or finish).
+**1. Verification Report (`%_Verification_Report_%`)**:
+   For each goal, provide the following in JSON format:
+   - `goal`: The goal you are verifying.
+   - `status`: "Achieved" or "Not Achieved".
+   - `evidence`: Quote the exact lines of code from the patched file that prove the goal is met.
+   - `reasoning`: Explain how the evidence proves the goal is met.
 
-**2. Act (Choose ONE)**:
-   - If further modifications are needed based on your verification, output a new `%_Modified_%` patch.
+**2. Analyze & Think (`%_Thought_%`)**:
+   Additionally, answer the following questions:
+   - **What's Missing?**: Look at the original handwritten_files list. Are there any files you haven't modified that might still be affected? Justify your decision.
+   - **What's the Risk?**: What is the single biggest risk or potential bug in the patch you just wrote?
+
+**3. Act (Choose ONE)**:
+   - If any goal shows "Not Achieved" status, output a new `%_Modified_%` patch.
    - If you need more information to proceed with your plan, output `%_Reply Required_%`.
-   - If and ONLY IF all Correction Goals have been fully met and your plan is complete, output `%%_Fin_%%`.
+   - If and ONLY IF all goals show "Achieved" status and no critical risks were identified, output `%%_Fin_%%`.
 ---
 ## Response Structure Example ##
 
 // --- EXAMPLE 1: Further information is required ---
 
-%_Thought_%
-Verification against Correction Goals:
-- Goal 1: 'Update `Credential` struct usage in `auth_sys.go`.' -> Achieved. The patch correctly adds the `origin` field during initialization.
-- Goal 2: 'Ensure no build errors in C code.' -> Achieved. My previous analysis confirmed the C files did not require changes.
-- Goal 3: 'Update related test code.' -> Not Achieved. My plan includes checking test files, but I have not yet examined their content.
+%_Verification_Report_%
+[
+  {
+    "goal": "Update `Credential` struct usage in `auth_sys.go`",
+    "status": "Achieved",
+    "evidence": "cred := &Credential{\n\tuser: userInfo.Username(),\n\torigin: name,\n}",
+    "reasoning": "The patch correctly adds the `origin` field during Credential struct initialization, as required by the updated struct definition."
+  },
+  {
+    "goal": "Ensure no build errors in C code",
+    "status": "Achieved", 
+    "evidence": "No changes made to C files",
+    "reasoning": "Analysis confirmed C files do not reference the modified struct, so no changes needed."
+  },
+  {
+    "goal": "Update related test code",
+    "status": "Not Achieved",
+    "evidence": "Test file not yet examined",
+    "reasoning": "Cannot verify if test code needs updates without examining test file content."
+  }
+]
 
-My next action, according to my plan, is to analyze the test file to see if it needs updates. I will request its content now.
+%_Thought_%
+**What's Missing?**: My plan includes checking test files, but I have not yet examined their content. The handwritten_files list shows auth_sys_test.go which may need updates to match the new struct initialization.
+
+**What's the Risk?**: The biggest risk is that test code may be using old Credential struct initialization without the origin field, which would cause compilation failures.
 
 %_Reply Required_%
 [
@@ -66,11 +92,20 @@ My next action, according to my plan, is to analyze the test file to see if it n
 
 // --- EXAMPLE 2: Further modification is needed ---
 
-%_Thought_%
-Verification against Correction Goals:
-- Goal 1: 'Update `Credential` struct usage.' -> Partially Achieved. I added the `origin` field, but I realize now that the hostname should be retrieved from a config variable, not directly from the OS, for better testability.
+%_Verification_Report_%
+[
+  {
+    "goal": "Update `Credential` struct usage",
+    "status": "Not Achieved",
+    "evidence": "name, err := os.Hostname()",
+    "reasoning": "While I added the origin field, using os.Hostname() directly reduces testability. Should use config-based hostname for better testing support."
+  }
+]
 
-I will generate a new patch to correct this.
+%_Thought_%
+**What's Missing?**: All files in my plan have been examined.
+
+**What's the Risk?**: Hard-coded hostname retrieval makes unit testing difficult and reduces code flexibility.
 
 %_Modified_%
 --- src/control/security/auth_sys.go
@@ -80,19 +115,38 @@ I will generate a new patch to correct this.
  	}
  
 -	name, err := os.Hostname()
-+	name := config.GetHostname() // Assume config is available
++	name := config.GetHostname() // Use config for better testability
  	if err != nil {
  		name = "unavailable"
  	}
 
 // --- EXAMPLE 3: All tasks are complete ---
 
-%_Thought_%
-Verification against Correction Goals:
-- Goal 1: 'Update `Credential` struct usage.' -> Achieved.
-- Goal 2: 'Ensure no build errors in C code.' -> Achieved.
-- Goal 3: 'Update related test code.' -> Achieved. The test file did not require any changes.
+%_Verification_Report_%
+[
+  {
+    "goal": "Update `Credential` struct usage",
+    "status": "Achieved",
+    "evidence": "cred := &Credential{\n\tuser: userInfo.Username(),\n\torigin: config.GetHostname(),\n}",
+    "reasoning": "The patch correctly adds the origin field with config-based hostname retrieval, improving testability."
+  },
+  {
+    "goal": "Ensure no build errors in C code",
+    "status": "Achieved",
+    "evidence": "No changes made to C files",
+    "reasoning": "C files do not reference the modified struct, confirmed through analysis."
+  },
+  {
+    "goal": "Update related test code", 
+    "status": "Achieved",
+    "evidence": "Test file uses mock credentials, no struct initialization changes needed",
+    "reasoning": "Test code uses dependency injection pattern, unaffected by struct changes."
+  }
+]
 
-All correction goals have been met and all steps in my plan are complete. The task is finished.
+%_Thought_%
+**What's Missing?**: All files from the handwritten_files list have been examined and appropriate changes made. No additional files require modification.
+
+**What's the Risk?**: Risk is minimal. The changes are backward compatible and well-tested. Config dependency is properly handled.
 
 %%_Fin_%%

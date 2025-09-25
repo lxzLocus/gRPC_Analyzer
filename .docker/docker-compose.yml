@@ -39,6 +39,13 @@ services:
       - type: bind
         source: E:/Workspace/gRPC_Analyzer/dataset/filtered_fewChanged
         target: /app/dataset/filtered_fewChanged
+      - type: bind
+        source: E:/Workspace/gRPC_Analyzer/dataset/incorrect
+        target: /app/dataset/incorrect
+      - type: bind
+        source: E:/Workspace/gRPC_Analyzer/dataset/incorrect_few
+        target: /app/dataset/incorrect_few
+
 
   # ===========================================
   # 評価システム（新規追加）
