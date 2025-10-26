@@ -202,7 +202,14 @@ class FileManager {
         const allFilePaths = fs.readFileSync(path.join(this.config.promptVariableDir, '04_surroundedFilePath.txt'), 'utf-8');
         const suspectedFiles = fs.readFileSync(path.join(this.config.promptVariableDir, '05_suspectedFiles.txt'), 'utf-8');
 
+        // プルリクエストタイトルを抽出
+        const inputDir = this.config.inputProjectDir;
+        const parts = inputDir.split(path.sep);
+        const prName = parts[parts.length - 2] || 'unknown_pr';
+        const pullRequestTitle = prName.replace(/_/g, ' '); // アンダーバーをスペースに置換
+
         const context = {
+            pullRequestTitle: pullRequestTitle,
             protoFile: protoFileContent,
             protoFileChanges: protoFileChanges,
             fileChanges: fileChangesContent,

@@ -28,6 +28,9 @@ You will first analyze the situation, create a plan, request any necessary addit
 
 ## Context ##
 
+### Pull Request Title (Hint) ###
+{{pullRequestTitle}}
+
 ### Proto file ###
 {{protoFile}}
 

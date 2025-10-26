@@ -133,6 +133,7 @@ export enum State {
 
 // プロンプトテンプレート用の型定義
 export type PromptTemplateContext = {
+    pullRequestTitle: string;
     protoFile: string;
     protoFileChanges: string;
     fileChanges: string;

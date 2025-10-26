@@ -136,6 +136,31 @@ class FileManager {
     }
 
     /**
+     * inputProjectDirからプルリクエストタイトルを抽出
+     * @returns プルリクエストタイトル（アンダーバーをスペースに置換済み）
+     */
+    private extractPullRequestTitle(): string {
+        try {
+            // inputProjectDir例: /app/dataset/filtered_commit/boulder/pullrequest/Remove_OCSP_and_CRL_methods_from_CA_gRPC_service/premerge_xxx
+            const inputDir = this.config.inputProjectDir;
+            const parts = inputDir.split(path.sep);
+            
+            // パス構造からPR名を抽出
+            // parts: ["", "app", "dataset", "filtered_commit", "boulder", "pullrequest", "PR_name", "premerge_xxx"]
+            const prName = parts[parts.length - 2] || 'unknown_pr';           // Remove_OCSP_and_CRL_methods_from_CA_gRPC_service
+            
+            // アンダーバーをスペースに置換
+            const cleanedTitle = prName.replace(/_/g, ' ');
+            
+            console.log(`📁 抽出されたPRタイトル: ${cleanedTitle}`);
+            return cleanedTitle;
+        } catch (error) {
+            console.warn('⚠️  プルリクエストタイトル抽出エラー:', error);
+            return 'unknown pr';
+        }
+    }
+
+    /**
      * テンプレート変数の検証
      * @param context テンプレートコンテキスト
      * @returns 検証結果とエラーメッセージ
@@ -191,6 +216,7 @@ class FileManager {
 
         // テンプレートコンテキストの構築と検証
         const context: PromptTemplateContext = {
+            pullRequestTitle: this.extractPullRequestTitle(),
             protoFile: protoFileContent,
             protoFileChanges: protoFileChanges,
             fileChanges: fileChangesContent,
@@ -1167,6 +1193,7 @@ Leverage this constraint to maximize your differential reasoning capabilities.`
 
         // テンプレートコンテキストの構築と検証
         const context: PromptTemplateContext = {
+            pullRequestTitle: this.extractPullRequestTitle(),
             protoFile: protoFileContent,
             protoFileChanges: protoFileChanges,
             fileChanges: fileChangesContent,
