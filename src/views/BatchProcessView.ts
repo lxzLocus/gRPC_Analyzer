@@ -6,6 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { getJSTFileTimestamp, getJSTTimestamp, convertUTCtoJST } from '../utils/timeUtils.js';
 import { 
     ProcessingResult,
     ProcessingStatistics,
@@ -26,9 +27,9 @@ export class BatchProcessView {
     constructor(outputDir: string = '/app/output') {
         this.outputDir = outputDir;
         
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        this.errorReportFile = path.join(outputDir, `error_report_${timestamp}.json`);
-        this.summaryReportFile = path.join(outputDir, `processing_summary_${timestamp}.json`);
+    const timestamp = getJSTFileTimestamp();
+    this.errorReportFile = path.join(outputDir, `error_report_${timestamp}.json`);
+    this.summaryReportFile = path.join(outputDir, `processing_summary_${timestamp}.json`);
 
         // 出力ディレクトリの作成
         this.ensureOutputDirectory();
@@ -42,7 +43,7 @@ export class BatchProcessView {
      */
     displayProcessingStart(datasetDir: string): void {
         console.log('🚀 Starting safe batch processing for:', datasetDir);
-        console.log('📅 Started at:', new Date().toISOString());
+    console.log('📅 Started at (JST):', getJSTTimestamp());
         console.log('🐛 Process ID:', process.pid);
         console.log('📝 Node.js Version:', process.version);
         console.log('🗑️ Garbage Collection:', global.gc ? 'Available' : 'Not Available (use --expose-gc)');
@@ -149,8 +150,8 @@ export class BatchProcessView {
      * 処理完了の表示
      */
     displayProcessingComplete(): void {
-        console.log('\n✅ Safe batch processing completed successfully.');
-        console.log('⏰ Process completed at:', new Date().toISOString());
+    console.log('\n✅ Safe batch processing completed successfully.');
+    console.log('⏰ Process completed at (JST):', getJSTTimestamp());
     }
 
     /**
@@ -198,7 +199,10 @@ export class BatchProcessView {
         
         const summary = {
             ...statistics,
+            // 互換性のため従来のendTime(Date→ISO化)も保持しつつ、JST文字列も追加
             endTime,
+            endTimeJST: getJSTTimestamp(),
+            startTimeJST: convertUTCtoJST(statistics.startTime.toISOString()),
             totalDuration,
             totalDurationFormatted: this.formatDuration(totalDuration),
             successRate: statistics.totalPullRequests > 0

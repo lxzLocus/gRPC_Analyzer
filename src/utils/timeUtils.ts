@@ -17,12 +17,12 @@ export function getJSTTimestamp(): string {
 
 /**
  * ファイル名用のJSTタイムスタンプを取得
- * @returns ファイル名に適したJSTタイムスタンプ（例: "2025-07-14T15-26-37-643Z"）
+ * @returns ファイル名に適したJSTタイムスタンプ（例: "2025-07-14T15-26-37-643+09-00"）
  */
 export function getJSTFileTimestamp(): string {
     const jstTimestamp = getJSTTimestamp();
-    // ファイル名用に文字を置換（+09:00をZに変更）
-    return jstTimestamp.replace(/[:.]/g, '-').replace('+09-00', 'Z');
+    // ファイル名用に安全な文字へ置換（: と . を - に）し、タイムゾーンは +09-00 として明示
+    return jstTimestamp.replace(/[:.]/g, '-').replace('+09:00', '+09-00');
 }
 
 /**

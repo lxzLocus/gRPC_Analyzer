@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DatasetRepository } from '../Repository/DatasetRepository.js';
 import { ProcessingStatistics, ErrorReport } from '../types/BatchProcessTypes.js';
+import { getJSTFileTimestamp, getJSTTimestamp, convertUTCtoJST } from '../utils/timeUtils.js';
 
 // Node.js型の宣言
 declare const process: any;
@@ -22,7 +23,7 @@ export class ReportService {
         this.datasetRepository = new DatasetRepository();
         this.outputDir = outputDir;
         
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const timestamp = getJSTFileTimestamp();
         this.errorReportFile = path.join(outputDir, `error_report_${timestamp}.json`);
         this.summaryReportFile = path.join(outputDir, `processing_summary_${timestamp}.json`);
 
@@ -93,7 +94,10 @@ export class ReportService {
         
         const summary = {
             ...statistics,
+            // 従来のISO(UTC)も維持しつつ、JST文字列を追加
             endTime,
+            endTimeJST: getJSTTimestamp(),
+            startTimeJST: convertUTCtoJST(statistics.startTime.toISOString()),
             totalDuration,
             totalDurationFormatted: this.formatDuration(totalDuration),
             successRate: statistics.totalPullRequests > 0

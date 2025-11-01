@@ -67,6 +67,23 @@ export class BatchProcessingService {
      */
     async getRepositories(datasetDir: string): Promise<string[]> {
         const repositories = await this.datasetRepository.getRepositoryList(datasetDir);
+        
+        // 単一PR実行モードの場合はフィルタリング
+        if (this.options.targetPullRequest) {
+            const filtered = repositories.filter(
+                repo => repo === this.options.targetPullRequest!.repositoryName
+            );
+            this.statistics.totalRepositories = filtered.length;
+            
+            if (filtered.length === 0) {
+                console.warn(`⚠️  Target repository not found: ${this.options.targetPullRequest.repositoryName}`);
+            } else {
+                console.log(`🎯 Filtered to target repository: ${this.options.targetPullRequest.repositoryName}`);
+            }
+            
+            return filtered;
+        }
+        
         this.statistics.totalRepositories = repositories.length;
         return repositories;
     }
@@ -76,6 +93,24 @@ export class BatchProcessingService {
      */
     async getCategories(datasetDir: string, repositoryName: string): Promise<string[]> {
         const categories = await this.datasetRepository.getCategoryList(datasetDir, repositoryName);
+        
+        // 単一PR実行モードの場合はフィルタリング
+        if (this.options.targetPullRequest && 
+            repositoryName === this.options.targetPullRequest.repositoryName) {
+            const filtered = categories.filter(
+                cat => cat === this.options.targetPullRequest!.category
+            );
+            this.statistics.totalCategories += filtered.length;
+            
+            if (filtered.length === 0) {
+                console.warn(`⚠️  Target category not found: ${this.options.targetPullRequest.category}`);
+            } else {
+                console.log(`🎯 Filtered to target category: ${this.options.targetPullRequest.category}`);
+            }
+            
+            return filtered;
+        }
+        
         this.statistics.totalCategories += categories.length;
         return categories;
     }
@@ -93,6 +128,25 @@ export class BatchProcessingService {
             repositoryName, 
             category
         );
+        
+        // 単一PR実行モードの場合はフィルタリング
+        if (this.options.targetPullRequest && 
+            repositoryName === this.options.targetPullRequest.repositoryName &&
+            category === this.options.targetPullRequest.category) {
+            const filtered = pullRequests.filter(
+                pr => pr === this.options.targetPullRequest!.pullRequestTitle
+            );
+            this.statistics.totalPullRequests += filtered.length;
+            
+            if (filtered.length === 0) {
+                console.warn(`⚠️  Target pull request not found: ${this.options.targetPullRequest.pullRequestTitle}`);
+            } else {
+                console.log(`🎯 Filtered to target PR: ${this.options.targetPullRequest.pullRequestTitle}`);
+            }
+            
+            return filtered;
+        }
+        
         this.statistics.totalPullRequests += pullRequests.length;
         return pullRequests;
     }

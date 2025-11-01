@@ -49,6 +49,12 @@ export interface BatchProcessingOptions {
     timeoutMs?: number;
     enableGarbageCollection?: boolean;
     enablePreVerification?: boolean;
+    // 単一PR実行用のフィルター（指定時は該当PRのみ処理）
+    targetPullRequest?: {
+        repositoryName: string;
+        category: string;
+        pullRequestTitle: string;
+    };
 }
 
 // 処理統計の型

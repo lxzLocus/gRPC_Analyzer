@@ -13,7 +13,9 @@
     "batch:mvc": "node scripts/MainScript.js",
     "batch:mvc:test": "node scripts/MainScript.js 4 /app/output",
     "batch:mvc:large": "node scripts/MainScript.js 2 /app/output",
-    "batch:mvc:help": "node scripts/MainScript.js --help"
+    "batch:mvc:help": "node scripts/MainScript.js --help",
+    "batch:single-pr": "node scripts/SinglePRScript.js",
+    "compare:versions": "node scripts/CompareVersionScript.js"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",

@@ -10,6 +10,7 @@ import fs from 'fs';
 import Handlebars from 'handlebars';
 import dotenv from 'dotenv';
 import path from 'path';
+import { getJSTTimestamp, getJSTFileTimestamp } from './timeUtils.js';
 
 /*
 modules
@@ -269,12 +270,12 @@ async function main() {
     const openAIClient = new OpenAIClient(process.env.OPENAI_API_KEY || '');
     const logger = new Logger();
 
-    const startTime = new Date().toISOString();
+    const startTime = getJSTTimestamp();
     // experiment_idを "pravega/Issue_3758-..." の形式で取得
     const pathParts = config.inputProjectDir.split(path.sep);
     const experimentId = path.join(pathParts[pathParts.length - 2], pathParts[pathParts.length - 1]);
 
-    const logFileTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const logFileTimestamp = getJSTFileTimestamp();
     const logFilePath = path.join(config.outputDir, 'log', `${logFileTimestamp}_log.json`);
     if (!fs.existsSync(path.dirname(logFilePath))) {
         fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
@@ -298,7 +299,7 @@ async function main() {
         turn_count += 1;
         console.log(`--- Turn ${turn_count} ---`);
 
-        const turnTimestamp = new Date().toISOString();
+    const turnTimestamp = getJSTTimestamp();
         const llm_request_log = {
             prompt_template: prompt_template_name,
             full_prompt_content: next_prompt_content!,
@@ -316,7 +317,7 @@ async function main() {
             break;
         }
         const llm_content = llm_response.choices[0].message.content;
-        const responseTimestamp = new Date().toISOString();
+    const responseTimestamp = getJSTTimestamp();
         const usage = {
             prompt_tokens: llm_response.usage?.prompt_tokens || 0,
             completion_tokens: llm_response.usage?.completion_tokens || 0,
@@ -409,7 +410,7 @@ async function main() {
     }
 
     // --- 4. 最終処理 ---
-    const endTime = new Date().toISOString();
+    const endTime = getJSTTimestamp();
 
     logger.setExperimentMetadata(
         experimentId,

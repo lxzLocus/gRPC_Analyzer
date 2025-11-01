@@ -12,6 +12,7 @@ import {
     BatchProcessingOptions, 
     ErrorReport 
 } from '../types/BatchProcessTypes.js';
+import { getJSTTimestamp } from '../utils/timeUtils.js';
 
 // Node.js型の宣言
 declare const process: any;
@@ -214,7 +215,7 @@ export class BatchProcessController {
     private async handleCriticalError(error: any, datasetDir: string): Promise<void> {
         try {
             const errorReport: ErrorReport = {
-                timestamp: new Date().toISOString(),
+                timestamp: getJSTTimestamp(),
                 repositoryName: 'SYSTEM',
                 category: 'CRITICAL_ERROR',
                 pullRequestTitle: 'BATCH_PROCESSING',
