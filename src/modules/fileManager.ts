@@ -279,92 +279,139 @@ class FileManager {
         const contents: string[] = [];
         const results: FileProcessingResult[] = [];
 
-        // ファイルごとの処理
+        // ===== 並行処理による最適化 =====
+        // Step 1: 読み込み可能なファイルのリストを作成
+        const readableFiles: Array<{ index: number; filePath: string; relativePath: string; fileCheck: any }> = [];
+        
         for (let i = 0; i < filePaths.length; i++) {
             const filePath = filePaths[i];
             const fileCheck = fileChecks[i];
             const relativePath = path.relative(this.config.inputProjectDir, filePath);
-            const fileStartTime = Date.now();
 
-            let result: FileProcessingResult = {
-                success: false,
-                path: filePath,
-                relativePath: relativePath,
-                processingTime: 0
-            };
-
-            try {
-                if (!fileCheck.exists) {
-                    // .pb.goファイルの特別処理
-                    if (relativePath.endsWith('.pb.go')) {
-                        const errorMsg = this.generateProtobufFileErrorMessage(relativePath);
-                        contents.push(`--- ${relativePath}\n${errorMsg}`);
-                        result.error = errorMsg;
-                        summary.errors.push({ path: relativePath, error: 'Generated .pb.go file not found' });
-                        summary.errorCount++;
-                    } else {
-                        // 通常のファイル処理 - 類似ファイルを探す
-                        const originalPath = fileInfos[i].path;
-                        const suggestions = await this.findSimilarFiles(originalPath, this.config.inputProjectDir);
-                        const suggestionText = suggestions.length > 0 
-                            ? `\n\n類似ファイルの候補:\n${suggestions.slice(0, 5).map((s: string) => `  - ${s}`).join('\n')}`
-                            : '';
-                        
-                        const errorMsg = `ファイルが見つかりません: ${fileCheck.error || 'File not found'}${suggestionText}`;
-                        contents.push(`--- ${relativePath}\n[${errorMsg}]`);
-                        result.error = errorMsg;
-                        summary.errors.push({ path: relativePath, error: errorMsg });
-                        summary.errorCount++;
-                    }
-                } else if (!fileCheck.isFile) {
-                    const errorMsg = 'ディレクトリが指定されました（ファイルを期待）';
-                    contents.push(`--- ${relativePath}\n[${errorMsg}]`);
-                    result.error = errorMsg;
-                    summary.errors.push({ path: relativePath, error: errorMsg });
-                    summary.errorCount++;
-                } else if (!this.isFileSizeWithinLimit(fileCheck.size)) {
-                    const errorMsg = `ファイルサイズが制限を超えています: ${this.formatFileSize(fileCheck.size)} > ${this.formatFileSize(this.fileOperationConfig.maxFileSize)}`;
-                    contents.push(`--- ${relativePath}\n[${errorMsg}]`);
-                    result.error = errorMsg;
-                    summary.errors.push({ path: relativePath, error: errorMsg });
+            // エラーチェック（読み込み不可の場合は即座に処理）
+            if (!fileCheck.exists) {
+                if (relativePath.endsWith('.pb.go')) {
+                    const errorMsg = this.generateProtobufFileErrorMessage(relativePath);
+                    contents.push(`--- ${relativePath}\n${errorMsg}`);
+                    results.push({
+                        success: false,
+                        path: filePath,
+                        relativePath: relativePath,
+                        error: errorMsg,
+                        processingTime: 0
+                    });
+                    summary.errors.push({ path: relativePath, error: 'Generated .pb.go file not found' });
                     summary.errorCount++;
                 } else {
-                    // ファイル読み込み
-                    const content = await this.readFileWithTimeout(filePath);
-                    contents.push(`--- ${relativePath}\n${content}`);
+                    const originalPath = fileInfos[i].path;
+                    const suggestions = await this.findSimilarFiles(originalPath, this.config.inputProjectDir);
+                    const suggestionText = suggestions.length > 0 
+                        ? `\n\n類似ファイルの候補:\n${suggestions.slice(0, 5).map((s: string) => `  - ${s}`).join('\n')}`
+                        : '';
                     
-                    result.success = true;
-                    result.size = fileCheck.size;
+                    const errorMsg = `ファイルが見つかりません: ${fileCheck.error || 'File not found'}${suggestionText}`;
+                    contents.push(`--- ${relativePath}\n[${errorMsg}]`);
+                    results.push({
+                        success: false,
+                        path: filePath,
+                        relativePath: relativePath,
+                        error: errorMsg,
+                        processingTime: 0
+                    });
+                    summary.errors.push({ path: relativePath, error: errorMsg });
+                    summary.errorCount++;
+                }
+            } else if (!fileCheck.isFile) {
+                const errorMsg = 'ディレクトリが指定されました（ファイルを期待）';
+                contents.push(`--- ${relativePath}\n[${errorMsg}]`);
+                results.push({
+                    success: false,
+                    path: filePath,
+                    relativePath: relativePath,
+                    error: errorMsg,
+                    processingTime: 0
+                });
+                summary.errors.push({ path: relativePath, error: errorMsg });
+                summary.errorCount++;
+            } else if (!this.isFileSizeWithinLimit(fileCheck.size)) {
+                const errorMsg = `ファイルサイズが制限を超えています: ${this.formatFileSize(fileCheck.size)} > ${this.formatFileSize(this.fileOperationConfig.maxFileSize)}`;
+                contents.push(`--- ${relativePath}\n[${errorMsg}]`);
+                results.push({
+                    success: false,
+                    path: filePath,
+                    relativePath: relativePath,
+                    error: errorMsg,
+                    processingTime: 0
+                });
+                summary.errors.push({ path: relativePath, error: errorMsg });
+                summary.errorCount++;
+            } else {
+                // 読み込み可能 - リストに追加
+                readableFiles.push({ index: i, filePath, relativePath, fileCheck });
+            }
+        }
+
+        // Step 2: 並行ファイル読み込み（最大10並行）
+        if (readableFiles.length > 0) {
+            console.log(`🚀 並行ファイル読み込み開始: ${readableFiles.length}ファイル (最大10並行)`);
+            const parallelStartTime = Date.now();
+            
+            const readResults = await this.readFilesInParallel(
+                readableFiles.map(rf => rf.filePath),
+                10 // 最大10並行
+            );
+
+            const parallelTime = Date.now() - parallelStartTime;
+            console.log(`⚡ 並行読み込み完了: ${parallelTime}ms`);
+
+            // Step 3: 結果を元のインデックス順に処理
+            for (let i = 0; i < readableFiles.length; i++) {
+                const { index, filePath, relativePath, fileCheck } = readableFiles[i];
+                const readResult = readResults[i];
+                const fileStartTime = Date.now();
+
+                if (readResult.error) {
+                    const errorMsg = `ファイル読み込みエラー: ${readResult.error.message}`;
+                    contents.push(`--- ${relativePath}\n[${errorMsg}]`);
+                    results.push({
+                        success: false,
+                        path: filePath,
+                        relativePath: relativePath,
+                        error: errorMsg,
+                        processingTime: Date.now() - fileStartTime
+                    });
+                    summary.errors.push({ path: relativePath, error: errorMsg });
+                    summary.errorCount++;
+                    console.error(`  ❌ ${relativePath}: ${errorMsg}`);
+
+                    this.logger.logFileOperationError(
+                        'READ_FILE',
+                        filePath,
+                        readResult.error,
+                        {
+                            relativePath,
+                            attemptedEncoding: this.fileOperationConfig.encoding,
+                            maxFileSize: this.fileOperationConfig.maxFileSize,
+                            timeout: this.fileOperationConfig.timeoutMs
+                        }
+                    );
+                } else if (readResult.content !== undefined) {
+                    contents.push(`--- ${relativePath}\n${readResult.content}`);
+                    const processingTime = Date.now() - fileStartTime;
+                    results.push({
+                        success: true,
+                        path: filePath,
+                        relativePath: relativePath,
+                        size: fileCheck.size,
+                        processingTime: processingTime
+                    });
                     summary.successCount++;
                     summary.totalSize += fileCheck.size;
+                    summary.totalProcessingTime += processingTime;
                     
                     console.log(`  ✅ ${relativePath} (${this.formatFileSize(fileCheck.size)})`);
                 }
-            } catch (error) {
-                const errorMsg = `ファイル読み込みエラー: ${(error as Error).message}`;
-                contents.push(`--- ${relativePath}\n[${errorMsg}]`);
-                result.error = errorMsg;
-                summary.errors.push({ path: relativePath, error: errorMsg });
-                summary.errorCount++;
-                console.error(`  ❌ ${relativePath}: ${errorMsg}`);
-                
-                // 詳細なファイル操作エラーログを記録
-                this.logger.logFileOperationError(
-                    'READ_FILE',
-                    filePath,
-                    error as Error,
-                    {
-                        relativePath,
-                        attemptedEncoding: this.fileOperationConfig.encoding,
-                        maxFileSize: this.fileOperationConfig.maxFileSize,
-                        timeout: this.fileOperationConfig.timeoutMs
-                    }
-                );
             }
-
-            result.processingTime = Date.now() - fileStartTime;
-            summary.totalProcessingTime += result.processingTime;
-            results.push(result);
         }
 
         // 統計情報の出力
@@ -666,6 +713,37 @@ class FileManager {
     }
 
     /**
+     * 並行ファイル読み込み（並行数制限付き）
+     * @param filePaths ファイルパスの配列
+     * @param concurrency 最大並行数（デフォルト: 10）
+     * @returns ファイル内容の配列（順序保証）
+     */
+    private async readFilesInParallel(
+        filePaths: string[], 
+        concurrency: number = 10
+    ): Promise<Array<{ path: string; content?: string; error?: Error }>> {
+        const results: Array<{ path: string; content?: string; error?: Error }> = [];
+        
+        // 並行処理のバッチを作成
+        for (let i = 0; i < filePaths.length; i += concurrency) {
+            const batch = filePaths.slice(i, i + concurrency);
+            const batchResults = await Promise.all(
+                batch.map(async (filePath) => {
+                    try {
+                        const content = await this.readFileWithTimeout(filePath);
+                        return { path: filePath, content };
+                    } catch (error) {
+                        return { path: filePath, error: error as Error };
+                    }
+                })
+            );
+            results.push(...batchResults);
+        }
+        
+        return results;
+    }
+
+    /**
      * 類似ファイルを検索する
      * @param targetPath - 検索対象のパス
      * @param searchDir - 検索ディレクトリ
@@ -958,100 +1036,153 @@ class FileManager {
         const contents: string[] = [];
         const results: FileProcessingResult[] = [];
 
-        // ファイルごとの処理
+        // ===== 並行処理による最適化（変更検知版） =====
+        // Step 1: 読み込み可能なファイルのリストを作成（変更検知情報を含む）
+        const readableFiles: Array<{ 
+            index: number; 
+            filePath: string; 
+            relativePath: string; 
+            fileCheck: any;
+            detectionResult: any;
+        }> = [];
+        
         for (let i = 0; i < filePaths.length; i++) {
             const filePath = filePaths[i];
             const fileCheck = fileChecks[i];
             const relativePath = path.relative(this.config.inputProjectDir, filePath);
-            const fileStartTime = Date.now();
 
             // 変更検知を実行
             const detectionResult = this.detectFileChangeStatus(fileInfos[i].path, changedFiles);
-            
-            let result: FileProcessingResult = {
-                success: false,
-                path: filePath,
-                relativePath: relativePath,
-                processingTime: 0
-            };
 
-            try {
-                if (!fileCheck.exists) {
-                    // .pb.goファイルの特別処理
-                    if (relativePath.endsWith('.pb.go')) {
-                        const errorMsg = this.generateProtobufFileErrorMessage(relativePath);
-                        contents.push(`--- ${relativePath}\n${errorMsg}`);
-                        result.error = errorMsg;
-                        summary.errors.push({ path: relativePath, error: 'Generated .pb.go file not found' });
-                        summary.errorCount++;
-                    } else {
-                        // 通常のファイル処理 - 類似ファイルを探す
-                        const originalPath = fileInfos[i].path;
-                        const suggestions = await this.findSimilarFiles(originalPath, this.config.inputProjectDir);
-                        const suggestionText = suggestions.length > 0 
-                            ? `\n\n類似ファイルの候補:\n${suggestions.slice(0, 5).map((s: string) => `  - ${s}`).join('\n')}`
-                            : '';
-                        
-                        const errorMsg = `ファイルが見つかりません: ${fileCheck.error || 'File not found'}${suggestionText}`;
-                        contents.push(`--- ${relativePath}\n[${errorMsg}]`);
-                        result.error = errorMsg;
-                        summary.errors.push({ path: relativePath, error: errorMsg });
-                        summary.errorCount++;
-                    }
-                } else if (!fileCheck.isFile) {
-                    const errorMsg = 'ディレクトリが指定されました（ファイルを期待）';
-                    contents.push(`--- ${relativePath}\n[${errorMsg}]`);
-                    result.error = errorMsg;
-                    summary.errors.push({ path: relativePath, error: errorMsg });
-                    summary.errorCount++;
-                } else if (!this.isFileSizeWithinLimit(fileCheck.size)) {
-                    const errorMsg = `ファイルサイズが制限を超えています: ${this.formatFileSize(fileCheck.size)} > ${this.formatFileSize(this.fileOperationConfig.maxFileSize)}`;
-                    contents.push(`--- ${relativePath}\n[${errorMsg}]`);
-                    result.error = errorMsg;
-                    summary.errors.push({ path: relativePath, error: errorMsg });
+            // エラーチェック（読み込み不可の場合は即座に処理）
+            if (!fileCheck.exists) {
+                if (relativePath.endsWith('.pb.go')) {
+                    const errorMsg = this.generateProtobufFileErrorMessage(relativePath);
+                    contents.push(`--- ${relativePath}\n${errorMsg}`);
+                    results.push({
+                        success: false,
+                        path: filePath,
+                        relativePath: relativePath,
+                        error: errorMsg,
+                        processingTime: 0
+                    });
+                    summary.errors.push({ path: relativePath, error: 'Generated .pb.go file not found' });
                     summary.errorCount++;
                 } else {
-                    // ファイル読み込み
-                    const content = await this.readFileWithTimeout(filePath);
+                    const originalPath = fileInfos[i].path;
+                    const suggestions = await this.findSimilarFiles(originalPath, this.config.inputProjectDir);
+                    const suggestionText = suggestions.length > 0 
+                        ? `\n\n類似ファイルの候補:\n${suggestions.slice(0, 5).map((s: string) => `  - ${s}`).join('\n')}`
+                        : '';
                     
+                    const errorMsg = `ファイルが見つかりません: ${fileCheck.error || 'File not found'}${suggestionText}`;
+                    contents.push(`--- ${relativePath}\n[${errorMsg}]`);
+                    results.push({
+                        success: false,
+                        path: filePath,
+                        relativePath: relativePath,
+                        error: errorMsg,
+                        processingTime: 0
+                    });
+                    summary.errors.push({ path: relativePath, error: errorMsg });
+                    summary.errorCount++;
+                }
+            } else if (!fileCheck.isFile) {
+                const errorMsg = 'ディレクトリが指定されました（ファイルを期待）';
+                contents.push(`--- ${relativePath}\n[${errorMsg}]`);
+                results.push({
+                    success: false,
+                    path: filePath,
+                    relativePath: relativePath,
+                    error: errorMsg,
+                    processingTime: 0
+                });
+                summary.errors.push({ path: relativePath, error: errorMsg });
+                summary.errorCount++;
+            } else if (!this.isFileSizeWithinLimit(fileCheck.size)) {
+                const errorMsg = `ファイルサイズが制限を超えています: ${this.formatFileSize(fileCheck.size)} > ${this.formatFileSize(this.fileOperationConfig.maxFileSize)}`;
+                contents.push(`--- ${relativePath}\n[${errorMsg}]`);
+                results.push({
+                    success: false,
+                    path: filePath,
+                    relativePath: relativePath,
+                    error: errorMsg,
+                    processingTime: 0
+                });
+                summary.errors.push({ path: relativePath, error: errorMsg });
+                summary.errorCount++;
+            } else {
+                // 読み込み可能 - リストに追加（変更検知結果も含む）
+                readableFiles.push({ index: i, filePath, relativePath, fileCheck, detectionResult });
+            }
+        }
+
+        // Step 2: 並行ファイル読み込み（最大10並行）
+        if (readableFiles.length > 0) {
+            console.log(`🚀 並行ファイル読み込み開始（変更検知版）: ${readableFiles.length}ファイル (最大10並行)`);
+            const parallelStartTime = Date.now();
+            
+            const readResults = await this.readFilesInParallel(
+                readableFiles.map(rf => rf.filePath),
+                10 // 最大10並行
+            );
+
+            const parallelTime = Date.now() - parallelStartTime;
+            console.log(`⚡ 並行読み込み完了: ${parallelTime}ms`);
+
+            // Step 3: 結果を元のインデックス順に処理
+            for (let i = 0; i < readableFiles.length; i++) {
+                const { index, filePath, relativePath, fileCheck, detectionResult } = readableFiles[i];
+                const readResult = readResults[i];
+                const fileStartTime = Date.now();
+
+                if (readResult.error) {
+                    const errorMsg = `ファイル読み込みエラー: ${readResult.error.message}`;
+                    contents.push(`--- ${relativePath}\n[${errorMsg}]`);
+                    results.push({
+                        success: false,
+                        path: filePath,
+                        relativePath: relativePath,
+                        error: errorMsg,
+                        processingTime: Date.now() - fileStartTime
+                    });
+                    summary.errors.push({ path: relativePath, error: errorMsg });
+                    summary.errorCount++;
+                    console.error(`  ❌ ${relativePath}: ${errorMsg}`);
+
+                    this.logger.logFileOperationError(
+                        'READ_FILE',
+                        filePath,
+                        readResult.error,
+                        {
+                            relativePath,
+                            attemptedEncoding: this.fileOperationConfig.encoding,
+                            maxFileSize: this.fileOperationConfig.maxFileSize,
+                            timeout: this.fileOperationConfig.timeoutMs
+                        }
+                    );
+                } else if (readResult.content !== undefined) {
                     // 変更検知情報を付加してファイル内容を構築
-                    const enhancedContent = `--- ${relativePath}\n${detectionResult.message}\n\n${content}`;
+                    const enhancedContent = `--- ${relativePath}\n${detectionResult.message}\n\n${readResult.content}`;
                     contents.push(enhancedContent);
                     
-                    result.success = true;
-                    result.size = fileCheck.size;
+                    const processingTime = Date.now() - fileStartTime;
+                    results.push({
+                        success: true,
+                        path: filePath,
+                        relativePath: relativePath,
+                        size: fileCheck.size,
+                        processingTime: processingTime
+                    });
                     summary.successCount++;
                     summary.totalSize += fileCheck.size;
+                    summary.totalProcessingTime += processingTime;
                     
                     // 変更検知結果をログ出力
                     const statusIcon = detectionResult.status === 'CHANGED' ? '🔄' : '✅';
                     console.log(`  ${statusIcon} ${relativePath} (${this.formatFileSize(fileCheck.size)}) - ${detectionResult.templateToUse}`);
                 }
-            } catch (error) {
-                const errorMsg = `ファイル読み込みエラー: ${(error as Error).message}`;
-                contents.push(`--- ${relativePath}\n[${errorMsg}]`);
-                result.error = errorMsg;
-                summary.errors.push({ path: relativePath, error: errorMsg });
-                summary.errorCount++;
-                console.error(`  ❌ ${relativePath}: ${errorMsg}`);
-                
-                // 詳細なファイル操作エラーログを記録
-                this.logger.logFileOperationError(
-                    'READ_FILE',
-                    filePath,
-                    error as Error,
-                    {
-                        relativePath,
-                        attemptedEncoding: this.fileOperationConfig.encoding,
-                        maxFileSize: this.fileOperationConfig.maxFileSize,
-                        timeout: this.fileOperationConfig.timeoutMs
-                    }
-                );
             }
-
-            result.processingTime = Date.now() - fileStartTime;
-            summary.totalProcessingTime += result.processingTime;
-            results.push(result);
         }
 
         // 統計情報の出力
