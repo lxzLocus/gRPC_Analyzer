@@ -70,8 +70,8 @@ class LLMFlowController {
     private openAIClient!: OpenAIClient;
     private logger: Logger = new Logger();
     private retryEnhancer: LLMRetryEnhancer;
-    private conversationSummarizer!: ConversationSummarizer;
-    private crossReferenceAnalyzer!: CrossReferenceAnalyzer;
+    private conversationSummarizer: ConversationSummarizer | null = null;
+    private crossReferenceAnalyzer: CrossReferenceAnalyzer | null = null;
 
     // 作業用データ
     private currentMessages: Array<{ role: string, content: string }> = [];
@@ -316,17 +316,29 @@ class LLMFlowController {
         this.fileManager = new FileManager(this.config, this.logger);
         this.messageHandler = new MessageHandler();
         this.openAIClient = new OpenAIClient(this.config); // Configインスタンスを渡す
-        this.crossReferenceAnalyzer = new CrossReferenceAnalyzer(this.config.inputProjectDir);
+        
+        // 機能フラグに基づいて crossReferenceAnalyzer を初期化
+        if (this.config.isFeatureAvailable('crossReferenceAnalyzer')) {
+            this.crossReferenceAnalyzer = new CrossReferenceAnalyzer(this.config.inputProjectDir);
+            console.log('✅ CrossReferenceAnalyzer enabled');
+        } else {
+            console.log('⚠️  CrossReferenceAnalyzer disabled (feature not available)');
+        }
 
         // OpenAIClientの初期化完了を待機
         await (this.openAIClient as any).initPromise;
 
-        // 対話履歴要約機能を初期化
-        this.conversationSummarizer = new ConversationSummarizer(
-            this.config, 
-            this.openAIClient, 
-            () => this.correctionGoals // correctionGoalsのコールバック
-        );
+        // 機能フラグに基づいて conversationSummarizer を初期化
+        if (this.config.isFeatureAvailable('conversationSummarizer')) {
+            this.conversationSummarizer = new ConversationSummarizer(
+                this.config, 
+                this.openAIClient, 
+                () => this.correctionGoals // correctionGoalsのコールバック
+            );
+            console.log('✅ ConversationSummarizer enabled');
+        } else {
+            console.log('⚠️  ConversationSummarizer disabled (feature not available)');
+        }
 
         // 初期プロンプト生成
         this.next_prompt_content = this.fileManager.readFirstPromptFile();
@@ -506,22 +518,48 @@ class LLMFlowController {
             return;
         }
 
-        // 早期終了の防止: 最低限の処理フローを保証
+        // 早期終了防止機能のチェック
+        const earlyTerminationPreventionEnabled = this.config.get('experimental.features.earlyTerminationPrevention', true);
+        
+        // 早期終了の防止: 最低限の処理フローを保証（機能が有効な場合のみ）
         const hasProcessedFiles = this.internalProgress.contextAccumulated.sourceFiles.length > 0;
         const hasGeneratedDiff = this.currentTurn >= 2; // 最低2ターンは実行
 
-        if (parsed.has_fin_tag && hasProcessedFiles && hasGeneratedDiff) {
-            // タスク完了（ただし最低限の処理が完了している場合のみ）
-            console.log('📋 Task completion confirmed after proper processing flow');
-            this.state = State.End;
+        if (parsed.has_fin_tag) {
+            if (!earlyTerminationPreventionEnabled) {
+                // レガシーモード: 即終了（防止機能無効）
+                console.log('📋 Task completion - early termination prevention disabled');
+                this.state = State.End;
+            } else if (hasProcessedFiles && hasGeneratedDiff) {
+                // 現代モード: 最低限の処理が完了している場合のみ終了
+                console.log('📋 Task completion confirmed after proper processing flow');
+                this.state = State.End;
+            } else {
+                // 処理不足のため継続
+                console.log('⚠️  %%_Fin_%% detected but minimum processing not complete, continuing...');
+                if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
+                    this.state = State.SystemAnalyzeRequest;
+                } else if (!hasProcessedFiles && this.currentTurn <= 3) {
+                    // 情報要求を強制
+                    console.log('📋 Forcing file content analysis to prevent early termination');
+                    if (this.context.llmParsed) {
+                        this.context.llmParsed.requiredFilepaths = this.generateDefaultFileRequests();
+                        this.state = State.SystemAnalyzeRequest;
+                    } else {
+                        this.state = State.End;
+                    }
+                } else {
+                    this.state = State.End;
+                }
+            }
         } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
             // 追加情報要求
             this.state = State.SystemAnalyzeRequest;
         } else if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
             // 修正案(diff)生成
             this.state = State.SystemParseDiff;
-        } else if (!hasProcessedFiles && this.currentTurn <= 3) {
-            // 初回または2回目で、まだファイル処理していない場合は情報要求を強制
+        } else if (earlyTerminationPreventionEnabled && !hasProcessedFiles && this.currentTurn <= 3) {
+            // 初回または2回目で、まだファイル処理していない場合は情報要求を強制（機能有効時のみ）
             console.log('📋 Forcing file content analysis to prevent early termination');
             // プロト関連ファイルのデフォルト要求を生成
             if (this.context.llmParsed) {
@@ -552,15 +590,27 @@ class LLMFlowController {
             console.log('📋 Correction Goals extracted and saved from llmNextStep:', this.correctionGoals.substring(0, 200) + '...');
         }
 
-        // ready_for_final_checkフラグのチェック
+        // ready_for_final_checkフラグのチェック（機能が利用可能な場合のみ遷移）
         if (this.context.llmParsed.ready_for_final_check) {
-            console.log('✅ LLM indicated ready for final check, transitioning to final verification');
-            this.state = State.SendFinalCheckToLLM;
+            if (this.config.isFeatureAvailable('finalCheckPhase')) {
+                console.log('✅ LLM indicated ready for final check, transitioning to final verification');
+                this.state = State.SendFinalCheckToLLM;
+            } else {
+                console.log('⚠️  ready_for_final_check detected, but finalCheckPhase not available - skipping');
+                this.state = State.LLMDecision; // 通常フローに戻る
+            }
             return;
         }
     }
 
     private async sendFinalCheckToLLM() {
+        // 機能が利用不可の場合は早期リターン
+        if (!this.config.isFeatureAvailable('finalCheckPhase')) {
+            console.log('⚠️  sendFinalCheckToLLM called but finalCheckPhase not available - falling back to LLMDecision');
+            this.state = State.LLMDecision;
+            return;
+        }
+
         // 最終確認プロンプトを送信
         const parsed = this.context.llmParsed;
         if (!parsed) {
@@ -979,38 +1029,54 @@ class LLMFlowController {
             this.logger.logInfo(`Current Step: ${planProgress.currentStep}`);
         }
 
-        // 相互参照コンテキストを生成
+        // 相互参照コンテキストを生成（機能が利用可能な場合のみ）
         let crossReferenceContext = '';
-        try {
-            if (modifiedFiles) {
-                const modifiedFilePaths = this.extractFilePaths(modifiedFiles);
-                for (const filePath of modifiedFilePaths) {
-                    const fullPath = path.resolve(this.config.inputProjectDir, filePath);
-                    if (fs.existsSync(fullPath)) {
-                        const fileContent = fs.readFileSync(fullPath, 'utf-8');
-                        const snippets = await this.crossReferenceAnalyzer.findCrossReferences(fullPath, fileContent);
-                        if (snippets.length > 0) {
-                            crossReferenceContext += this.crossReferenceAnalyzer.formatCrossReferenceContext(snippets);
+        if (this.config.isFeatureAvailable('crossReferenceAnalyzer') && this.crossReferenceAnalyzer) {
+            try {
+                if (modifiedFiles) {
+                    const modifiedFilePaths = this.extractFilePaths(modifiedFiles);
+                    for (const filePath of modifiedFilePaths) {
+                        const fullPath = path.resolve(this.config.inputProjectDir, filePath);
+                        if (fs.existsSync(fullPath)) {
+                            const fileContent = fs.readFileSync(fullPath, 'utf-8');
+                            const snippets = await this.crossReferenceAnalyzer.findCrossReferences(fullPath, fileContent);
+                            if (snippets.length > 0) {
+                                crossReferenceContext += this.crossReferenceAnalyzer.formatCrossReferenceContext(snippets);
+                            }
                         }
                     }
                 }
+            } catch (error) {
+                this.logger.logError(`Failed to generate cross-reference context: ${error}`);
+                crossReferenceContext = 'Cross-reference analysis failed. Proceeding without additional context.';
             }
-        } catch (error) {
-            this.logger.logError(`Failed to generate cross-reference context: ${error}`);
-            crossReferenceContext = 'Cross-reference analysis failed. Proceeding without additional context.';
+        } else {
+            console.log('⚠️  CrossReferenceAnalyzer not available, skipping cross-reference context generation');
         }
         
-        const promptModified = this.config.readPromptModifiedEnhancedFile(
-            modifiedFiles, 
-            enhancedPlan, 
-            currentThought,
-            '', // filesRequested (必要に応じて設定)
-            '', // previousModifications (必要に応じて設定)
-            '', // previousThought (必要に応じて設定)
-            '', // previousPlan (必要に応じて設定)
-            this.correctionGoals, // correctionGoals
-            crossReferenceContext // crossReferenceContext
-        );
+        // プロンプト選択：機能が利用可能かどうかで分岐
+        let promptModified: string;
+        if (this.config.isFeatureAvailable('crossReferenceAnalyzer')) {
+            promptModified = this.config.readPromptModifiedEnhancedFile(
+                modifiedFiles, 
+                enhancedPlan, 
+                currentThought,
+                '', // filesRequested (必要に応じて設定)
+                '', // previousModifications (必要に応じて設定)
+                '', // previousThought (必要に応じて設定)
+                '', // previousPlan (必要に応じて設定)
+                this.correctionGoals, // correctionGoals
+                crossReferenceContext // crossReferenceContext
+            );
+        } else {
+            // フォールバック：通常の promptModified を使用
+            promptModified = this.config.readPromptModifiedFile(
+                modifiedFiles,
+                enhancedPlan,
+                currentThought
+            );
+        }
+        
         this.currentMessages = await this.sendMessageWithSummarizer("user", promptModified);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
@@ -1022,11 +1088,21 @@ class LLMFlowController {
         this.totalCompletionTokens += usage.completion_tokens;
 
         // ログ記録
+        const promptTemplateName = this.config.isFeatureAvailable('crossReferenceAnalyzer') 
+            ? '00_promptModified_enhanced.txt' 
+            : '00_promptModified.txt';
+        const logType = this.config.isFeatureAvailable('crossReferenceAnalyzer')
+            ? 'APPLYING_DIFF_AND_RECHECKING_ENHANCED'
+            : 'APPLYING_DIFF_AND_RECHECKING';
+        const logDetails = this.config.isFeatureAvailable('crossReferenceAnalyzer')
+            ? 'Diff applied successfully. Preparing for enhanced re-check with cross-reference context.'
+            : 'Diff applied successfully. Preparing for re-check.';
+        
         this.logger.addInteractionLog(
             this.currentTurn,
             new Date().toISOString(),
             {
-                prompt_template: '00_promptModified_enhanced.txt',
+                prompt_template: promptTemplateName,
                 full_prompt_content: promptModified
             },
             {
@@ -1035,8 +1111,8 @@ class LLMFlowController {
                 usage: usage
             },
             {
-                type: 'APPLYING_DIFF_AND_RECHECKING_ENHANCED',
-                details: 'Diff applied successfully. Preparing for enhanced re-check with cross-reference context.'
+                type: logType,
+                details: logDetails
             }
         );
     }
@@ -2587,8 +2663,13 @@ class LLMFlowController {
      * ConversationSummarizer を使用してメッセージを送信
      */
     private async sendMessageWithSummarizer(role: string, content: string): Promise<Array<{ role: string, content: string }>> {
-        // ConversationSummarizer にメッセージを追加（自動要約チェック付き）
-        this.currentMessages = await this.conversationSummarizer.addMessage(role, content);
+        // ConversationSummarizer が利用可能な場合は使用
+        if (this.conversationSummarizer) {
+            this.currentMessages = await this.conversationSummarizer.addMessage(role, content);
+        } else {
+            // レガシーモード：直接 currentMessages に追加
+            this.currentMessages.push({ role, content });
+        }
         return this.currentMessages;
     }
 

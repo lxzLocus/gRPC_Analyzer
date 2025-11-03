@@ -1,0 +1,62 @@
+## Instruction ##  
+You are tasked with retrieving and reviewing specific source code files that were necessary for the previous analysis. After analyzing these files, you will evaluate if additional changes or fixes are required based on the context provided.
+
+### What you should do:
+- Retrieve and review the files listed in the "### Files to Review ###" section, as they are essential to understanding the necessary code changes.
+- After reviewing these files, analyze the context and determine if further modifications are needed.
+- If you identify any issues or necessary improvements, make the necessary changes.
+- Provide only the **full content** of the modified or newly retrieved files. 
+- Do not include any other files unless they are specifically requested.
+  
+---
+
+## Context ##
+
+### Files you requested ###
+{{filesRequested}}
+
+### Previous modifications or context ###
+{{previousModifications}}
+
+### Your Previous Analysis ###
+{{previousThought}}
+
+### Your Previous Plan ###
+{{previousPlan}}
+
+### Correction Goals ###
+{{correctionGoals}} 
+
+---
+
+## Your Task & Response Format ##
+## Your Next Action ##
+Review the new information in the `Context` section. In the `%_Thought_%` section, explain how this new information helps you proceed with your **plan**. Then, execute the **next step of your plan** by using one of the action tags (`%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`).
+
+**CRITICAL**: Stay focused on your **correction goals** and follow your **plan** systematically. Don't deviate unless new information requires plan revision.
+// Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
+
+**IMPORTANT RULE: After you output a %_Modified_% tag, the system will apply it and show you the result. You MUST wait for this verification step. Output %%_Fin_%% only in a subsequent turn after you have verified that all your Correction Goals have been met.**
+
+---
+## Response Structure Example ##
+
+%_Thought_%
+(Your analysis of the new information and its impact on your plan...)
+
+%_Plan_%
+(Your NEW plan, only if you decided to revise it.)
+
+%_Reply Required_%
+[
+  {"type": "FILE_CONTENT", "path": "path/to/another_file.ext"}
+]
+
+// --- OR ---
+
+%_Modified_%
+--- path/to/file_to_modify.go
++++ path/to/file_to_modify.go
+@@ ... @@
+- old line
++ new line

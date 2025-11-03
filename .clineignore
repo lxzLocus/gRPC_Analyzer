@@ -1,14 +1,41 @@
-node_modules/*
-**/node_modules/*
-**/dataset/*
-
-/output/
-/build/
-/tmp/
-
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.DS_Store
 
+__pycache__/
+
+node_modules/
+
+*/dataset/*
+dataset/
+!dataset/P.U_merged_filtered - Final_merged_only_not_excluded_yes_ms_unarchived_commit_hash v2.0.csv
+!dataset/gRPC_reps_list.csv
+
+dist/
+log/
+logs/
+output/
+docs/
+backups/
+cache/
+
+test*.*
+
+
+
+# 評価システム関連
+evaluation/logs/
+evaluation/full_dataset_results/
+evaluation/llm_evaluation_logs/
+evaluation/verification_results/
+evaluation/cache/
+evaluation/results/
+evaluation/__pycache__/
+evaluation/src/__pycache__/
+
+# Docker関連（オプション）
+# .docker/volumes/
+
+*/apr-logs/*
+*/apr-output/*
+
+GPT4.1_0916/*
