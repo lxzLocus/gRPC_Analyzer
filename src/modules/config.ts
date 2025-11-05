@@ -360,7 +360,7 @@ class Config {
         
         if (flowMode === 'legacy') {
             const promptSet = this.get('experimental.legacyPromptSet', 'e0e0931_baseline');
-            const legacyPath = path.join(this.promptBasePath, 'legacy', promptSet);
+            const legacyPath = path.join(this.promptDir, 'legacy', promptSet);
             
             if (fs.existsSync(legacyPath)) {
                 console.log(`📂 Using legacy prompt set: ${promptSet}`);
@@ -369,7 +369,7 @@ class Config {
             } else {
                 console.error(`❌ Legacy prompt set not found: ${legacyPath}`);
                 console.warn(`   Falling back to modern prompts`);
-                const modernPath = path.join(this.promptBasePath, 'modern');
+                const modernPath = path.join(this.promptDir, 'modern');
                 if (fs.existsSync(modernPath)) {
                     return modernPath;
                 }
@@ -379,7 +379,7 @@ class Config {
         }
         
         // modernモードまたは未指定の場合
-        const modernPath = path.join(this.promptBasePath, 'modern');
+        const modernPath = path.join(this.promptDir, 'modern');
         if (fs.existsSync(modernPath)) {
             console.log(`📂 Using modern prompt set`);
             return modernPath;
@@ -540,7 +540,20 @@ class Config {
      * 対話履歴要約用プロンプトファイルを読み込み
      */
     readPromptSummarizeFile(fullConversationHistory: string): string {
-        const promptSummarizeText = fs.readFileSync(path.join(this.promptBasePath, '00_prompt_summarize.txt'), 'utf-8');
+        const primaryPath = path.join(this.promptBasePath, '00_prompt_summarize.txt');
+        const fallbackPath = path.join(this.promptDir, '00_prompt_summarize.txt');
+        
+        let promptSummarizeText: string;
+        
+        // プライマリパスを試行
+        if (fs.existsSync(primaryPath)) {
+            promptSummarizeText = fs.readFileSync(primaryPath, 'utf-8');
+        } else if (fs.existsSync(fallbackPath)) {
+            console.warn(`⚠️  Summarize prompt not found in ${this.promptBasePath}, using fallback: ${fallbackPath}`);
+            promptSummarizeText = fs.readFileSync(fallbackPath, 'utf-8');
+        } else {
+            throw new Error(`❌ Summarize prompt file not found in ${primaryPath} or ${fallbackPath}`);
+        }
 
         const context = {
             full_conversation_history: fullConversationHistory
@@ -557,7 +570,20 @@ class Config {
         previousActionResult: string,
         correctionGoals: string = ''
     ): string {
-        const promptResumeText = fs.readFileSync(path.join(this.promptBasePath, '00_prompt_resume_from_summary.txt'), 'utf-8');
+        const primaryPath = path.join(this.promptBasePath, '00_prompt_resume_from_summary.txt');
+        const fallbackPath = path.join(this.promptDir, '00_prompt_resume_from_summary.txt');
+        
+        let promptResumeText: string;
+        
+        // プライマリパスを試行
+        if (fs.existsSync(primaryPath)) {
+            promptResumeText = fs.readFileSync(primaryPath, 'utf-8');
+        } else if (fs.existsSync(fallbackPath)) {
+            console.warn(`⚠️  Resume prompt not found in ${this.promptBasePath}, using fallback: ${fallbackPath}`);
+            promptResumeText = fs.readFileSync(fallbackPath, 'utf-8');
+        } else {
+            throw new Error(`❌ Resume prompt file not found in ${primaryPath} or ${fallbackPath}`);
+        }
 
         const context = {
             summary_of_history: summaryOfHistory,

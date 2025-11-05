@@ -1,0 +1,81 @@
+{
+  "system": {
+    "version": "1.0.0",
+    "environment": "experiment",
+    "debugMode": false,
+    "logLevel": "info",
+    "description": "e0e0931 baseline prompts with conversation summarizer enabled"
+  },
+  "experimental": {
+    "flowMode": "legacy",
+    "legacyPromptSet": "e0e0931_baseline",
+    "features": {
+      "conversationSummarizer": true,
+      "crossReferenceAnalyzer": false,
+      "finalCheckPhase": false,
+      "earlyTerminationPrevention": false
+    },
+    "description": "Using e0e0931 (4 prompts) with only summarization enabled"
+  },
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "maxTokens": 128000,
+    "temperature": 0.1,
+    "timeout": 120000,
+    "retryAttempts": 3,
+    "summaryThreshold": 30000,
+    "summaryModel": "gpt-4o-mini",
+    "summaryTemperature": 0.1,
+    "qualityCheck": {
+      "enabled": true,
+      "requireModifiedContent": true,
+      "minModifiedLines": 1,
+      "retryDelayMs": 1000,
+      "exponentialBackoff": true
+    }
+  },
+  "openai": {
+    "model": "gpt-4o-mini",
+    "maxTokens": 16384,
+    "temperature": 0.1,
+    "timeout": 120000
+  },
+  "gemini": {
+    "model": "gemini-1.5-flash-002",
+    "maxTokens": 8192,
+    "temperature": 0.1,
+    "timeout": 120000
+  },
+  "fileOperations": {
+    "maxFileSize": 10485760,
+    "timeout": 30000,
+    "encoding": "utf-8",
+    "enableSizeCheck": true,
+    "enableTimeoutCheck": true,
+    "backupEnabled": true
+  },
+  "performance": {
+    "enableMonitoring": true,
+    "enableDetailedLogs": true,
+    "performanceLogPath": "/app/logs/performance",
+    "reportGenerationEnabled": true
+  },
+  "paths": {
+    "promptDir": "/app/src/prompts",
+    "outputDir": "/app/output",
+    "logsDir": "/app/logs",
+    "backupDir": "/app/backups"
+  },
+  "testing": {
+    "mockMode": false,
+    "integrationTestEnabled": true,
+    "testReportPath": "/app/logs/test-reports",
+    "testTimeout": 300000
+  },
+  "security": {
+    "validateFilePaths": true,
+    "restrictToProjectDir": true,
+    "maxDepth": 10
+  }
+}

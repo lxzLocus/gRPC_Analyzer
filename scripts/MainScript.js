@@ -36,7 +36,7 @@ const AVAILABLE_DATASETS = [
  * デフォルト設定
  */
 const DEFAULT_CONFIG = {
-    selectedDatasetIndex: 0,    // filtered_confirmed をデフォルト選択（より小さなファイル）
+    selectedDatasetIndex: 0,    // filtered_fewChanged をデフォルト選択（より小さなファイル）
     outputDir: "/app/output",
     processingOptions: {
         baseOutputDir: "/app/output",
@@ -49,14 +49,40 @@ const DEFAULT_CONFIG = {
 };
 
 /**
+ * 初期プロンプト+PRタイトル入力
+ * 
+ */
+const WITH_PR_TITLE = {
+    selectedDatasetIndex: 0,    // filtered_fewChanged をデフォルト選択（より小さなファイル）
+    outputDir: "/app/output",
+    processingOptions: {
+        generateReport: true,
+        generateErrorReport: true,
+        processingOptions: {
+            baseOutputDir: "/app/output",
+            maxRetries: 3,
+            memoryCleanupInterval: 5,
+            timeoutMs: 10 * 60 * 1000,              // 10分
+            enableGarbageCollection: true,
+            enablePreVerification: false    // 無効
+        }
+    }
+}
+
+
+
+/**
  * メイン実行関数
  */
 async function main() {
     // コマンドライン引数の解析
+
+    const config = DEFAULT_CONFIG;
+
     const args = process.argv.slice(2);
-    let datasetIndex = DEFAULT_CONFIG.selectedDatasetIndex;
-    let outputDir = DEFAULT_CONFIG.outputDir;
-    let enablePreVerification = DEFAULT_CONFIG.processingOptions.enablePreVerification;
+    let datasetIndex = config.selectedDatasetIndex;
+    let outputDir = config.outputDir;
+    let enablePreVerification = config.processingOptions.enablePreVerification;
     
     // 引数の処理
     for (let i = 0; i < args.length; i++) {

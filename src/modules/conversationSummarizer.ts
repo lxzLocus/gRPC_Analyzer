@@ -96,11 +96,11 @@ class ConversationSummarizer {
             const conversationHistory = this.formatConversationForSummary();
             const summarizePrompt = this.config.readPromptSummarizeFile(conversationHistory);
             
-            console.log(`📝 Sending ${conversationHistory.length} characters to summarization...`);
+            console.log(`📝 Sending ${summarizePrompt.length} characters to summarization...`);
             
             // 2. 別のLLMインスタンスで要約を生成
             const summaryResponse = await this.generateSummary({
-                fullConversationHistory: conversationHistory,
+                fullConversationHistory: summarizePrompt,
                 model: this.config.get('llm.summaryModel', this.config.get('llm.model', 'gpt-4')),
                 temperature: 0.1 // 要約には低い温度を使用
             });
@@ -175,6 +175,9 @@ class ConversationSummarizer {
             if (response && response.choices && response.choices[0]) {
                 const summaryText = response.choices[0].message.content.trim();
                 
+                // デバッグ: レスポンスの最初の部分を表示
+                console.log(`📊 Summary response preview (first 200 chars): ${summaryText.substring(0, 200)}`);
+                
                 // JSONパースを試行
                 try {
                     const summary: ConversationSummary = JSON.parse(summaryText);
@@ -184,6 +187,7 @@ class ConversationSummarizer {
                     };
                 } catch (parseError) {
                     console.error(`❌ Failed to parse summary JSON:`, parseError);
+                    console.error(`📝 Full response (first 500 chars):\n${summaryText.substring(0, 500)}`);
                     return {
                         summary: {
                             original_goal_summary: "Summary parsing failed",
