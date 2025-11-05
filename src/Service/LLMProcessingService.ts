@@ -39,7 +39,7 @@ export class LLMProcessingService {
             try {
                 console.log(`🔄 Processing (attempt ${retry + 1}/${maxRetries + 1}): ${repositoryName}/${category}/${pullRequestTitle}`);
                 
-                const result = await this.executeLLMController(premergeDir);
+                const result = await this.executeLLMController(premergeDir, pullRequestTitle);
                 
                 if (result.success) {
                     return result;
@@ -87,7 +87,7 @@ export class LLMProcessingService {
     /**
      * LLMFlowController の実行
      */
-    private async executeLLMController(premergeDir: string): Promise<LLMControllerResult> {
+    private async executeLLMController(premergeDir: string, pullRequestTitle: string): Promise<LLMControllerResult> {
         const startTime = Date.now();
 
         try {
@@ -95,7 +95,7 @@ export class LLMProcessingService {
             console.log('🔧 LLMProcessingService -> LLMFlowController パス渡し:');
             console.log(`   premergeDir: ${premergeDir}`);
             
-            this.currentController = new LLMFlowController(premergeDir);
+            this.currentController = new LLMFlowController(premergeDir, pullRequestTitle);
             
             // タイムアウト設定
             const timeoutPromise = new Promise<never>((_, reject) => {

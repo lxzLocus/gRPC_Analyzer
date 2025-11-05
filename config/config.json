@@ -1,36 +1,36 @@
 {
   "system": {
     "version": "1.0.0",
-    "environment": "production"
+    "environment": "experiment",
+    "debugMode": false,
+    "logLevel": "info"
+  },
+  "experimental": {
+    "flowMode": "legacy",
+    "legacyPromptSet": "e0e0931_with_pr_title",
+    "features": {
+      "prTitleEmbedding": true,
+      "conversationSummarizer": false,
+      "crossReferenceAnalyzer": false,
+      "finalCheckPhase": false,
+      "earlyTerminationPrevention": false
+    }
   },
   "llm": {
-  },
-  "fileOperations": {
-    "encoding": "utf-8",
-    "enableSizeCheck": true,
-    "enableTimeoutCheck": true
-  },
-  "performance": {
-    "enableMonitoring": false,
-    "enableDetailedLogs": false,
-    "performanceLogPath": "/app/logs/performance",
-    "reportGenerationEnabled": true
+    "provider": "openai",
+    "model": "gpt-5",
+    "maxTokens": 128000,
+    "temperature": 0.1,
+    "timeout": 120000,
+    "retryAttempts": 3,
+    "summaryThreshold": 30000,
+    "summaryModel": "gpt-5",
+    "summaryTemperature": 0.1
   },
   "paths": {
     "promptDir": "/app/src/prompts",
     "outputDir": "/app/output",
     "logsDir": "/app/logs",
     "backupDir": "/app/backups"
-  },
-  "testing": {
-    "mockMode": false,
-    "integrationTestEnabled": true,
-    "testReportPath": "/app/output",
-    "testTimeout": 60000
-  },
-  "security": {
-    "validateFilePaths": true,
-    "restrictToProjectDir": true,
-    "maxDepth": 10
   }
 }

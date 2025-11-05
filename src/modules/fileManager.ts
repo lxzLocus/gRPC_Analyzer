@@ -158,7 +158,7 @@ class FileManager {
         };
     }
 
-    readFirstPromptFile(): string {
+    readFirstPromptFile(pullRequestTitle: string): string {
         console.log('📋 プロンプトファイルの読み込みを開始...');
         
         // メインプロンプトファイルの読み込み
@@ -195,7 +195,8 @@ class FileManager {
             protoFileChanges: protoFileChanges,
             fileChanges: fileChangesContent,
             surroundedFilePath: surroundedFilePath,
-            suspectedFiles: suspectedFiles
+            suspectedFiles: suspectedFiles,
+            pullRequestTitle: pullRequestTitle
         };
 
         const validation = this.validateTemplateContext(context);

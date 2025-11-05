@@ -88,7 +88,7 @@ class LLMFlowController {
     private initialPlan: string = ''; // 初回の計画内容
     private protoFileChanges: string = ''; // プロト変更内容
 
-    constructor(pullRequestPath: string) {
+    constructor(pullRequestPath: string, private pullRequestTitle: string) {
         this.inputPremergeDir = pullRequestPath;
         this.startTime = new Date().toISOString();
         this.retryEnhancer = new LLMRetryEnhancer({
@@ -298,7 +298,7 @@ class LLMFlowController {
         this.conversationSummarizer = new ConversationSummarizer(this.config, this.openAIClient);
 
         // 初期プロンプト生成
-        this.next_prompt_content = this.fileManager.readFirstPromptFile();
+        this.next_prompt_content = this.fileManager.readFirstPromptFile(this.pullRequestTitle);
         this.prompt_template_name = this.config.promptTextfile;
         
         // ConversationSummarizer に初期メッセージを追加

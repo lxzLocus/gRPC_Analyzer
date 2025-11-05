@@ -76,5 +76,21 @@
             "console": "integratedTerminal",
             "sourceMaps": true
         },
+    {
+            "name": "Debug MainScript.js",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/MainScript.js",
+            "args": [
+                "0", // データセット番号 (0: filtered_fewChanged)
+                "/app/output" // 出力ディレクトリ
+            ],
+            "cwd": "${workspaceFolder}",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ],
+            "envFile": "${workspaceFolder}/.env",
+            "console": "integratedTerminal"
+        }
     ]
 }
