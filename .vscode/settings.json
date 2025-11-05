@@ -1,5 +1,5 @@
 {
     "search.exclude": {
-        "**/dataset": true
+        "**/dataset/**": true
     }
 }

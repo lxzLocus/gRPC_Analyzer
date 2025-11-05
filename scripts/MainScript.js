@@ -71,6 +71,11 @@ const WITH_PR_TITLE = {
  * メイン実行関数
  */
 async function main() {
+    // デバッグ: main関数の開始を確認
+    console.log('🔍 Debug: main() function started');
+    console.log('🔍 Debug: import.meta.url =', import.meta.url);
+    console.log('🔍 Debug: process.argv[1] =', process.argv[1]);
+    
     // コマンドライン引数の解析
 
     const config = DEFAULT_CONFIG;
@@ -312,7 +317,12 @@ function showUsage() {
 // ヘルプオプションの処理は main() 関数内で行うため、ここでは削除
 
 // 直接実行された場合のみメイン関数を実行
-if (import.meta.url === `file://${process.argv[1]}`) {
+// デバッガー互換性のため、より堅牢な条件式を使用
+const isMainModule = import.meta.url === `file://${process.argv[1]}` || 
+                     import.meta.url.endsWith(process.argv[1]);
+
+if (isMainModule) {
+    console.log('🔍 Debug: Starting main() function...');
     main().catch(error => {
         console.error('💥 Unhandled error in main:', error);
         process.exit(1);
