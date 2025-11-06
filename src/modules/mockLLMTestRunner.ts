@@ -257,8 +257,8 @@ Fixed the parsing issue.
             // テスト用の設定を作成
             const testConfig = new Config('/app/dataset/test');
 
-            // LLMFlowControllerを作成
-            const controller = new LLMFlowController('/app/dataset/test');
+            // LLMFlowControllerを作成（pullRequestTitleを追加）
+            const controller = new LLMFlowController('/app/dataset/test', 'test-pull-request');
             
             // OpenAI呼び出しをモックに置き換え
             this.injectMockIntoController(controller);

@@ -82,8 +82,11 @@ class IntegrationTestRunner {
                 this.logger.logWarning(`Missing expected files: ${missingFiles.join(', ')}`);
             }
 
-            // LLMFlowControllerを作成
-            const controller = new LLMFlowController(testConfig.projectPath);
+            // LLMFlowControllerを作成（pullRequestTitleを追加）
+            const controller = new LLMFlowController(
+                testConfig.projectPath, 
+                'integration-test'
+            );
             
             // タイムアウト設定
             const timeoutPromise = new Promise((_, reject) => {

@@ -223,7 +223,9 @@ export class BatchProcessModel {
         const startTime = Date.now();
         
         try {
-            this.currentController = new LLMFlowController(premergeDir);
+            // pullRequestTitle を取得（premergeDir からパースするか、デフォルト値を使用）
+            const pullRequestTitle = this.extractPullRequestTitle(premergeDir);
+            this.currentController = new LLMFlowController(premergeDir, pullRequestTitle);
             
             // タイムアウト設定
             const timeoutPromise = new Promise<never>((_, reject) => {
@@ -263,6 +265,20 @@ export class BatchProcessModel {
             }
             this.currentController = null;
         }
+    }
+
+    /**
+     * premergeDir からプルリクエストタイトルを抽出
+     * パスの形式: /path/to/repo/pullrequest/pr_name/premerge_xxx
+     */
+    private extractPullRequestTitle(premergeDir: string): string {
+        const parts = premergeDir.split('/');
+        // premerge_xxx の一つ上のディレクトリがPRタイトル
+        const premergeIndex = parts.findIndex(part => part.startsWith('premerge_'));
+        if (premergeIndex > 0) {
+            return parts[premergeIndex - 1] || 'unknown-pr';
+        }
+        return 'unknown-pr';
     }
 
     /**

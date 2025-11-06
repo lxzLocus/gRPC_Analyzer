@@ -99,6 +99,7 @@ class Config {
     outputDir: string;
     inputDir: string;
     promptDir: string;
+    private promptBasePath: string; // プロンプトの基底パス（modern/legacy切り替え用）
     promptTextfile: string;
     promptRefineTextfile: string;
     tmpDiffRestorePath: string;
@@ -131,6 +132,9 @@ class Config {
         this.debugMode = this.getConfigValue('system.debugMode', false);
         this.logLevel = this.getConfigValue('system.logLevel', 'info');
         this.environment = this.getConfigValue('system.environment', 'development');
+
+        // プロンプトベースパスの決定
+        this.promptBasePath = this.determinePromptBasePath();
 
         // ディレクトリの作成（存在しない場合）
         this.ensureDirectoriesExist();
@@ -282,6 +286,7 @@ class Config {
         }
         
         if (process.env.MAX_FILE_SIZE) {
+            if (!this.externalConfig.fileOperations) this.externalConfig.fileOperations = {} as any;
             this.externalConfig.fileOperations.maxFileSize = parseInt(process.env.MAX_FILE_SIZE);
         }
         // 他の環境変数も同様に処理...
@@ -303,6 +308,44 @@ class Config {
         }
         
         return value !== undefined ? value : defaultValue;
+    }
+
+    /**
+     * プロンプトベースパスを決定（modern/legacy切り替え）
+     */
+    private determinePromptBasePath(): string {
+        const flowMode = this.get('experimental.flowMode', 'modern');
+        
+        if (flowMode === 'legacy') {
+            const promptSet = this.get('experimental.legacyPromptSet', 'e0e0931_baseline');
+            const legacyPath = path.join(this.promptDir, 'legacy', promptSet);
+            
+            if (fs.existsSync(legacyPath)) {
+                console.log(`📂 Using legacy prompt set: ${promptSet}`);
+                console.log(`   Path: ${legacyPath}`);
+                return legacyPath;
+            } else {
+                console.error(`❌ Legacy prompt set not found: ${legacyPath}`);
+                console.warn(`   Falling back to modern prompts`);
+                const modernPath = path.join(this.promptDir, 'modern');
+                if (fs.existsSync(modernPath)) {
+                    return modernPath;
+                }
+                // modernディレクトリもなければデフォルトのpromptsを使用
+                return this.promptDir;
+            }
+        }
+        
+        // デフォルトはmodernプロンプト
+        const modernPath = path.join(this.promptDir, 'modern');
+        if (fs.existsSync(modernPath)) {
+            console.log(`📂 Using modern prompts: ${modernPath}`);
+            return modernPath;
+        }
+        
+        // modernディレクトリが存在しない場合はデフォルトのpromptsディレクトリを使用
+        console.log(`📂 Using default prompts: ${this.promptDir}`);
+        return this.promptDir;
     }
 
     /**
@@ -469,13 +512,28 @@ class Config {
      */
     readPromptResumeFromSummaryFile(
         summaryOfHistory: string,
-        previousActionResult: string
+        previousActionResult: string,
+        correctionGoals: string = ''
     ): string {
-        const promptResumeText = fs.readFileSync(path.join(this.promptDir, '00_prompt_resume_from_summary.txt'), 'utf-8');
+        const primaryPath = path.join(this.promptBasePath, '00_prompt_resume_from_summary.txt');
+        const fallbackPath = path.join(this.promptDir, '00_prompt_resume_from_summary.txt');
+        
+        let promptResumeText: string;
+        
+        // プライマリパスを試行
+        if (fs.existsSync(primaryPath)) {
+            promptResumeText = fs.readFileSync(primaryPath, 'utf-8');
+        } else if (fs.existsSync(fallbackPath)) {
+            console.warn(`⚠️  Resume prompt not found in ${this.promptBasePath}, using fallback: ${fallbackPath}`);
+            promptResumeText = fs.readFileSync(fallbackPath, 'utf-8');
+        } else {
+            throw new Error(`❌ Resume prompt file not found in ${primaryPath} or ${fallbackPath}`);
+        }
 
         const context = {
             summary_of_history: summaryOfHistory,
-            previous_action_result: previousActionResult
+            previous_action_result: previousActionResult,
+            correction_goals: correctionGoals
         };
         const template = Handlebars.compile(promptResumeText, { noEscape: true });
         return template(context);

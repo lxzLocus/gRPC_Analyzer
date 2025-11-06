@@ -14,5 +14,12 @@
     "lib": ["es2020", "dom"]
   },
   "include": ["src/**/*"],
-  "exclude": ["**/dataset/*", "**/node_modules/*", "/app/dist/*", "/app/docs/*", "scripts/**/*"]
+  "exclude": [
+    "**/dataset/*", 
+    "**/node_modules/*", 
+    "/app/dist/*", 
+    "/app/docs/*", 
+    "scripts/**/*",
+    "src/modules/logger_backup.ts"
+  ]
 }

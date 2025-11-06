@@ -90,8 +90,8 @@ export async function runForAllDatasets(datasetDir: string) {
             const categoryPath = path.join(savedRepositoryPath, category);
             const titleDirs = fs.readdirSync(categoryPath).filter(dir => fs.statSync(path.join(categoryPath, dir)).isDirectory());
 
-            for (const pullRequestTitle of titleDirs) {
-                const pullRequestPath = path.join(categoryPath, pullRequestTitle);
+            for (const prTitle of titleDirs) {  // 変数名を変更
+                const pullRequestPath = path.join(categoryPath, prTitle);
 
                 // premerge_で始まるサブディレクトリを取得
                 const premergeDir = fs.readdirSync(pullRequestPath)
@@ -106,7 +106,9 @@ export async function runForAllDatasets(datasetDir: string) {
                 // 各プルリクエストの premerge ディレクトリを引数に渡して
                 // LLMFlowControllerのインスタンスを生成する
                 console.log(`🔄 Processing ${pullRequestPath}...`);
-                const controller = new LLMFlowController(premergeDir);
+                
+                // prTitle を直接使用
+                const controller = new LLMFlowController(premergeDir, prTitle);
                 
                 // run()を実行
                 await controller.run();

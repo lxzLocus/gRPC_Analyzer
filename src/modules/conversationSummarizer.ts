@@ -16,14 +16,16 @@ class ConversationSummarizer {
     private config: Config;
     private openAIClient: OpenAIClient;
     private historyManager: ConversationHistoryManager;
+    private correctionGoalsCallback: () => string; // correctionGoalsを取得するコールバック
     
     // 設定
     private readonly DEFAULT_SUMMARY_THRESHOLD = 30000; // デフォルトのトークン閾値
     private readonly TOKEN_ESTIMATION_RATIO = 4; // 1トークン ≈ 4文字の近似
 
-    constructor(config: Config, openAIClient: OpenAIClient) {
+    constructor(config: Config, openAIClient: OpenAIClient, correctionGoalsCallback: () => string) {
         this.config = config;
         this.openAIClient = openAIClient;
+        this.correctionGoalsCallback = correctionGoalsCallback;
         
         this.historyManager = {
             messages: [],
@@ -111,10 +113,12 @@ class ConversationSummarizer {
             // 3. 最後のアクションの結果を特定
             const lastActionResult = this.extractLastActionResult();
             
-            // 4. 対話再開用のプロンプトを生成
+            // 4. 対話再開用のプロンプトを生成（correctionGoalsを含める）
+            const correctionGoals = this.correctionGoalsCallback();
             const resumePrompt = this.config.readPromptResumeFromSummaryFile(
                 JSON.stringify(summaryResponse.summary, null, 2),
-                lastActionResult
+                lastActionResult,
+                correctionGoals
             );
             
             // 5. 新しい短い対話履歴に置き換え
@@ -171,15 +175,15 @@ class ConversationSummarizer {
             if (response && response.choices && response.choices[0]) {
                 const summaryText = response.choices[0].message.content.trim();
                 
-                // JSONパースを試行
+                // JSONパースを試行（強化版）
                 try {
-                    const summary: ConversationSummary = JSON.parse(summaryText);
+                    const summary: ConversationSummary = this.extractJSON(summaryText);
                     return {
                         summary,
                         success: true
                     };
                 } catch (parseError) {
-                    console.error(`❌ Failed to parse summary JSON:`, parseError);
+                    console.error(`❌ Failed to parse summary JSON (enhanced parser):`, parseError);
                     return {
                         summary: {
                             original_goal_summary: "Summary parsing failed",
@@ -240,6 +244,143 @@ class ConversationSummarizer {
         }
         
         return 'Previous action completed successfully.';
+    }
+
+    /**
+     * LLM出力からJSONを抽出（強化パーサー - llmFlowController.safeParseJSONベース）
+     */
+    private extractJSON(text: string): any {
+        if (!text || typeof text !== 'string') {
+            throw new Error(`Invalid input for JSON parsing in conversationSummarizer`);
+        }
+
+        const trimmed = text.trim();
+
+        // Step 1: 徹底的な文字クリーンアップ
+        let cleaned = trimmed
+            .replace(/[\u200B-\u200D\uFEFF]/g, '') // ゼロ幅文字
+            .replace(/[\u0000-\u001F\u007F-\u009F]/g, (match) => {
+                const code = match.charCodeAt(0);
+                if (code === 9 || code === 10 || code === 13) { // タブ、改行、復帰
+                    return ' ';
+                }
+                return '';
+            })
+            .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ') // 特殊空白
+            .replace(/[\u2028\u2029]/g, ' ') // ライン・パラグラフ区切り
+            .replace(/[\uFFF0-\uFFFF]/g, '') // 特殊用途文字
+            .replace(/\s+/g, ' ') // 連続空白を単一スペースに
+            .trim();
+
+        // Step 2: LLM内部タグを除去
+        cleaned = cleaned.replace(/%_Thought_.*?%/g, '');
+        cleaned = cleaned.replace(/%_Plan_.*?%/g, '');
+        cleaned = cleaned.replace(/%_.*?_%/g, '');
+
+        // Step 3: コードフェンスを除去
+        cleaned = cleaned
+            .replace(/```json\s*/gi, '')
+            .replace(/```\s*/g, '')
+            .trim();
+
+        // Step 4: 最も外側の完全なJSONオブジェクトを抽出（再帰的な括弧マッチング）
+        let jsonCandidate = this.extractCompleteJSON(cleaned);
+        
+        if (!jsonCandidate) {
+            throw new Error('No valid JSON object found in summary response');
+        }
+
+        // Step 5: 末尾カンマの除去
+        jsonCandidate = jsonCandidate.replace(/,(\s*[\]\}])/g, '$1');
+
+        // Step 6: JSONパース試行
+        try {
+            return JSON.parse(jsonCandidate);
+        } catch (firstError) {
+            console.log(`⚠️ First JSON parse attempt failed, trying repairs...`);
+
+            // Step 7: 修復を試みる
+            try {
+                // シングルクォートをダブルクォートに変換
+                let repaired = jsonCandidate.replace(/'/g, '"');
+
+                // プロパティ名のクォートを修正
+                repaired = repaired.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+
+                // 末尾カンマを再度除去
+                repaired = repaired.replace(/,(\s*[\]\}])/g, '$1');
+
+                return JSON.parse(repaired);
+            } catch (secondError) {
+                console.error(`❌ JSON repair failed for summary response`);
+                console.error(`📝 Original text (first 500 chars):\n${text.substring(0, 500)}`);
+                console.error(`📝 Cleaned text (first 500 chars):\n${cleaned.substring(0, 500)}`);
+                console.error(`📝 Extracted JSON candidate (first 500 chars):\n${jsonCandidate.substring(0, 500)}`);
+                throw new Error(`JSON parsing failed after repairs: ${secondError instanceof Error ? secondError.message : String(secondError)}`);
+            }
+        }
+    }
+
+    /**
+     * 完全なJSONオブジェクトを抽出（括弧のバランスを考慮）
+     */
+    private extractCompleteJSON(text: string): string | null {
+        // JSONオブジェクトまたは配列の開始位置を探す
+        const startMatch = text.match(/[\[\{]/);
+        if (!startMatch) {
+            return null;
+        }
+
+        const startIndex = startMatch.index!;
+        const startChar = text[startIndex];
+        const endChar = startChar === '{' ? '}' : ']';
+        
+        let depth = 0;
+        let inString = false;
+        let escapeNext = false;
+
+        for (let i = startIndex; i < text.length; i++) {
+            const char = text[i];
+
+            // エスケープ処理
+            if (escapeNext) {
+                escapeNext = false;
+                continue;
+            }
+
+            if (char === '\\') {
+                escapeNext = true;
+                continue;
+            }
+
+            // 文字列内の処理
+            if (char === '"' && !escapeNext) {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString) {
+                continue;
+            }
+
+            // 括弧の深さをカウント
+            if (char === startChar || (startChar === '{' && char === '[') || (startChar === '[' && char === '{')) {
+                depth++;
+            } else if (char === endChar || (startChar === '{' && char === ']' && depth > 0) || (startChar === '[' && char === '}' && depth > 0)) {
+                depth--;
+                
+                // 最も外側の括弧が閉じられた
+                if (depth === 0) {
+                    const jsonStr = text.substring(startIndex, i + 1);
+                    console.log(`✅ Extracted complete JSON: ${jsonStr.length} characters`);
+                    return jsonStr;
+                }
+            }
+        }
+
+        // 括弧が閉じられなかった場合
+        console.warn(`⚠️ Incomplete JSON detected, depth: ${depth}`);
+        return null;
     }
 
     /**

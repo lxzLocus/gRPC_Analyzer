@@ -1109,7 +1109,8 @@ class FileManager {
      */
     readPromptFileWithChangeDetection(
         useFileVersionMismatchTemplate: boolean = false, 
-        requestedFileContent: string = ''
+        requestedFileContent: string = '',
+        pullRequestTitle: string = 'unknown-pr'  // デフォルト値を追加
     ): string {
         console.log('📋 プロンプトファイルの読み込みを開始（変更検知対応）...');
         
@@ -1168,6 +1169,7 @@ Leverage this constraint to maximize your differential reasoning capabilities.`
 
         // テンプレートコンテキストの構築と検証
         const context: PromptTemplateContext = {
+            pullRequestTitle: pullRequestTitle,  // pullRequestTitleを追加
             protoFile: protoFileContent,
             protoFileChanges: protoFileChanges,
             fileChanges: fileChangesContent,

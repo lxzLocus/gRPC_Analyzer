@@ -294,8 +294,12 @@ class LLMFlowController {
         // OpenAIClientの初期化完了を待機
         await (this.openAIClient as any).initPromise;
 
-        // 対話履歴要約機能を初期化
-        this.conversationSummarizer = new ConversationSummarizer(this.config, this.openAIClient);
+        // 対話履歴要約機能を初期化（correctionGoalsのコールバックを追加）
+        this.conversationSummarizer = new ConversationSummarizer(
+            this.config, 
+            this.openAIClient, 
+            () => this.correctionGoals // correctionGoalsのコールバック
+        );
 
         // 初期プロンプト生成
         this.next_prompt_content = this.fileManager.readFirstPromptFile(this.pullRequestTitle);

@@ -731,4 +731,4 @@ export default class Logger {
     
     return recommendations;
   }
-
+}
