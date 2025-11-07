@@ -79,9 +79,13 @@ class LLMFlowController {
     private startTime: string = '';
     private totalPromptTokens: number = 0;
     private totalCompletionTokens: number = 0;
+    private pullRequestTitle: string = '';
 
-    constructor(pullRequestPath: string) {
+
+    constructor(pullRequestPath: string, pullRequestTitle?: string) {
         this.inputPremergeDir = pullRequestPath;
+        this.pullRequestTitle = pullRequestTitle || '';
+
         this.startTime = new Date().toISOString();
         this.retryEnhancer = new LLMRetryEnhancer({
             maxRetries: 3,
@@ -282,7 +286,7 @@ class LLMFlowController {
         await (this.openAIClient as any).initPromise;
 
         // 初期プロンプト生成
-        this.next_prompt_content = this.fileManager.readFirstPromptFile();
+        this.next_prompt_content = this.fileManager.readFirstPromptFile(this.pullRequestTitle);
         this.prompt_template_name = this.config.promptTextfile;
         this.currentMessages = this.messageHandler.attachMessages("user", this.next_prompt_content);
     }

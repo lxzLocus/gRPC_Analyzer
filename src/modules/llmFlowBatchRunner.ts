@@ -106,7 +106,7 @@ export async function runForAllDatasets(datasetDir: string) {
                 // 各プルリクエストの premerge ディレクトリを引数に渡して
                 // LLMFlowControllerのインスタンスを生成する
                 console.log(`🔄 Processing ${pullRequestPath}...`);
-                const controller = new LLMFlowController(premergeDir);
+                const controller = new LLMFlowController(premergeDir, pullRequestTitle);
                 
                 // run()を実行
                 await controller.run();
