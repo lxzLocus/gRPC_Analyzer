@@ -134,6 +134,7 @@ export type PromptTemplateContext = {
     fileChanges: string;
     surroundedFilePath: string;
     suspectedFiles: string;
+    pullRequestTitle: string;
 };
 
 export type PromptFileConfig = {

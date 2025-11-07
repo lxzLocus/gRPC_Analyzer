@@ -78,10 +78,20 @@ export default class Logger {
   // public logInteractionToFile(...) { ... }
 
   /**
+   * JSTタイムスタンプを生成するヘルパー関数
+   */
+  private getJSTTimestamp(): string {
+    const now = new Date();
+    const jstOffset = 9 * 60; // JST is UTC+9
+    const jstTime = new Date(now.getTime() + jstOffset * 60 * 1000);
+    return jstTime.toISOString().replace('Z', '+09:00');
+  }
+
+  /**
    * 情報ログを出力（コンソール + ファイル出力対応）
    */
   public logInfo(message: string): void {
-    const timestamp = new Date().toISOString();
+    const timestamp = this.getJSTTimestamp();
     const logMessage = `[INFO ${timestamp}] ${message}`;
     console.log(logMessage);
     
@@ -93,7 +103,7 @@ export default class Logger {
    * エラーログを出力
    */
   public logError(message: string, error?: Error): void {
-    const timestamp = new Date().toISOString();
+    const timestamp = this.getJSTTimestamp();
     const logMessage = `[ERROR ${timestamp}] ${message}`;
     if (error) {
       console.error(logMessage, error);
@@ -108,7 +118,7 @@ export default class Logger {
    * 警告ログを出力
    */
   public logWarning(message: string): void {
-    const timestamp = new Date().toISOString();
+    const timestamp = this.getJSTTimestamp();
     const logMessage = `[WARN ${timestamp}] ${message}`;
     console.warn(logMessage);
     
@@ -731,4 +741,4 @@ export default class Logger {
     
     return recommendations;
   }
-
+}

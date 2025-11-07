@@ -81,12 +81,22 @@ class LLMFlowController {
     private totalCompletionTokens: number = 0;
     private pullRequestTitle: string = '';
 
+    /**
+     * JSTタイムスタンプを生成するヘルパー関数
+     */
+    private getJSTTimestamp(): string {
+        const now = new Date();
+        const jstOffset = 9 * 60; // JST is UTC+9
+        const jstTime = new Date(now.getTime() + jstOffset * 60 * 1000);
+        return jstTime.toISOString().replace('Z', '+09:00');
+    }
+
 
     constructor(pullRequestPath: string, pullRequestTitle?: string) {
         this.inputPremergeDir = pullRequestPath;
         this.pullRequestTitle = pullRequestTitle || '';
 
-        this.startTime = new Date().toISOString();
+        this.startTime = this.getJSTTimestamp();
         this.retryEnhancer = new LLMRetryEnhancer({
             maxRetries: 3,
             enableQualityCheck: true,
@@ -309,7 +319,7 @@ class LLMFlowController {
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
-            new Date().toISOString(),
+            this.getJSTTimestamp(),
             {
                 prompt_template: this.prompt_template_name,
                 full_prompt_content: this.next_prompt_content || ''
@@ -348,7 +358,7 @@ class LLMFlowController {
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
-            new Date().toISOString(),
+            this.getJSTTimestamp(),
             {
                 prompt_template: '00_promptReply.txt',
                 full_prompt_content: promptReply
@@ -730,7 +740,7 @@ class LLMFlowController {
             this.context.error = {
                 message: errorMessage,
                 errorContext: detailedErrorContext,
-                timestamp: new Date().toISOString(),
+                timestamp: this.getJSTTimestamp(),
                 phase: 'DIFF_APPLICATION'
             } as any;
             this.context.diff = undefined;
@@ -788,7 +798,7 @@ class LLMFlowController {
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
-            new Date().toISOString(),
+            this.getJSTTimestamp(),
             {
                 prompt_template: '00_promptModified.txt',
                 full_prompt_content: promptModified
@@ -822,7 +832,7 @@ class LLMFlowController {
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
-            new Date().toISOString(),
+            this.getJSTTimestamp(),
             {
                 prompt_template: 'error_prompt',
                 full_prompt_content: errorPrompt
@@ -845,7 +855,7 @@ class LLMFlowController {
 
     private async finish() {
         // 実験メタデータを設定
-        const endTime = new Date().toISOString();
+        const endTime = this.getJSTTimestamp();
         const experimentId = this.generateExperimentId();
         
         // 基本的なステータス判定
@@ -1247,7 +1257,7 @@ class LLMFlowController {
         this.internalProgress = {
             ...this.internalProgress,
             ...updates,
-            lastUpdated: new Date().toISOString()
+            lastUpdated: this.getJSTTimestamp()
         };
     }
 
