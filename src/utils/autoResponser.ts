@@ -404,6 +404,10 @@ async function main() {
     // --- 4. 最終処理 ---
     const endTime = new Date().toISOString();
 
+// LLM設定情報を取得
+    const llmProvider = process.env.LLM_PROVIDER || 'openai';
+    const llmModel = process.env.OPENAI_MODEL || process.env.GEMINI_MODEL || 'gpt-4';
+
     logger.setExperimentMetadata(
         experimentId,
         startTime,
@@ -411,9 +415,10 @@ async function main() {
         status,
         turn_count,
         totalPromptTokens,
-        totalCompletionTokens
+        totalCompletionTokens,
+        llmProvider,
+        llmModel
     );
-
     const finalLog = logger.getFinalJSON();
     if (finalLog) {
         fs.writeFileSync(logFilePath, JSON.stringify(finalLog, null, 2), 'utf-8');

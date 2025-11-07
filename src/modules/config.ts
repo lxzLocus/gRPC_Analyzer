@@ -369,26 +369,28 @@ class Config {
         this.debugLog(`Config updated: ${key} = ${value}`);
     }
 
-    readPromptReplyFile(filesRequested: string, modifiedDiff: string, commentText: string, previousThought?: string, previousPlan?: string): string {
+    readPromptReplyFile(filesRequested: string, modifiedDiff: string, commentText: string, previousThought?: string, previousPlan?: string, pullRequestTitle?: string): string {
         const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptReply.txt'), 'utf-8');
 
         const context = {
             filesRequested: filesRequested, // required section from previous message
             previousModifications: modifiedDiff, // diff from previous step
             previousThought: previousThought || '', // 前回の思考内容
-            previousPlan: previousPlan || '' // 前回の計画内容
+            previousPlan: previousPlan || '', // 前回の計画内容
+            pullRequestTitle: pullRequestTitle || '' // Pull Request タイトル
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
     }
 
-    readPromptModifiedFile(modifiedFiles: string, currentPlan?: string, currentThought?: string): string {
+    readPromptModifiedFile(modifiedFiles: string, currentPlan?: string, currentThought?: string, pullRequestTitle?: string): string {
         const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified.txt'), 'utf-8');
 
         const context = {
             modifiedFiles: modifiedFiles, // diff that was just applied or restored
             current_plan: currentPlan || '', // 現在のプラン
-            current_thought: currentThought || '' // 現在の思考
+            current_thought: currentThought || '', // 現在の思考
+            pullRequestTitle: pullRequestTitle || '' // Pull Request タイトル
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);

@@ -51,6 +51,9 @@ type InteractionLogEntry = {
 
 type ExperimentMetadataType = {
   experiment_id: string;
+  repositoryName?: string;
+  category?: string;
+  pullRequestTitle?: string;
   start_time: string;
   end_time: string;
   status: string;
@@ -142,10 +145,16 @@ export default class Logger {
       max_tokens?: number;
       top_p?: number;
       [key: string]: any;
-    }
+    },
+    repositoryName?: string,
+    category?: string,
+    pullRequestTitle?: string
   ): void {
     this.experimentMetadata = {
       experiment_id: experimentId,
+      ...(repositoryName && { repositoryName }),
+      ...(category && { category }),
+      ...(pullRequestTitle && { pullRequestTitle }),
       start_time: startTime,
       end_time: endTime,
       status,

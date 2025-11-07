@@ -85,6 +85,23 @@ export class LLMProcessingService {
     }
 
     /**
+     * Pull Request タイトルをパスから抽出
+     */
+    private extractPullRequestTitle(premergeDir: string): string {
+        const parts = premergeDir.split('/');
+        // 最後のディレクトリが 'premerge' の場合、その一つ上がPRタイトル
+        if (parts.length >= 2 && parts[parts.length - 1] === 'premerge') {
+            return parts[parts.length - 2] || 'unknown-pr';
+        }
+        // premerge で始まるディレクトリがある場合は、その一つ上がPRタイトル
+        const premergeIndex = parts.findIndex(part => part.startsWith('premerge'));
+        if (premergeIndex > 0) {
+            return parts[premergeIndex - 1] || 'unknown-pr';
+        }
+        return 'unknown-pr';
+    }
+
+    /**
      * LLMFlowController の実行
      */
     private async executeLLMController(premergeDir: string): Promise<LLMControllerResult> {
@@ -95,7 +112,11 @@ export class LLMProcessingService {
             console.log('🔧 LLMProcessingService -> LLMFlowController パス渡し:');
             console.log(`   premergeDir: ${premergeDir}`);
             
-            this.currentController = new LLMFlowController(premergeDir);
+            // Pull Request タイトルを抽出
+            const pullRequestTitle = this.extractPullRequestTitle(premergeDir);
+            console.log(`   extracted pullRequestTitle: ${pullRequestTitle}`);
+            
+            this.currentController = new LLMFlowController(premergeDir, pullRequestTitle);
             
             // タイムアウト設定
             const timeoutPromise = new Promise<never>((_, reject) => {

@@ -79,24 +79,10 @@ class LLMFlowController {
     private startTime: string = '';
     private totalPromptTokens: number = 0;
     private totalCompletionTokens: number = 0;
-    private pullRequestTitle: string = '';
 
-    /**
-     * JSTタイムスタンプを生成するヘルパー関数
-     */
-    private getJSTTimestamp(): string {
-        const now = new Date();
-        const jstOffset = 9 * 60; // JST is UTC+9
-        const jstTime = new Date(now.getTime() + jstOffset * 60 * 1000);
-        return jstTime.toISOString().replace('Z', '+09:00');
-    }
-
-
-    constructor(pullRequestPath: string, pullRequestTitle?: string) {
+    constructor(pullRequestPath: string) {
         this.inputPremergeDir = pullRequestPath;
-        this.pullRequestTitle = pullRequestTitle || '';
-
-        this.startTime = this.getJSTTimestamp();
+        this.startTime = new Date().toISOString();
         this.retryEnhancer = new LLMRetryEnhancer({
             maxRetries: 3,
             enableQualityCheck: true,
@@ -175,53 +161,6 @@ class LLMFlowController {
         };
     }
 
-
-    // =============================================================================
-    // Public Getter Methods for Metadata
-    // =============================================================================
-
-    /**
-     * リポジトリ名を取得
-     * パスパターン: .../filtered_fewChanged/REPO_NAME/...
-     */
-    public getRepositoryName(): string {
-        try {
-            const parts = this.inputPremergeDir.split(path.sep);
-            const fewChangedIndex = parts.indexOf('filtered_fewChanged');
-            if (fewChangedIndex >= 0 && fewChangedIndex + 1 < parts.length) {
-                return parts[fewChangedIndex + 1];
-            }
-            return 'unknown_repository';
-        } catch (error) {
-            console.error('Error extracting repository name:', error);
-            return 'unknown_repository';
-        }
-    }
-
-    /**
-     * カテゴリを取得 (issue/pullrequest)
-     * パスパターン: .../filtered_fewChanged/REPO_NAME/CATEGORY/...
-     */
-    public getCategory(): string {
-        try {
-            const parts = this.inputPremergeDir.split(path.sep);
-            const fewChangedIndex = parts.indexOf('filtered_fewChanged');
-            if (fewChangedIndex >= 0 && fewChangedIndex + 2 < parts.length) {
-                return parts[fewChangedIndex + 2];
-            }
-            return 'unknown_category';
-        } catch (error) {
-            console.error('Error extracting category:', error);
-            return 'unknown_category';
-        }
-    }
-
-    /**
-     * PR タイトルを取得
-     */
-    public getPullRequestTitle(): string {
-        return this.pullRequestTitle;
-    }
     // =============================================================================
     // メインフロー制御
     // =============================================================================
@@ -343,7 +282,7 @@ class LLMFlowController {
         await (this.openAIClient as any).initPromise;
 
         // 初期プロンプト生成
-        this.next_prompt_content = this.fileManager.readFirstPromptFile(this.pullRequestTitle);
+        this.next_prompt_content = this.fileManager.readFirstPromptFile();
         this.prompt_template_name = this.config.promptTextfile;
         this.currentMessages = this.messageHandler.attachMessages("user", this.next_prompt_content);
     }
@@ -366,7 +305,7 @@ class LLMFlowController {
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
-            this.getJSTTimestamp(),
+            new Date().toISOString(),
             {
                 prompt_template: this.prompt_template_name,
                 full_prompt_content: this.next_prompt_content || ''
@@ -405,7 +344,7 @@ class LLMFlowController {
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
-            this.getJSTTimestamp(),
+            new Date().toISOString(),
             {
                 prompt_template: '00_promptReply.txt',
                 full_prompt_content: promptReply
@@ -787,7 +726,7 @@ class LLMFlowController {
             this.context.error = {
                 message: errorMessage,
                 errorContext: detailedErrorContext,
-                timestamp: this.getJSTTimestamp(),
+                timestamp: new Date().toISOString(),
                 phase: 'DIFF_APPLICATION'
             } as any;
             this.context.diff = undefined;
@@ -845,7 +784,7 @@ class LLMFlowController {
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
-            this.getJSTTimestamp(),
+            new Date().toISOString(),
             {
                 prompt_template: '00_promptModified.txt',
                 full_prompt_content: promptModified
@@ -879,7 +818,7 @@ class LLMFlowController {
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
-            this.getJSTTimestamp(),
+            new Date().toISOString(),
             {
                 prompt_template: 'error_prompt',
                 full_prompt_content: errorPrompt
@@ -902,7 +841,7 @@ class LLMFlowController {
 
     private async finish() {
         // 実験メタデータを設定
-        const endTime = this.getJSTTimestamp();
+        const endTime = new Date().toISOString();
         const experimentId = this.generateExperimentId();
         
         // 基本的なステータス判定
@@ -938,10 +877,7 @@ class LLMFlowController {
             this.totalCompletionTokens,
             llmProvider,
             llmModel,
-            llmConfig,
-            this.getRepositoryName(),
-            this.getCategory(),
-            this.getPullRequestTitle()
+            llmConfig
         );
 
         // 終了処理: ログを /app/log/PROJECT_NAME/PULLREQUEST/PULLREQUEST_NAME/DATE_TIME.log へ保存
@@ -1307,7 +1243,7 @@ class LLMFlowController {
         this.internalProgress = {
             ...this.internalProgress,
             ...updates,
-            lastUpdated: this.getJSTTimestamp()
+            lastUpdated: new Date().toISOString()
         };
     }
 
