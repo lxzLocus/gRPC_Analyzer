@@ -14,6 +14,11 @@ export interface ProcessingResult {
     processingTime: number;
     errorMessage?: string;
     errorType?: string;
+    metrics?: {
+        promptTokens?: number;
+        completionTokens?: number;
+        totalTokens?: number;
+    };
 }
 
 // リポジトリ処理結果の型
@@ -99,6 +104,11 @@ export interface LLMControllerResult {
     processingTime: number;
     errorMessage?: string;
     logFilePath?: string;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
 }
 
 // プルリクエスト情報の型

@@ -7,6 +7,7 @@
 import { BatchProcessingService } from '../Service/BatchProcessingService.js';
 import { BatchProcessView } from '../views/BatchProcessView.js';
 import { MemoryManagementService } from '../Service/MemoryManagementService.js';
+import ProgressTracker from '../modules/progressTracker.js';
 import { 
     ProcessingResult, 
     BatchProcessingOptions, 
@@ -22,6 +23,7 @@ export class BatchProcessController {
     private service: BatchProcessingService;
     private view: BatchProcessView;
     private memoryService: MemoryManagementService;
+    private progressTracker: ProgressTracker | null = null;
     private isShuttingDown: boolean = false;
 
     constructor(options: BatchProcessingOptions = {}) {
@@ -51,6 +53,15 @@ export class BatchProcessController {
             const repositories = await this.service.getRepositories(datasetDir);
             this.view.displayRepositoryCount(repositories.length);
 
+            // 全PRの数を事前にカウント
+            const totalPRs = await this.countTotalPullRequests(datasetDir, repositories);
+            
+            // プログレストラッカーを初期化
+            if (totalPRs > 0) {
+                this.progressTracker = new ProgressTracker(totalPRs);
+                console.log(`\n📊 Total Pull Requests to process: ${totalPRs}\n`);
+            }
+
             // 各リポジトリの処理
             for (const repositoryName of repositories) {
                 if (this.isShuttingDown) {
@@ -59,6 +70,11 @@ export class BatchProcessController {
                 }
 
                 await this.processRepository(datasetDir, repositoryName);
+            }
+
+            // 最終統計を表示
+            if (this.progressTracker) {
+                this.progressTracker.finish();
             }
 
             // 最終レポート生成
@@ -71,6 +87,32 @@ export class BatchProcessController {
             await this.handleCriticalError(error, datasetDir);
             throw error;
         }
+    }
+
+    /**
+     * 全PRの総数を事前にカウント
+     */
+    private async countTotalPullRequests(datasetDir: string, repositories: string[]): Promise<number> {
+        let total = 0;
+        
+        for (const repositoryName of repositories) {
+            try {
+                const categories = await this.service.getCategories(datasetDir, repositoryName);
+                
+                for (const category of categories) {
+                    const pullRequests = await this.service.getPullRequests(
+                        datasetDir,
+                        repositoryName,
+                        category
+                    );
+                    total += pullRequests.length;
+                }
+            } catch (error) {
+                console.error(`Warning: Could not count PRs for ${repositoryName}:`, error);
+            }
+        }
+        
+        return total;
     }
 
     /**
@@ -157,14 +199,45 @@ export class BatchProcessController {
                 pullRequestTitle
             );
 
-            // 結果表示
-            this.view.displayPullRequestResult(result);
+            // プログレストラッカーを更新
+            if (this.progressTracker) {
+                const status = result.success ? 'success' : 'failed';
+                
+                // トークン情報のデバッグログ
+                console.log('🔍 Controller Token Debug:');
+                console.log(`   result.metrics:`, result.metrics);
+                console.log(`   Has metrics: ${!!result.metrics}`);
+                
+                this.progressTracker.recordCompletion(status, {
+                    promptTokens: result.metrics?.promptTokens,
+                    completionTokens: result.metrics?.completionTokens,
+                    totalTokens: result.metrics?.totalTokens
+                });
+                
+                // ログメッセージを追加
+                const statusIcon = result.success ? '✅' : '❌';
+                this.progressTracker.log(
+                    `${statusIcon} ${repositoryName}/${category}/${pullRequestTitle}`
+                );
+            }
 
-            // 進捗表示
-            const progress = this.service.getProcessingProgress();
-            this.view.displayProgress(progress);
+            // 結果表示（プログレストラッカーがない場合のみ詳細表示）
+            if (!this.progressTracker) {
+                this.view.displayPullRequestResult(result);
+                const progress = this.service.getProcessingProgress();
+                this.view.displayProgress(progress);
+            }
 
         } catch (error) {
+            // プログレストラッカーを更新
+            if (this.progressTracker) {
+                this.progressTracker.recordCompletion('failed');
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                this.progressTracker.log(
+                    `❌ Error: ${repositoryName}/${category}/${pullRequestTitle} - ${errorMsg}`
+                );
+            }
+            
             console.error(`❌ Error processing pull request ${pullRequestTitle}:`, error);
             await this.service.recordError(
                 repositoryName,

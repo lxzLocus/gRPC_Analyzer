@@ -202,6 +202,11 @@ export class BatchProcessingService {
                 repositoryName, category, pullRequestTitle, llmResult
             );
 
+            // トークン情報のデバッグログ
+            console.log('🔍 LLM Result Token Debug:');
+            console.log(`   llmResult.usage:`, llmResult.usage);
+            console.log(`   Has usage: ${!!llmResult.usage}`);
+
             const result: ProcessingResult = {
                 success: isSuccess,
                 repositoryName,
@@ -211,8 +216,18 @@ export class BatchProcessingService {
                 premergeDir,
                 processingTime: Date.now() - startTime,
                 errorMessage: isSuccess ? undefined : llmResult.errorMessage,
-                errorType: isSuccess ? undefined : 'ProcessingFailure'
+                errorType: isSuccess ? undefined : 'ProcessingFailure',
+                metrics: llmResult.usage ? {
+                    promptTokens: llmResult.usage.promptTokens,
+                    completionTokens: llmResult.usage.completionTokens,
+                    totalTokens: llmResult.usage.totalTokens
+                } : undefined
             };
+
+            // メトリクスのデバッグログ
+            console.log('🔍 Processing Result Metrics:');
+            console.log(`   metrics:`, result.metrics);
+            console.log(`   Has metrics: ${!!result.metrics}`);
 
             // エラーの場合はReportServiceに記録
             if (!isSuccess && result.errorMessage) {

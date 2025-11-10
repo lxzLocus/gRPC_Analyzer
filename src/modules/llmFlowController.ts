@@ -2807,6 +2807,17 @@ class LLMFlowController {
         console.log(`🔄 Initial phase retry needed: hasValidContent=${hasValidContent}, hasActionPlan=${hasActionPlan}`);
         return true; // リトライ
     }
+
+    /**
+     * トークン使用量を取得
+     */
+    public getTokenUsage(): { promptTokens: number; completionTokens: number; totalTokens: number } {
+        return {
+            promptTokens: this.totalPromptTokens,
+            completionTokens: this.totalCompletionTokens,
+            totalTokens: this.totalPromptTokens + this.totalCompletionTokens
+        };
+    }
 }
 
 export default LLMFlowController;

@@ -57,7 +57,7 @@ const PROCESSING_OPTIONS = {
         pullRequestTitle: TARGET_PR_CONFIG.pullRequestTitle
     }
 };
-220112
+
 /**
  * メイン実行関数
  */

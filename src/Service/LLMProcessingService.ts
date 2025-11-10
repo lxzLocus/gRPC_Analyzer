@@ -113,16 +113,25 @@ export class LLMProcessingService {
                 timeoutPromise
             ]);
 
+            // トークン使用量を取得
+            const tokenUsage = this.currentController.getTokenUsage();
+            console.log('🎫 LLM Token Usage:', tokenUsage);
+
             return {
                 success: true,
-                processingTime: Date.now() - startTime
+                processingTime: Date.now() - startTime,
+                usage: tokenUsage
             };
 
         } catch (error) {
+            // エラー時もトークン情報を返す（コントローラーが存在する場合）
+            const tokenUsage = this.currentController ? this.currentController.getTokenUsage() : undefined;
+            
             return {
                 success: false,
                 processingTime: Date.now() - startTime,
-                errorMessage: error instanceof Error ? error.message : String(error)
+                errorMessage: error instanceof Error ? error.message : String(error),
+                usage: tokenUsage
             };
         }
     }

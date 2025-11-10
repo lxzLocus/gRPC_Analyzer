@@ -182,7 +182,7 @@ class Config {
         // デフォルト設定
         return {
             system: { version: '1.0.0', environment: 'development', debugMode: false, logLevel: 'info' },
-            llm: { provider: 'openai', model: 'gpt-4.1', maxTokens: 4000, temperature: 0.1, timeout: 30000, retryAttempts: 3 },
+            llm: { provider: 'openai', model: 'gpt-4o', maxTokens: 4000, temperature: 0.1, timeout: 30000, retryAttempts: 3 },
             gemini: { model: 'gemini-2.5-pro', maxTokens: 4000, temperature: 0.1, timeout: 30000 },
             fileOperations: { maxFileSize: 52428800, timeout: 30000, encoding: 'utf-8', enableSizeCheck: true, enableTimeoutCheck: true, backupEnabled: true },
             performance: { enableMonitoring: true, enableDetailedLogs: true, performanceLogPath: '/app/logs/performance', reportGenerationEnabled: true },

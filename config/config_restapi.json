@@ -7,15 +7,15 @@
   },
   "llm": {
     "provider": "restapi",
-    "maxTokens": 128000,
+    "maxTokens": 130000,
     "temperature": 0.1,
     "retryAttempts": 3,
     "summaryThreshold": 30000,
     "restApi": {
-      "baseUrl": "http://host.docker.internal:1234",
+      "baseUrl": "http://host.docker.internal:5000",
       "endpoint": "/v1/chat/completions",
-      "model": "openai/gpt-oss-120b",
-      "timeout": 120000,
+      "model": "openai/gpt-oss-20b",
+      "timeout": 600000,
       "reasoningEffort": "low",
       "headers": {}
     }
