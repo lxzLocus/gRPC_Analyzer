@@ -110,10 +110,6 @@ class Config {
     logLevel: string;
     environment: string;
 
-    // 実験機能: プロンプトセット切り替え
-    private promptBasePath: string;
-    private availableFeatures: Map<string, boolean> = new Map();
-
     constructor(pullRequestPath: string, configPath?: string) {
         // 外部設定を読み込み
         this.externalConfig = this.loadExternalConfig(configPath);
@@ -136,11 +132,7 @@ class Config {
         this.logLevel = this.getConfigValue('system.logLevel', 'info');
         this.environment = this.getConfigValue('system.environment', 'development');
 
-        // 実験機能: プロンプトベースパスの決定と機能検出
-        this.promptBasePath = this.determinePromptBasePath();
-        this.detectAvailableFeatures();
-
-        // ディレクトリの作成（存在しない場合）
+        // ディレクトリの作成(存在しない場合)
         this.ensureDirectoriesExist();
 
         // 一時ファイルを削除
@@ -352,101 +344,6 @@ class Config {
     }
 
     /**
-     * 実験機能: プロンプトベースパスを決定
-     * experimental.flowMode が 'legacy' の場合、レガシープロンプトセットを使用
-     */
-    private determinePromptBasePath(): string {
-        const flowMode = this.get('experimental.flowMode', 'modern');
-        
-        if (flowMode === 'legacy') {
-            const promptSet = this.get('experimental.legacyPromptSet', 'e0e0931_baseline');
-            const legacyPath = path.join(this.promptDir, 'legacy', promptSet);
-            
-            if (fs.existsSync(legacyPath)) {
-                console.log(`📂 Using legacy prompt set: ${promptSet}`);
-                console.log(`   Path: ${legacyPath}`);
-                return legacyPath;
-            } else {
-                console.error(`❌ Legacy prompt set not found: ${legacyPath}`);
-                console.warn(`   Falling back to modern prompts`);
-                const modernPath = path.join(this.promptDir, 'modern');
-                if (fs.existsSync(modernPath)) {
-                    return modernPath;
-                }
-                // modernディレクトリもなければデフォルトのpromptsを使用
-                return this.promptDir;
-            }
-        }
-        
-        // modernモードまたは未指定の場合
-        const modernPath = path.join(this.promptDir, 'modern');
-        if (fs.existsSync(modernPath)) {
-            console.log(`📂 Using modern prompt set`);
-            return modernPath;
-        }
-        
-        // modernディレクトリがなければデフォルトのpromptsを使用
-        console.log(`📂 Using default prompt directory`);
-        return this.promptDir;
-    }
-
-    /**
-     * 実験機能: 利用可能な機能を検出
-     * プロンプトファイルの存在と機能フラグに基づいて、各機能の利用可能性を判定
-     */
-    private detectAvailableFeatures(): void {
-        const featureRequirements: { [key: string]: string[] } = {
-            'conversationSummarizer': ['00_prompt_summarize.txt', '00_prompt_resume_from_summary.txt'],
-            'finalCheckPhase': ['00_promptFinalCheck.txt'],
-            'crossReferenceAnalyzer': ['00_promptModified_enhanced.txt']
-        };
-        
-        console.log(`🔍 Detecting available features in: ${this.promptBasePath}`);
-        
-        for (const [feature, requiredFiles] of Object.entries(featureRequirements)) {
-            // プロンプトファイルの存在チェック
-            const allFilesExist = requiredFiles.every(file => 
-                fs.existsSync(path.join(this.promptBasePath, file))
-            );
-            
-            // ユーザー設定の機能フラグをチェック
-            const userEnabled = this.get(`experimental.features.${feature}`, true);
-            
-            // 両方の条件を満たす場合のみ利用可能
-            const actuallyAvailable = allFilesExist && userEnabled;
-            
-            this.availableFeatures.set(feature, actuallyAvailable);
-            
-            if (!allFilesExist) {
-                const missingFiles = requiredFiles.filter(file =>
-                    !fs.existsSync(path.join(this.promptBasePath, file))
-                );
-                console.log(`⚠️  Feature '${feature}' unavailable (missing: ${missingFiles.join(', ')})`);
-            } else if (!userEnabled) {
-                console.log(`🔧 Feature '${feature}' disabled by config`);
-            } else {
-                console.log(`✅ Feature '${feature}' available`);
-            }
-        }
-        
-        // 早期終了防止はプロンプトに依存しない
-        const earlyTerminationPrevention = this.get('experimental.features.earlyTerminationPrevention', true);
-        this.availableFeatures.set('earlyTerminationPrevention', earlyTerminationPrevention);
-        if (earlyTerminationPrevention) {
-            console.log(`✅ Feature 'earlyTerminationPrevention' enabled`);
-        } else {
-            console.log(`🔧 Feature 'earlyTerminationPrevention' disabled`);
-        }
-    }
-
-    /**
-     * 実験機能: 指定された機能が利用可能かチェック
-     */
-    isFeatureAvailable(feature: string): boolean {
-        return this.availableFeatures.get(feature) ?? false;
-    }
-
-    /**
      * 設定情報の表示
      */
     displayConfig(): void {
@@ -497,7 +394,7 @@ class Config {
         previousPlan?: string,
         correctionGoals?: string
     ): string {
-        const promptRefineText = fs.readFileSync(path.join(this.promptBasePath, '00_promptReply.txt'), 'utf-8');
+        const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptReply.txt'), 'utf-8');
 
         const context = {
             filesRequested: filesRequested, // required section from previous message
@@ -520,7 +417,7 @@ class Config {
         previousPlan?: string,
         correctionGoals?: string
     ): string {
-        const promptRefineText = fs.readFileSync(path.join(this.promptBasePath, '00_promptModified.txt'), 'utf-8');
+        const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified.txt'), 'utf-8');
 
         const context = {
             modifiedFiles: modifiedFiles, // diff that was just applied or restored
@@ -540,20 +437,7 @@ class Config {
      * 対話履歴要約用プロンプトファイルを読み込み
      */
     readPromptSummarizeFile(fullConversationHistory: string): string {
-        const primaryPath = path.join(this.promptBasePath, '00_prompt_summarize.txt');
-        const fallbackPath = path.join(this.promptDir, '00_prompt_summarize.txt');
-        
-        let promptSummarizeText: string;
-        
-        // プライマリパスを試行
-        if (fs.existsSync(primaryPath)) {
-            promptSummarizeText = fs.readFileSync(primaryPath, 'utf-8');
-        } else if (fs.existsSync(fallbackPath)) {
-            console.warn(`⚠️  Summarize prompt not found in ${this.promptBasePath}, using fallback: ${fallbackPath}`);
-            promptSummarizeText = fs.readFileSync(fallbackPath, 'utf-8');
-        } else {
-            throw new Error(`❌ Summarize prompt file not found in ${primaryPath} or ${fallbackPath}`);
-        }
+        const promptSummarizeText = fs.readFileSync(path.join(this.promptDir, '00_prompt_summarize.txt'), 'utf-8');
 
         const context = {
             full_conversation_history: fullConversationHistory
@@ -570,20 +454,7 @@ class Config {
         previousActionResult: string,
         correctionGoals: string = ''
     ): string {
-        const primaryPath = path.join(this.promptBasePath, '00_prompt_resume_from_summary.txt');
-        const fallbackPath = path.join(this.promptDir, '00_prompt_resume_from_summary.txt');
-        
-        let promptResumeText: string;
-        
-        // プライマリパスを試行
-        if (fs.existsSync(primaryPath)) {
-            promptResumeText = fs.readFileSync(primaryPath, 'utf-8');
-        } else if (fs.existsSync(fallbackPath)) {
-            console.warn(`⚠️  Resume prompt not found in ${this.promptBasePath}, using fallback: ${fallbackPath}`);
-            promptResumeText = fs.readFileSync(fallbackPath, 'utf-8');
-        } else {
-            throw new Error(`❌ Resume prompt file not found in ${primaryPath} or ${fallbackPath}`);
-        }
+        const promptResumeText = fs.readFileSync(path.join(this.promptDir, '00_prompt_resume_from_summary.txt'), 'utf-8');
 
         const context = {
             summary_of_history: summaryOfHistory,
@@ -595,7 +466,7 @@ class Config {
     }
 
     /**
-     * 改善された検証プロンプトファイルを読み込み（相互参照コンテキスト付き）
+     * 改善された検証プロンプトファイルを読み込み(相互参照コンテキスト付き)
      */
     readPromptModifiedEnhancedFile(
         modifiedFiles: string, 
@@ -608,7 +479,7 @@ class Config {
         correctionGoals?: string,
         crossReferenceContext?: string
     ): string {
-        const promptRefineText = fs.readFileSync(path.join(this.promptBasePath, '00_promptModified_enhanced.txt'), 'utf-8');
+        const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified_enhanced.txt'), 'utf-8');
 
         const context = {
             modifiedFiles: modifiedFiles, // diff that was just applied or restored
@@ -632,7 +503,7 @@ class Config {
         verificationSummary: string,
         modifiedFilesStatus: string
     ): string {
-        const promptFinalCheckText = fs.readFileSync(path.join(this.promptBasePath, '00_promptFinalCheck.txt'), 'utf-8');
+        const promptFinalCheckText = fs.readFileSync(path.join(this.promptDir, '00_promptFinalCheck.txt'), 'utf-8');
 
         const context = {
             verificationSummary: verificationSummary,
