@@ -27,7 +27,7 @@ export class RestApiLLMClient implements LLMClient {
         
         // 設定から REST API の設定を取得
         this.apiConfig = {
-            baseUrl: config.get('llm.restApi.baseUrl', 'http://localhost:1234'),
+            baseUrl: config.get('llm.restApi.baseUrl', 'localhost:1234'),
             endpoint: config.get('llm.restApi.endpoint', '/v1/chat/completions'),
             model: config.get('llm.restApi.model', 'openai/gpt-oss-120b'),
             timeout: config.get('llm.restApi.timeout', 120000),
@@ -113,19 +113,44 @@ export class RestApiLLMClient implements LLMClient {
 
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                console.error(`❌ REST API error:`, {
-                    status: error.response?.status,
-                    statusText: error.response?.statusText,
-                    data: error.response?.data,
+                // 接続エラーの場合
+                if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+                    console.error(`❌ REST API Connection Error:`);
+                    console.error(`   Cannot connect to: ${this.apiConfig.baseUrl}`);
+                    console.error(`   Error code: ${error.code}`);
+                    console.error(`   Error message: ${error.message}`);
+                    console.error(`\n💡 Troubleshooting:`);
+                    console.error(`   1. Check if the REST API server is running at ${this.apiConfig.baseUrl}`);
+                    console.error(`   2. Verify the baseUrl in config_restapi.json is correct`);
+                    console.error(`   3. Ensure the server is accessible from this container/machine`);
+                    console.error(`   4. Check firewall settings if using a remote server\n`);
+                    
+                    throw new Error(`Cannot connect to REST API server at ${this.apiConfig.baseUrl}. Error: ${error.code} - ${error.message}`);
+                }
+                
+                // HTTPエラーレスポンスがある場合
+                if (error.response) {
+                    console.error(`❌ REST API HTTP Error:`, {
+                        status: error.response.status,
+                        statusText: error.response.statusText,
+                        data: error.response.data,
+                        url: `${this.apiConfig.baseUrl}${this.apiConfig.endpoint}`
+                    });
+
+                    const errorMessage = error.response.data?.error?.message 
+                        || error.response.data?.message 
+                        || `HTTP ${error.response.status}: ${error.response.statusText}`;
+
+                    throw new Error(`REST API request failed: ${errorMessage}`);
+                }
+                
+                // その他のAxiosエラー
+                console.error(`❌ REST API Request Error:`, {
+                    code: error.code,
                     message: error.message
                 });
 
-                // エラーメッセージを整形
-                const errorMessage = error.response?.data?.error?.message 
-                    || error.response?.data?.message 
-                    || error.message;
-
-                throw new Error(`REST API request failed: ${errorMessage}`);
+                throw new Error(`REST API request failed: ${error.message}`);
             }
 
             console.error('❌ Unexpected error in REST API client:', error);

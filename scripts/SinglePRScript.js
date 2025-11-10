@@ -31,9 +31,9 @@ const TARGET_PR_CONFIG = {
     // PR情報（データセットディレクトリ構造に合わせて指定）
     // 例: /app/dataset/filtered_fewChanged/repository_name/category_name/pr_title/
     // 以下はサンプルです。実際のデータに合わせて変更してください
-    repositoryName: "example_repo",           // リポジトリ名（例: "etcd-io_etcd"）
-    category: "example_category",             // カテゴリ名（例: "breaking_changes"）
-    pullRequestTitle: "Pull_XXXXX",           // PRタイトル（例: "Pull_13207"）
+    repositoryName: "boulder",           // リポジトリ名（例: "etcd-io_etcd"）
+    category: "pullrequest",             // カテゴリ名（例: "breaking_changes"）
+    pullRequestTitle: "Remove_-useV2authorizations-_boolean_flags-",           // PRタイトル（例: "Pull_13207"）
     
     // 出力ディレクトリ
     outputDir: "/app/output/single_pr"
@@ -57,11 +57,17 @@ const PROCESSING_OPTIONS = {
         pullRequestTitle: TARGET_PR_CONFIG.pullRequestTitle
     }
 };
-
+220112
 /**
  * メイン実行関数
  */
 async function main() {
+    // Configクラスを読み込んで設定を取得
+    const configModule = await import('../dist/js/modules/config.js');
+    const Config = configModule.default;
+    const dummyPRPath = '/app/dataset'; // ダミーパス（Configインスタンス作成に必要）
+    const configInstance = new Config(dummyPRPath);
+    
     // 実行情報の表示
     console.log('🎯 Single PR Processing Mode');
     console.log('========================================');
@@ -74,13 +80,25 @@ async function main() {
     console.log(`📝 Node.js Version: ${process.version}`);
     console.log(`🗑️ Garbage Collection: ${global.gc ? 'Available' : 'Not Available (use --expose-gc)'}`);
     
-    // LLM設定情報の表示
+    // LLM設定情報の表示（Configクラスから取得）
+    const provider = configInstance.get('llm.provider', 'openai');
     console.log('\n🤖 LLM Configuration:');
-    console.log(`   Provider: ${process.env.LLM_PROVIDER || 'openai'}`);
-    console.log(`   Model: ${getLLMModel()}`);
-    console.log(`   Temperature: ${getLLMTemperature()}`);
-    console.log(`   Max Tokens: ${getLLMMaxTokens()}`);
+    console.log(`   Provider: ${provider}`);
+    console.log(`   Model: ${getLLMModelFromConfig(configInstance, provider)}`);
+    console.log(`   Temperature: ${getLLMTemperatureFromConfig(configInstance, provider)}`);
+    console.log(`   Max Tokens: ${getLLMMaxTokensFromConfig(configInstance, provider)}`);
+    
+    // API Key情報（環境変数から取得）
     console.log(`   API Key Length: ${getLLMApiKeyLength()}`);
+    
+    // REST API設定の表示（providerがrestapiの場合）
+    if (provider === 'restapi') {
+        const baseUrl = configInstance.get('llm.restApi.baseUrl', 'http://localhost:1234');
+        const endpoint = configInstance.get('llm.restApi.endpoint', '/v1/chat/completions');
+        const model = configInstance.get('llm.restApi.model', 'default');
+        console.log(`   REST API URL: ${baseUrl}${endpoint}`);
+        console.log(`   REST API Model: ${model}`);
+    }
     
     // 処理オプションの表示
     console.log('\n⚙️ Processing Options:');
@@ -186,7 +204,52 @@ function formatDuration(milliseconds) {
 }
 
 /**
- * LLMモデル名を取得
+ * LLMモデル名を取得（Configクラスから）
+ */
+function getLLMModelFromConfig(configInstance, provider) {
+    if (provider === 'openai') {
+        return configInstance.get('llm.model', process.env.OPENAI_MODEL || 'gpt-4');
+    } else if (provider === 'gemini') {
+        return configInstance.get('gemini.model', process.env.GEMINI_MODEL || 'gemini-1.5-pro');
+    } else if (provider === 'restapi') {
+        return configInstance.get('llm.restApi.model', 'default');
+    } else {
+        return 'unknown';
+    }
+}
+
+/**
+ * LLM温度設定を取得（Configクラスから）
+ */
+function getLLMTemperatureFromConfig(configInstance, provider) {
+    if (provider === 'openai') {
+        return configInstance.get('llm.temperature', process.env.OPENAI_TEMPERATURE || '0.7');
+    } else if (provider === 'gemini') {
+        return configInstance.get('gemini.temperature', process.env.GEMINI_TEMPERATURE || '0.7');
+    } else if (provider === 'restapi') {
+        return configInstance.get('llm.restApi.temperature', '0.7');
+    } else {
+        return 'unknown';
+    }
+}
+
+/**
+ * LLM最大トークン数を取得（Configクラスから）
+ */
+function getLLMMaxTokensFromConfig(configInstance, provider) {
+    if (provider === 'openai') {
+        return configInstance.get('llm.maxTokens', process.env.OPENAI_MAX_TOKENS || '4000');
+    } else if (provider === 'gemini') {
+        return configInstance.get('gemini.maxTokens', process.env.GEMINI_MAX_TOKENS || '4000');
+    } else if (provider === 'restapi') {
+        return configInstance.get('llm.restApi.maxTokens', '4000');
+    } else {
+        return 'unknown';
+    }
+}
+
+/**
+ * LLMモデル名を取得（環境変数から・レガシー）
  */
 function getLLMModel() {
     const provider = process.env.LLM_PROVIDER || 'openai';
@@ -253,4 +316,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     });
 }
 
-export { main, TARGET_PR_CONFIG, PROCESSING_OPTIONS };
+export { 
+    main, 
+    TARGET_PR_CONFIG, 
+    PROCESSING_OPTIONS,
+    getLLMModelFromConfig,
+    getLLMTemperatureFromConfig,
+    getLLMMaxTokensFromConfig
+};

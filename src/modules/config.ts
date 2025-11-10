@@ -141,14 +141,39 @@ class Config {
 
     /**
      * 外部設定ファイルを読み込み
+     * プロバイダーに応じた設定ファイルを自動的に読み込む
      */
     private loadExternalConfig(configPath?: string): ExternalConfig {
-        const defaultConfigPath = configPath || '/app/config/config.json';
+        const baseConfigPath = configPath || '/app/config/config.json';
         
         try {
-            if (fs.existsSync(defaultConfigPath)) {
-                const configContent = fs.readFileSync(defaultConfigPath, 'utf-8');
-                return JSON.parse(configContent);
+            // ベース設定を読み込み
+            let baseConfig: ExternalConfig | null = null;
+            if (fs.existsSync(baseConfigPath)) {
+                const configContent = fs.readFileSync(baseConfigPath, 'utf-8');
+                baseConfig = JSON.parse(configContent);
+            }
+            
+            // プロバイダーが指定されている場合、専用設定ファイルを探す
+            if (baseConfig && baseConfig.llm && baseConfig.llm.provider) {
+                const provider = baseConfig.llm.provider;
+                const providerConfigPath = `/app/config/config_${provider}.json`;
+                
+                if (fs.existsSync(providerConfigPath)) {
+                    console.log(`📂 Loading provider-specific config: config_${provider}.json`);
+                    const providerConfigContent = fs.readFileSync(providerConfigPath, 'utf-8');
+                    const providerConfig = JSON.parse(providerConfigContent);
+                    
+                    // プロバイダー専用設定をベースにして、ベース設定で上書き（ベース設定が優先）
+                    const mergedConfig = this.deepMerge(providerConfig, baseConfig);
+                    return mergedConfig;
+                } else {
+                    console.log(`⚠️  Provider-specific config not found: config_${provider}.json, using base config`);
+                }
+            }
+            
+            if (baseConfig) {
+                return baseConfig;
             }
         } catch (error) {
             console.warn('Failed to load external config, using defaults:', error);
@@ -166,9 +191,27 @@ class Config {
             security: { validateFilePaths: true, restrictToProjectDir: true, maxDepth: 10 }
         };
     }
+    
+    /**
+     * オブジェクトをディープマージ
+     */
+    private deepMerge(target: any, source: any): any {
+        const result = { ...target };
+        
+        for (const key in source) {
+            if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+                result[key] = this.deepMerge(result[key] || {}, source[key]);
+            } else {
+                result[key] = source[key];
+            }
+        }
+        
+        return result;
+    }
 
     /**
-     * 環境変数を読み込み（.env ファイルの値を上書き）
+     * 環境変数を読み込み（APIキー/トークンのみ）
+     * 設定値は config.json で管理し、環境変数では上書きしない
      */
     private loadEnvironmentVariables(): void {
         try {
@@ -178,113 +221,9 @@ class Config {
             // dotenvが利用できない場合は環境変数のみ使用
         }
 
-        // 環境変数で外部設定を上書き
-        if (process.env.DEBUG_MODE) {
-            this.externalConfig.system.debugMode = process.env.DEBUG_MODE === 'true';
-        }
-        if (process.env.LOG_LEVEL) {
-            this.externalConfig.system.logLevel = process.env.LOG_LEVEL;
-        }
-        
-        // LLM設定は環境変数で完全管理
-        if (process.env.LLM_PROVIDER) {
-            if (!this.externalConfig.llm) {
-                this.externalConfig.llm = {};
-            }
-            this.externalConfig.llm.provider = process.env.LLM_PROVIDER;
-        }
-        if (process.env.LLM_MAX_TOKENS) {
-            if (!this.externalConfig.llm) this.externalConfig.llm = {};
-            this.externalConfig.llm.maxTokens = parseInt(process.env.LLM_MAX_TOKENS);
-        }
-        if (process.env.LLM_TEMPERATURE) {
-            if (!this.externalConfig.llm) this.externalConfig.llm = {};
-            this.externalConfig.llm.temperature = parseFloat(process.env.LLM_TEMPERATURE);
-        }
-        if (process.env.LLM_TIMEOUT) {
-            if (!this.externalConfig.llm) this.externalConfig.llm = {};
-            this.externalConfig.llm.timeout = parseInt(process.env.LLM_TIMEOUT);
-        }
-        if (process.env.LLM_RETRY_ATTEMPTS) {
-            if (!this.externalConfig.llm) this.externalConfig.llm = {};
-            this.externalConfig.llm.retryAttempts = parseInt(process.env.LLM_RETRY_ATTEMPTS);
-        }
-        
-        // LLM要約設定
-        if (process.env.LLM_SUMMARY_THRESHOLD) {
-            if (!this.externalConfig.llm) this.externalConfig.llm = {};
-            this.externalConfig.llm.summaryThreshold = parseInt(process.env.LLM_SUMMARY_THRESHOLD);
-        }
-        if (process.env.LLM_SUMMARY_MODEL) {
-            if (!this.externalConfig.llm) this.externalConfig.llm = {};
-            this.externalConfig.llm.summaryModel = process.env.LLM_SUMMARY_MODEL;
-        }
-        if (process.env.LLM_SUMMARY_TEMPERATURE) {
-            if (!this.externalConfig.llm) this.externalConfig.llm = {};
-            this.externalConfig.llm.summaryTemperature = parseFloat(process.env.LLM_SUMMARY_TEMPERATURE);
-        }
-        
-        // LLM品質チェック設定
-        if (process.env.LLM_QUALITY_CHECK_ENABLED) {
-            if (!this.externalConfig.llm) this.externalConfig.llm = {};
-            if (!this.externalConfig.llm.qualityCheck) this.externalConfig.llm.qualityCheck = {};
-            this.externalConfig.llm.qualityCheck.enabled = process.env.LLM_QUALITY_CHECK_ENABLED === 'true';
-        }
-        if (process.env.LLM_REQUIRE_MODIFIED_CONTENT) {
-            if (!this.externalConfig.llm) this.externalConfig.llm = {};
-            if (!this.externalConfig.llm.qualityCheck) this.externalConfig.llm.qualityCheck = {};
-            this.externalConfig.llm.qualityCheck.requireModifiedContent = process.env.LLM_REQUIRE_MODIFIED_CONTENT === 'true';
-        }
-        if (process.env.LLM_MIN_MODIFIED_LINES) {
-            if (!this.externalConfig.llm) this.externalConfig.llm = {};
-            if (!this.externalConfig.llm.qualityCheck) this.externalConfig.llm.qualityCheck = {};
-            this.externalConfig.llm.qualityCheck.minModifiedLines = parseInt(process.env.LLM_MIN_MODIFIED_LINES);
-        }
-        
-        // OpenAI設定
-        if (process.env.OPENAI_MODEL) {
-            if (!this.externalConfig.openai) {
-                this.externalConfig.openai = {};
-            }
-            this.externalConfig.openai.model = process.env.OPENAI_MODEL;
-        }
-        if (process.env.OPENAI_MAX_TOKENS) {
-            if (!this.externalConfig.openai) this.externalConfig.openai = {};
-            this.externalConfig.openai.maxTokens = parseInt(process.env.OPENAI_MAX_TOKENS);
-        }
-        if (process.env.OPENAI_TEMPERATURE) {
-            if (!this.externalConfig.openai) this.externalConfig.openai = {};
-            this.externalConfig.openai.temperature = parseFloat(process.env.OPENAI_TEMPERATURE);
-        }
-        if (process.env.OPENAI_TIMEOUT) {
-            if (!this.externalConfig.openai) this.externalConfig.openai = {};
-            this.externalConfig.openai.timeout = parseInt(process.env.OPENAI_TIMEOUT);
-        }
-        
-        // Gemini設定
-        if (process.env.GEMINI_MODEL) {
-            if (!this.externalConfig.gemini) {
-                this.externalConfig.gemini = {};
-            }
-            this.externalConfig.gemini.model = process.env.GEMINI_MODEL;
-        }
-        if (process.env.GEMINI_MAX_TOKENS) {
-            if (!this.externalConfig.gemini) this.externalConfig.gemini = {};
-            this.externalConfig.gemini.maxTokens = parseInt(process.env.GEMINI_MAX_TOKENS);
-        }
-        if (process.env.GEMINI_TEMPERATURE) {
-            if (!this.externalConfig.gemini) this.externalConfig.gemini = {};
-            this.externalConfig.gemini.temperature = parseFloat(process.env.GEMINI_TEMPERATURE);
-        }
-        if (process.env.GEMINI_TIMEOUT) {
-            if (!this.externalConfig.gemini) this.externalConfig.gemini = {};
-            this.externalConfig.gemini.timeout = parseInt(process.env.GEMINI_TIMEOUT);
-        }
-        
-        if (process.env.MAX_FILE_SIZE) {
-            this.externalConfig.fileOperations.maxFileSize = parseInt(process.env.MAX_FILE_SIZE);
-        }
-        // 他の環境変数も同様に処理...
+        // APIキー/トークンのみ環境変数から読み込む
+        // その他の設定（provider, model, temperature等）は config.json で管理
+        // 環境変数による設定の上書きは行わない
     }
 
     /**

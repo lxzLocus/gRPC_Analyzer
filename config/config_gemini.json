@@ -6,30 +6,25 @@
     "logLevel": "info"
   },
   "llm": {
-    "provider": "restapi",
-    "maxTokens": 128000,
+    "provider": "gemini"
+  },
+  "gemini": {
+    "model": "gemini-2.5-pro",
+    "maxTokens": 4000,
     "temperature": 0.1,
-    "retryAttempts": 3,
-    "summaryThreshold": 30000,
-    "restApi": {
-      "baseUrl": "http://host.docker.internal:1234",
-      "endpoint": "/v1/chat/completions",
-      "model": "openai/gpt-oss-120b",
-      "timeout": 120000,
-      "reasoningEffort": "low",
-      "headers": {}
-    }
+    "timeout": 120000
   },
   "fileOperations": {
     "encoding": "utf-8",
     "enableSizeCheck": true,
-    "maxFileSize": 10485760,
+    "maxFileSize": 52428800,
     "enableTimeoutCheck": true,
-    "fileTimeout": 30000
+    "fileTimeout": 30000,
+    "backupEnabled": true
   },
   "performance": {
     "enableMonitoring": true,
-    "enableDetailedLogs": false,
+    "enableDetailedLogs": true,
     "performanceLogPath": "/app/logs/performance",
     "reportGenerationEnabled": true
   },
