@@ -4,6 +4,7 @@
     "environment": "production"
   },
   "llm": {
+    "provider": "restapi"
   },
   "fileOperations": {
     "encoding": "utf-8",

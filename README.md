@@ -31,6 +31,7 @@
 │   │   ├── fileManager.ts       # ファイルI/O操作
 │   │   ├── openAIClient.ts      # OpenAI API クライアント
 │   │   ├── geminiLLMClient.ts   # Gemini API クライアント
+│   │   ├── restApiLLMClient.ts  # REST API LLMクライアント (新規)
 │   │   ├── llmClientFactory.ts  # LLMクライアント統合管理
 │   │   ├── generatePeripheralStructure.ts # ディレクトリ構造生成
 │   │   ├── restoreDiff.ts       # 差分復元処理
@@ -967,10 +968,18 @@ cp .env.example .env
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
 GEMINI_API_KEY=your_gemini_api_key_here  # オプション
-LLM_PROVIDER=openai                      # openai または gemini
+LLM_PROVIDER=openai                      # openai, gemini, または restapi
 NODE_ENV=development
 DEBUG_MODE=false
 ```
+
+**🆕 REST API経由でLLMを使用する場合:**
+```env
+LLM_PROVIDER=restapi
+# REST API設定は config/config_restapi.json で行います
+```
+
+詳細は [REST APIクイックスタートガイド](docs/REST_API_QUICKSTART.md) を参照してください。
 
 4. **TypeScriptのコンパイル**
 ```bash

@@ -6,6 +6,7 @@
     "start": "node dist/js/modules/llmFlowController.js",
     "clean": "rm -rf dist",
     "test:prompt": "node test_prompt_loading.js",
+    "test:restapi": "npm run build && node scripts/testRestApiClient.js",
     "generate:prompts": "node dist/js/utils/generatePrompt.js",
     "batch:safe": "node scripts/safeBatchRunner.js",
     "batch:test": "node scripts/safeBatchRunner.js /app/dataset/test /app/output",

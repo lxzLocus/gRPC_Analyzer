@@ -1,0 +1,54 @@
+{
+  "system": {
+    "version": "1.0.0",
+    "environment": "production",
+    "debugMode": false,
+    "logLevel": "info"
+  },
+  "llm": {
+    "provider": "restapi",
+    "maxTokens": 128000,
+    "temperature": 0.1,
+    "timeout": 120000,
+    "retryAttempts": 3,
+    "summaryThreshold": 30000,
+    "restApi": {
+      "baseUrl": "http://localhost:1234",
+      "endpoint": "/v1/chat/completions",
+      "model": "openai/gpt-oss-120b",
+      "timeout": 120000,
+      "reasoningEffort": "low",
+      "headers": {}
+    }
+  },
+  "fileOperations": {
+    "encoding": "utf-8",
+    "enableSizeCheck": true,
+    "maxFileSize": 10485760,
+    "enableTimeoutCheck": true,
+    "fileTimeout": 30000
+  },
+  "performance": {
+    "enableMonitoring": true,
+    "enableDetailedLogs": false,
+    "performanceLogPath": "/app/logs/performance",
+    "reportGenerationEnabled": true
+  },
+  "paths": {
+    "promptDir": "/app/src/prompts",
+    "outputDir": "/app/output",
+    "logsDir": "/app/logs",
+    "backupDir": "/app/backups"
+  },
+  "testing": {
+    "mockMode": false,
+    "integrationTestEnabled": true,
+    "testReportPath": "/app/output",
+    "testTimeout": 60000
+  },
+  "security": {
+    "validateFilePaths": true,
+    "restrictToProjectDir": true,
+    "maxDepth": 10
+  }
+}

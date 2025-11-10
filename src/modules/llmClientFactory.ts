@@ -7,8 +7,9 @@ import Config from './config.js';
 import { LLMClient } from './llmClient.js';
 import OpenAILLMClient from './openAILLMClient.js';
 import GeminiLLMClient from './geminiLLMClient.js';
+import RestApiLLMClient from './restApiLLMClient.js';
 
-export type LLMProvider = 'openai' | 'gemini';
+export type LLMProvider = 'openai' | 'gemini' | 'restapi';
 
 export class LLMClientFactory {
     static create(config: Config, provider?: LLMProvider): LLMClient {
@@ -25,6 +26,9 @@ export class LLMClientFactory {
             case 'gemini':
                 return new GeminiLLMClient(config);
             
+            case 'restapi':
+                return new RestApiLLMClient(config);
+            
             default:
                 console.warn(`⚠️  Unknown LLM provider: ${selectedProvider}, falling back to OpenAI`);
                 return new OpenAILLMClient(config);
@@ -35,7 +39,7 @@ export class LLMClientFactory {
      * 利用可能なプロバイダーの一覧を取得
      */
     static getAvailableProviders(): LLMProvider[] {
-        return ['openai', 'gemini'];
+        return ['openai', 'gemini', 'restapi'];
     }
 
     /**
