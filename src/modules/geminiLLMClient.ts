@@ -20,7 +20,7 @@ export class GeminiLLMClient implements LLMClient {
         
         console.log(`🔑 GeminiLLMClient: Using API key length: ${finalApiKey.length}`);
         console.log(`🔑 Available env vars: GEMINI_API_KEY=${!!process.env.GEMINI_API_KEY}`);
-        console.log(`🤖 GeminiLLMClient: Using model: ${this.config.get('gemini.model', process.env.GEMINI_MODEL || 'gemini-2.5-pro')}`);
+        console.log(`🤖 GeminiLLMClient: Using model: ${this.config.get('gemini.model', 'gemini-2.5-pro')}`);
         
         // Geminiクライアントの初期化を非同期で行う
         this.initPromise = this.initializeClient(finalApiKey);

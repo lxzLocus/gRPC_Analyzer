@@ -109,7 +109,7 @@ class LLMFlowController {
             minModifiedLines: 1,
             retryDelayMs: 1000,
             exponentialBackoff: true
-        });
+        }, this.config);  // Configを渡す
         
         // 🔧 パス構築デバッグ - コンストラクタレベルでのパス情報を記録
         console.log('🔧 LLMFlowController コンストラクタでのパス情報:');
@@ -1102,8 +1102,8 @@ class LLMFlowController {
             }
         }
         
-        // LLMプロバイダー情報を取得
-        const llmProvider = process.env.LLM_PROVIDER || 'openai';
+        // LLMプロバイダー情報を取得（Configクラスから）
+        const llmProvider = this.config.get('llm.provider', 'openai');
         const llmModel = this.getCurrentLLMModel();
         const llmConfig = this.getLLMConfig();
 
@@ -2683,12 +2683,15 @@ class LLMFlowController {
      * 現在使用中のLLMモデル名を取得
      */
     private getCurrentLLMModel(): string {
-        const provider = process.env.LLM_PROVIDER || 'openai';
+        // Configクラスから設定を取得（config_openai.json等を参照）
+        const provider = this.config.get('llm.provider', 'openai');
         
         if (provider === 'openai') {
-            return process.env.OPENAI_MODEL || 'gpt-4';
+            return this.config.get('llm.model', 'gpt-4');
         } else if (provider === 'gemini') {
-            return process.env.GEMINI_MODEL || 'gemini-1.5-pro';
+            return this.config.get('gemini.model', 'gemini-1.5-pro');
+        } else if (provider === 'restapi') {
+            return this.config.get('llm.restApi.model', 'default');
         } else {
             return 'unknown';
         }
@@ -2698,17 +2701,20 @@ class LLMFlowController {
      * LLM設定情報を取得
      */
     private getLLMConfig(): any {
-        const provider = process.env.LLM_PROVIDER || 'openai';
+        const provider = this.config.get('llm.provider', 'openai');
         const config: any = {};
         
         if (provider === 'openai') {
-            config.temperature = parseFloat(process.env.OPENAI_TEMPERATURE || '0.7');
-            config.max_tokens = parseInt(process.env.OPENAI_MAX_TOKENS || '4000');
-            config.top_p = parseFloat(process.env.OPENAI_TOP_P || '1.0');
+            config.temperature = this.config.get('llm.temperature', 0.7);
+            config.max_tokens = this.config.get('llm.maxTokens', 4000);
+            config.top_p = 1.0; // デフォルト値
         } else if (provider === 'gemini') {
-            config.temperature = parseFloat(process.env.GEMINI_TEMPERATURE || '0.7');
-            config.max_tokens = parseInt(process.env.GEMINI_MAX_TOKENS || '4000');
-            config.top_p = parseFloat(process.env.GEMINI_TOP_P || '1.0');
+            config.temperature = this.config.get('gemini.temperature', 0.7);
+            config.max_tokens = this.config.get('gemini.maxTokens', 4000);
+            config.top_p = 1.0; // デフォルト値
+        } else if (provider === 'restapi') {
+            config.temperature = this.config.get('llm.restApi.temperature', 0.7);
+            config.max_tokens = this.config.get('llm.restApi.maxTokens', 4000);
         }
         
         // 空の設定オブジェクトの場合はundefinedを返す

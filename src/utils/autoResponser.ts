@@ -232,6 +232,7 @@ class OpenAIClient {
 
     async fetchOpenAPI(messages: Array<{ role: string, content: string }>): Promise<any> {
         try {
+            // 注意: このユーティリティは環境変数を使用（独立したツール）
             const model = process.env.OPENAI_MODEL || 'gpt-4o';
             const completion = await this.client.chat.completions.create({
                 model: model,

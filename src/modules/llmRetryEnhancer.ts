@@ -3,6 +3,8 @@
  * modified: 0 lines などの不完全な応答を検出してリトライする
  */
 
+import Config from './config.js';
+
 export interface LLMRetryOptions {
     maxRetries: number;
     enableQualityCheck: boolean;
@@ -31,9 +33,11 @@ export class LLMRetryEnhancer {
         retryDelayMs: 1000,
         exponentialBackoff: true
     };
+    private config: Config | null = null;
 
-    constructor(private options: Partial<LLMRetryOptions> = {}) {
+    constructor(private options: Partial<LLMRetryOptions> = {}, config?: Config) {
         this.options = { ...this.defaultOptions, ...options };
+        this.config = config || null;
     }
 
     /**
@@ -52,7 +56,9 @@ export class LLMRetryEnhancer {
 
         // トークン制限によるカットオフの検出
         if (usage && usage.completion_tokens) {
-            const maxTokens = parseInt(process.env.OPENAI_MAX_TOKENS || '4000');
+            const maxTokens = this.config 
+                ? this.config.get('llm.maxTokens', 4000)
+                : 4000;
             if (usage.completion_tokens >= maxTokens * 0.98) {
                 console.log(`⚠️  Token cutoff detected: ${usage.completion_tokens}/${maxTokens} tokens used`);
                 metrics.completionScore = Math.max(0, metrics.completionScore - 50); // 大幅減点
