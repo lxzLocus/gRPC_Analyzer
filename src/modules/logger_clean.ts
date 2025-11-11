@@ -59,6 +59,7 @@ type ExperimentMetadataType = {
     promptTokens: number;
     completionTokens: number;
     total: number;
+    summaryTokens?: number; // 要約で消費したトークン数（オプション）
   };
   llm_provider: string;
   llm_model: string;
@@ -152,7 +153,8 @@ export default class Logger {
       max_tokens?: number;
       top_p?: number;
       [key: string]: any;
-    }
+    },
+    summaryTokens?: number // 要約トークン数（オプション）
   ): void {
     this.experimentMetadata = {
       experiment_id: experimentId,
@@ -163,7 +165,8 @@ export default class Logger {
       total_tokens: {
         promptTokens,
         completionTokens,
-        total: promptTokens + completionTokens
+        total: promptTokens + completionTokens,
+        ...(summaryTokens !== undefined && summaryTokens > 0 && { summaryTokens })
       },
       llm_provider: llmProvider,
       llm_model: llmModel,

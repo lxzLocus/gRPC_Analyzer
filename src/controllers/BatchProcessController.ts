@@ -8,6 +8,8 @@ import { BatchProcessingService } from '../Service/BatchProcessingService.js';
 import { BatchProcessView } from '../views/BatchProcessView.js';
 import { MemoryManagementService } from '../Service/MemoryManagementService.js';
 import ProgressTracker from '../modules/progressTracker.js';
+import CostCalculator from '../utils/CostCalculator.js';
+import Config from '../modules/config.js';
 import { 
     ProcessingResult, 
     BatchProcessingOptions, 
@@ -24,6 +26,7 @@ export class BatchProcessController {
     private view: BatchProcessView;
     private memoryService: MemoryManagementService;
     private progressTracker: ProgressTracker | null = null;
+    private costCalculator: CostCalculator | null = null;
     private isShuttingDown: boolean = false;
 
     constructor(options: BatchProcessingOptions = {}) {
@@ -62,6 +65,9 @@ export class BatchProcessController {
                 console.log(`\n📊 Total Pull Requests to process: ${totalPRs}\n`);
             }
 
+            // コスト計算機を初期化
+            this.initializeCostCalculator();
+
             // 各リポジトリの処理
             for (const repositoryName of repositories) {
                 if (this.isShuttingDown) {
@@ -76,6 +82,9 @@ export class BatchProcessController {
             if (this.progressTracker) {
                 this.progressTracker.finish();
             }
+
+            // 最終コスト表示
+            this.displayFinalCost();
 
             // 最終レポート生成
             await this.generateFinalReport();
@@ -211,7 +220,8 @@ export class BatchProcessController {
                 this.progressTracker.recordCompletion(status, {
                     promptTokens: result.metrics?.promptTokens,
                     completionTokens: result.metrics?.completionTokens,
-                    totalTokens: result.metrics?.totalTokens
+                    totalTokens: result.metrics?.totalTokens,
+                    summaryTokens: result.metrics?.summaryTokens // 要約トークン数を渡す
                 });
                 
                 // ログメッセージを追加
@@ -356,6 +366,9 @@ export class BatchProcessController {
             // サービスのクリーンアップ
             await this.service.cleanup();
             
+            // 最終コスト表示
+            this.displayFinalCost();
+            
             // 最終レポート生成
             await this.generateFinalReport();
             
@@ -363,5 +376,67 @@ export class BatchProcessController {
         } catch (error) {
             console.error('❌ Error during controller shutdown:', error);
         }
+    }
+
+    /**
+     * コスト計算機を初期化
+     */
+    private initializeCostCalculator(): void {
+        try {
+            // ダミーのConfigインスタンスを作成（設定取得のため）
+            const tempConfig = new Config('/app/dataset');
+            const provider = tempConfig.get('llm.provider', 'openai');
+            const model = tempConfig.get('llm.model', 'gpt-4');
+            const summaryModel = tempConfig.get('llm.summaryModel', model);
+
+            this.costCalculator = new CostCalculator(provider, model, summaryModel);
+        } catch (error) {
+            console.warn('⚠️ Could not initialize cost calculator:', error);
+            this.costCalculator = null;
+        }
+    }
+
+    /**
+     * 最終コスト表示
+     */
+    private displayFinalCost(): void {
+        if (!this.costCalculator || !this.costCalculator.isEnabled()) {
+            return;
+        }
+
+        if (!this.progressTracker) {
+            return;
+        }
+
+        const stats = this.progressTracker.getStats();
+        const totalPRs = stats.total;
+        const completedPRs = stats.completed;
+
+        if (completedPRs === 0) {
+            return;
+        }
+
+        const currentUsage = {
+            promptTokens: stats.promptTokens,
+            completionTokens: stats.completionTokens,
+            totalTokens: stats.totalTokens,
+            summaryTokens: stats.summaryTokens
+        };
+
+        // 現在のコストと予測を計算
+        const { current, projected, remaining } = this.costCalculator.calculateProjection(
+            currentUsage,
+            completedPRs,
+            totalPRs
+        );
+
+        // 表示
+        this.costCalculator.displayProjection(
+            current,
+            projected,
+            remaining,
+            completedPRs,
+            totalPRs
+        );
     }
 }

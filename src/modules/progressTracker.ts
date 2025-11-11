@@ -13,6 +13,7 @@ export interface ProgressStats {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    summaryTokens?: number; // 要約で消費したトークン数
 }
 
 export interface TokenStats {
@@ -43,7 +44,8 @@ export class ProgressTracker {
             startTime: Date.now(),
             promptTokens: 0,
             completionTokens: 0,
-            totalTokens: 0
+            totalTokens: 0,
+            summaryTokens: 0 // 要約トークン数を初期化
         };
 
         this.terminalHeight = process.stdout.rows || 24;
@@ -66,6 +68,7 @@ export class ProgressTracker {
         promptTokens?: number;
         completionTokens?: number;
         totalTokens?: number;
+        summaryTokens?: number; // 要約トークン数を追加
     }): void {
         this.stats.completed++;
         
@@ -80,15 +83,18 @@ export class ProgressTracker {
             console.log(`   promptTokens: ${tokens.promptTokens}`);
             console.log(`   completionTokens: ${tokens.completionTokens}`);
             console.log(`   totalTokens: ${tokens.totalTokens}`);
+            console.log(`   summaryTokens: ${tokens.summaryTokens || 0}`);
             
             this.stats.promptTokens += tokens.promptTokens || 0;
             this.stats.completionTokens += tokens.completionTokens || 0;
             this.stats.totalTokens += tokens.totalTokens || 0;
+            this.stats.summaryTokens = (this.stats.summaryTokens || 0) + (tokens.summaryTokens || 0);
             
             // トークン履歴に記録（統計計算用）
             this.tokenHistory.push(tokens.totalTokens);
             
             console.log(`   Total accumulated: ${this.stats.totalTokens}`);
+            console.log(`   Summary accumulated: ${this.stats.summaryTokens}`);
             console.log(`   Request count with tokens: ${this.tokenHistory.length}`);
         } else {
             console.log('⚠️  ProgressTracker: No tokens provided or zero tokens');
@@ -299,6 +305,10 @@ export class ProgressTracker {
         console.log(`   🎫 Total Tokens: ${this.formatTokens(this.stats.totalTokens)}`);
         console.log(`      - Prompt: ${this.formatTokens(this.stats.promptTokens)}`);
         console.log(`      - Completion: ${this.formatTokens(this.stats.completionTokens)}`);
+        if (this.stats.summaryTokens && this.stats.summaryTokens > 0) {
+            console.log(`      - Summary: ${this.formatTokens(this.stats.summaryTokens)}`);
+            console.log(`   💰 Grand Total (incl. Summary): ${this.formatTokens(this.stats.totalTokens + this.stats.summaryTokens)}`);
+        }
     }
 
     /**

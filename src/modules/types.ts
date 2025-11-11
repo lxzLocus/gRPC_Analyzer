@@ -248,6 +248,7 @@ export type ConversationHistoryManager = {
     totalTokens: number;
     summaryThreshold: number; // トークン数の閾値
     lastSummaryTurn: number;  // 最後に要約した時のターン
+    summaryTokensUsed: number; // 要約処理で消費した総トークン数
 };
 
 export type SummarizeRequest = {

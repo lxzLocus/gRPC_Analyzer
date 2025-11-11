@@ -1108,14 +1108,17 @@ class LLMFlowController {
         const llmConfig = this.getLLMConfig();
 
         // 要約機能の統計を出力
+        let summaryTokensUsed = 0;
         if (this.conversationSummarizer) {
             const summaryStats = this.conversationSummarizer.getStats();
+            summaryTokensUsed = summaryStats.summaryTokensUsed || 0;
             console.log('\n📊 Conversation Summarization Stats:');
             console.log(`   Total Messages: ${summaryStats.totalMessages}`);
             console.log(`   Estimated Tokens: ${summaryStats.estimatedTokens}`);
             console.log(`   Summary Threshold: ${summaryStats.summaryThreshold}`);
             console.log(`   Times Summarized: ${summaryStats.timesExceededThreshold}`);
             console.log(`   Last Summary Turn: ${summaryStats.lastSummaryTurn}`);
+            console.log(`   Summary Tokens Used: ${summaryTokensUsed} tokens`);
         }
         
         this.logger.setExperimentMetadata(
@@ -1128,7 +1131,8 @@ class LLMFlowController {
             this.totalCompletionTokens,
             llmProvider,
             llmModel,
-            llmConfig
+            llmConfig,
+            summaryTokensUsed // 要約トークン数を渡す
         );
 
         // 終了処理: ログを /app/log/PROJECT_NAME/PULLREQUEST/PULLREQUEST_NAME/DATE_TIME.log へ保存
@@ -2815,13 +2819,23 @@ class LLMFlowController {
     }
 
     /**
-     * トークン使用量を取得
+     * トークン使用量を取得（要約を含む）
      */
-    public getTokenUsage(): { promptTokens: number; completionTokens: number; totalTokens: number } {
+    public getTokenUsage(): { 
+        promptTokens: number; 
+        completionTokens: number; 
+        totalTokens: number;
+        summaryTokens?: number; 
+    } {
+        const summaryTokens = this.conversationSummarizer 
+            ? this.conversationSummarizer.getStats().summaryTokensUsed || 0
+            : 0;
+
         return {
             promptTokens: this.totalPromptTokens,
             completionTokens: this.totalCompletionTokens,
-            totalTokens: this.totalPromptTokens + this.totalCompletionTokens
+            totalTokens: this.totalPromptTokens + this.totalCompletionTokens,
+            ...(summaryTokens > 0 && { summaryTokens })
         };
     }
 }

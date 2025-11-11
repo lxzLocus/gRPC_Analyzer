@@ -31,7 +31,8 @@ class ConversationSummarizer {
             messages: [],
             totalTokens: 0,
             summaryThreshold: this.config.get('llm.summaryThreshold', this.DEFAULT_SUMMARY_THRESHOLD),
-            lastSummaryTurn: 0
+            lastSummaryTurn: 0,
+            summaryTokensUsed: 0 // 要約で消費したトークン数を初期化
         };
         
         console.log(`📝 ConversationSummarizer initialized with threshold: ${this.historyManager.summaryThreshold} tokens`);
@@ -175,6 +176,13 @@ class ConversationSummarizer {
             if (response && response.choices && response.choices[0]) {
                 const summaryText = response.choices[0].message.content.trim();
                 
+                // 要約で消費したトークン数を記録
+                const summaryUsage = response.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+                this.historyManager.summaryTokensUsed += summaryUsage.total_tokens;
+                
+                console.log(`📊 Summary API usage - Prompt: ${summaryUsage.prompt_tokens}, Completion: ${summaryUsage.completion_tokens}, Total: ${summaryUsage.total_tokens}`);
+                console.log(`📊 Cumulative summary tokens: ${this.historyManager.summaryTokensUsed}`);
+                
                 // デバッグ: レスポンスの最初の部分を表示
                 console.log(`📊 Summary response preview (first 200 chars): ${summaryText.substring(0, 200)}`);
                 
@@ -259,7 +267,8 @@ class ConversationSummarizer {
             estimatedTokens: this.historyManager.totalTokens,
             summaryThreshold: this.historyManager.summaryThreshold,
             lastSummaryTurn: this.historyManager.lastSummaryTurn,
-            timesExceededThreshold: this.historyManager.lastSummaryTurn > 0 ? 1 : 0
+            timesExceededThreshold: this.historyManager.lastSummaryTurn > 0 ? 1 : 0,
+            summaryTokensUsed: this.historyManager.summaryTokensUsed // 要約で消費したトークン数
         };
     }
 

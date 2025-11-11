@@ -192,7 +192,13 @@ export class BatchProcessModel {
                 premergeDir,
                 processingTime: Date.now() - startTime,
                 errorMessage: isSuccess ? undefined : llmResult.errorMessage,
-                errorType: isSuccess ? undefined : 'ProcessingFailure'
+                errorType: isSuccess ? undefined : 'ProcessingFailure',
+                metrics: llmResult.usage ? {
+                    promptTokens: llmResult.usage.promptTokens,
+                    completionTokens: llmResult.usage.completionTokens,
+                    totalTokens: llmResult.usage.totalTokens,
+                    summaryTokens: llmResult.usage.summaryTokens
+                } : undefined
             };
 
             this.updateStatistics(isSuccess ? 'success' : 'failure', result.errorType);
@@ -238,9 +244,13 @@ export class BatchProcessModel {
                 timeoutPromise
             ]);
 
+            // トークン使用量を取得
+            const tokenUsage = this.currentController.getTokenUsage();
+
             return {
                 success: true,
-                processingTime: Date.now() - startTime
+                processingTime: Date.now() - startTime,
+                usage: tokenUsage
             };
 
         } catch (error) {

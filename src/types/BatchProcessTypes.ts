@@ -18,6 +18,7 @@ export interface ProcessingResult {
         promptTokens?: number;
         completionTokens?: number;
         totalTokens?: number;
+        summaryTokens?: number; // 要約で消費したトークン数
     };
 }
 
@@ -108,6 +109,7 @@ export interface LLMControllerResult {
         promptTokens: number;
         completionTokens: number;
         totalTokens: number;
+        summaryTokens?: number; // 要約で消費したトークン数
     };
 }
 
