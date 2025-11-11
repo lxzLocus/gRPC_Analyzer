@@ -12,6 +12,7 @@
 import path from 'path';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
+import { DiscordWebhook } from '../src/utils/DiscordWebhook.js';
 
 // ES module環境での __dirname の取得
 const __filename = fileURLToPath(import.meta.url);
@@ -47,6 +48,13 @@ const DEFAULT_CONFIG = {
         enablePreVerification: false    // 引数無しの場合は事前検証を無効化
     }
 };
+
+/**
+ * Discord Webhook設定
+ * 環境変数 DISCORD_WEBHOOK_URL が設定されている場合に有効化
+ */
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || null;
+const DISCORD_PROGRESS_INTERVAL = 2 * 60 * 60 * 1000; // 2時間（ミリ秒）
 
 /**
  * 初期プロンプト+PRタイトル入力
@@ -152,14 +160,64 @@ async function main() {
     console.log(`   Timeout: ${options.timeoutMs / 1000}s`);
     console.log(`   Garbage Collection: ${options.enableGarbageCollection ? 'Enabled' : 'Disabled'}`);
     console.log(`   Pre-Verification: ${options.enablePreVerification ? 'Enabled' : 'Disabled'}`);
+    
+    // Discord Webhook設定の表示
+    if (DISCORD_WEBHOOK_URL) {
+        console.log('\n📢 Discord Webhook:');
+        console.log(`   Status: Enabled`);
+        console.log(`   Progress Interval: ${DISCORD_PROGRESS_INTERVAL / 1000 / 60} minutes`);
+    } else {
+        console.log('\n📢 Discord Webhook: Disabled (DISCORD_WEBHOOK_URL not set)');
+    }
+    
     console.log('========================================\n');
 
     let controller = null;
+    let webhookClient = null;
+    let progressInterval = null;
+
+    // Discord Webhook初期化
+    if (DISCORD_WEBHOOK_URL) {
+        try {
+            webhookClient = new DiscordWebhook(DISCORD_WEBHOOK_URL);
+            console.log('✅ Discord Webhook client initialized');
+        } catch (error) {
+            console.warn('⚠️  Discord Webhook initialization failed:', error.message);
+            webhookClient = null;
+        }
+    }
 
     try {
         // 動的インポートでコントローラーを読み込み
         const controllerModule = await import('../src/Controller/Controller.js');
         const { datasetLoop } = controllerModule;
+        
+        // 2時間ごとに進捗を送信する定期処理を開始
+        if (webhookClient) {
+            progressInterval = setInterval(async () => {
+                try {
+                    console.log('\n⏰ Sending periodic progress update to Discord...');
+                    // ProgressTrackerから統計を取得する必要があるため、
+                    // ここでは仮の統計を送信（実際の統計は後で追加）
+                    const currentStats = {
+                        total: 0,
+                        processed: 0,
+                        successful: 0,
+                        failed: 0,
+                        skipped: 0,
+                        startTime: Date.now()
+                    };
+                    
+                    // TODO: 実際のProgressTrackerの統計を取得
+                    // await webhookClient.sendProgress(currentStats, selectedDataset);
+                    console.log('⏰ Progress update scheduled (implementation pending)');
+                } catch (webhookError) {
+                    console.warn('⚠️  Failed to send progress update:', webhookError.message);
+                }
+            }, DISCORD_PROGRESS_INTERVAL);
+            
+            console.log(`⏰ Progress update timer started (every ${DISCORD_PROGRESS_INTERVAL / 1000 / 60} minutes)\n`);
+        }
         
         // 処理の実行（patchEvaluationパターンを踏襲）
         const stats = await datasetLoop(selectedDataset, outputDir, {
@@ -186,6 +244,30 @@ async function main() {
         
         console.log('========================================');
         
+        // Discord通知: 正常終了
+        if (webhookClient) {
+            try {
+                console.log('\n📤 Sending final results to Discord...');
+                const finalStats = {
+                    total: stats.totalPullRequests,
+                    processed: stats.successfulPullRequests + stats.failedPullRequests + stats.skippedPullRequests,
+                    successful: stats.successfulPullRequests,
+                    failed: stats.failedPullRequests,
+                    skipped: stats.skippedPullRequests,
+                    startTime: Date.now() - (stats.totalDuration || 0)
+                };
+                await webhookClient.sendFinalResult(finalStats, selectedDataset, true);
+                console.log('✅ Final results sent to Discord');
+            } catch (webhookError) {
+                console.warn('⚠️  Failed to send final results to Discord:', webhookError.message);
+            }
+        }
+        
+        // 定期送信タイマーをクリア
+        if (progressInterval) {
+            clearInterval(progressInterval);
+        }
+        
         // 正常終了
         process.exit(0);
 
@@ -198,6 +280,22 @@ async function main() {
             console.error(`Stack Trace:\n${error.stack}`);
         }
         console.error('========================================');
+        
+        // Discord通知: エラー発生
+        if (webhookClient) {
+            try {
+                console.log('\n📤 Sending error notification to Discord...');
+                await webhookClient.sendError(error, 'MVC Batch Processing');
+                console.log('✅ Error notification sent to Discord');
+            } catch (webhookError) {
+                console.warn('⚠️  Failed to send error notification to Discord:', webhookError.message);
+            }
+        }
+        
+        // 定期送信タイマーをクリア
+        if (progressInterval) {
+            clearInterval(progressInterval);
+        }
         
         if (controller) {
             try {
