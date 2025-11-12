@@ -48,7 +48,25 @@ export class ProgressTracker {
             summaryTokens: 0 // 要約トークン数を初期化
         };
 
-        this.terminalHeight = process.stdout.rows || 24;
+        // TTY状態の確認
+        const isTTY = process.stdout.isTTY;
+        const terminalRows = process.stdout.rows || 24;
+        const terminalCols = process.stdout.columns || 80;
+        
+        console.log('🖥️  Terminal Status:');
+        console.log(`   TTY: ${isTTY ? 'Yes' : 'No (TUI disabled)'}`);
+        console.log(`   Rows: ${terminalRows}`);
+        console.log(`   Cols: ${terminalCols}`);
+        console.log(`   TERM: ${process.env.TERM || 'not set'}`);
+        
+        this.terminalHeight = terminalRows;
+        
+        // TTYでない場合はTUIを無効化
+        if (!isTTY) {
+            console.log('⚠️  TUI disabled: Not running in a TTY');
+            console.log('💡 To enable TUI, run with: docker exec -it <container> node ...');
+            return; // TUI機能をスキップ
+        }
         
         // ターミナルリサイズイベント
         process.stdout.on('resize', () => {
@@ -100,7 +118,16 @@ export class ProgressTracker {
             console.log('⚠️  ProgressTracker: No tokens provided or zero tokens');
         }
 
-        this.render();
+        // TTYの場合のみTUI更新
+        if (process.stdout.isTTY) {
+            this.render();
+        } else {
+            // 非TTYの場合は進捗をシンプルに表示
+            const percentage = this.stats.total > 0 
+                ? ((this.stats.completed / this.stats.total) * 100).toFixed(1)
+                : '0.0';
+            console.log(`🎯 Progress: ${this.stats.completed}/${this.stats.total} (${percentage}%) | ✅ ${this.stats.success} ❌ ${this.stats.failed} ⏭️  ${this.stats.skipped}`);
+        }
     }
 
     /**
@@ -108,14 +135,20 @@ export class ProgressTracker {
      */
     public log(message: string): void {
         const timestamp = new Date().toLocaleTimeString('ja-JP');
-        this.logBuffer.push(`[${timestamp}] ${message}`);
+        const logLine = `[${timestamp}] ${message}`;
+        this.logBuffer.push(logLine);
         
         // バッファサイズ制限
         if (this.logBuffer.length > this.maxLogLines) {
             this.logBuffer.shift();
         }
         
-        this.render();
+        // TTYの場合のみTUI更新、非TTYの場合は直接出力
+        if (process.stdout.isTTY) {
+            this.render();
+        } else {
+            console.log(logLine);
+        }
     }
 
     /**
