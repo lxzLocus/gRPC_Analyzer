@@ -1,13 +1,20 @@
 /**
  * 対話履歴要約マネージャー
  * 長い対話履歴を動的に要約し、トークン数制限を回避する
+ * 
+ * 4層トリガーシステム:
+ * 1. TOKEN_THRESHOLD: メッセージ追加時のトークン閾値チェック
+ * 2. PRE_SEND_CHECK: LLM送信直前の最終安全チェック
+ * 3. TURN_COMPLETION: ターン完了時の非同期要約
+ * 4. TASK_COMPLETION: タスク完了時のメタ要約
  */
 
 import type { 
     ConversationSummary, 
     ConversationHistoryManager, 
     SummarizeRequest, 
-    SummarizeResponse 
+    SummarizeResponse,
+    SummarizationTriggerType
 } from './types.js';
 import Config from './config.js';
 import OpenAIClient from './openAIClient.js';
@@ -21,6 +28,9 @@ class ConversationSummarizer {
     // 設定
     private readonly DEFAULT_SUMMARY_THRESHOLD = 30000; // デフォルトのトークン閾値
     private readonly TOKEN_ESTIMATION_RATIO = 4; // 1トークン ≈ 4文字の近似
+    private readonly MODEL_HARD_LIMIT = 100000; // モデルの絶対上限（緊急要約トリガー）
+    private readonly MIN_TURN_INTERVAL = 3; // 最小要約間隔（動的調整可能）
+    private readonly TOKEN_GROWTH_THRESHOLD = 1.4; // トークン成長率閾値
 
     constructor(config: Config, openAIClient: OpenAIClient, correctionGoalsCallback: () => string) {
         this.config = config;
@@ -32,7 +42,9 @@ class ConversationSummarizer {
             totalTokens: 0,
             summaryThreshold: this.config.get('llm.summaryThreshold', this.DEFAULT_SUMMARY_THRESHOLD),
             lastSummaryTurn: 0,
-            summaryTokensUsed: 0 // 要約で消費したトークン数を初期化
+            summaryTokensUsed: 0,
+            lastTokenAtSummary: 0,
+            summarizationHistory: []
         };
         
         console.log(`📝 ConversationSummarizer initialized with threshold: ${this.historyManager.summaryThreshold} tokens`);
@@ -40,6 +52,7 @@ class ConversationSummarizer {
 
     /**
      * メッセージを履歴に追加し、必要に応じて要約を実行
+     * トリガー層1: TOKEN_THRESHOLD
      */
     async addMessage(role: string, content: string): Promise<Array<{ role: string, content: string }>> {
         // メッセージを追加
@@ -50,13 +63,80 @@ class ConversationSummarizer {
         
         console.log(`📊 Current conversation: ${this.historyManager.messages.length} messages, ~${this.historyManager.totalTokens} tokens`);
         
-        // 閾値チェック
-        if (this.shouldSummarize()) {
-            console.log(`🔄 Token threshold exceeded, starting dynamic summarization...`);
-            return await this.performDynamicSummarization();
+        // トリガー層1: トークン閾値チェック（動的間隔調整付き）
+        if (this.shouldSummarize('TOKEN_THRESHOLD')) {
+            console.log(`🔄 [Trigger 1] Token threshold exceeded, starting dynamic summarization...`);
+            return await this.performDynamicSummarization('TOKEN_THRESHOLD', 'Token count exceeded threshold');
         }
         
         return this.historyManager.messages;
+    }
+
+    /**
+     * LLM送信直前の最終安全チェック
+     * トリガー層2: PRE_SEND_CHECK
+     */
+    async preSendCheck(): Promise<Array<{ role: string, content: string }>> {
+        // モデルの絶対上限チェック
+        if (this.historyManager.totalTokens > this.MODEL_HARD_LIMIT) {
+            console.log(`⚠️ [Trigger 2] Hard limit reached (${this.historyManager.totalTokens} > ${this.MODEL_HARD_LIMIT}), forcing compression...`);
+            return await this.performDynamicSummarization('PRE_SEND_CHECK', 'Emergency: Model hard limit exceeded');
+        }
+        
+        // 閾値超過しているが前回要約が最近すぎた場合の再チェック
+        if (this.historyManager.totalTokens > this.historyManager.summaryThreshold * 0.9) {
+            const messagesSinceLastSummary = this.historyManager.messages.length - this.historyManager.lastSummaryTurn;
+            if (messagesSinceLastSummary >= 2) { // 最小間隔緩和
+                console.log(`🔍 [Trigger 2] Pre-send safety check triggered (${this.historyManager.totalTokens} tokens, ${messagesSinceLastSummary} messages since last summary)`);
+                return await this.performDynamicSummarization('PRE_SEND_CHECK', 'Pre-send safety check');
+            }
+        }
+        
+        return this.historyManager.messages;
+    }
+
+    /**
+     * ターン完了時の要約チェック
+     * トリガー層3: TURN_COMPLETION
+     */
+    async onTurnComplete(turnNumber: number): Promise<void> {
+        // 一定ターン数ごとの要約チェック
+        if (turnNumber % 5 === 0 && turnNumber > 0) {
+            const messagesSinceLastSummary = this.historyManager.messages.length - this.historyManager.lastSummaryTurn;
+            if (messagesSinceLastSummary >= 5 && this.historyManager.totalTokens > this.historyManager.summaryThreshold * 0.7) {
+                console.log(`🔄 [Trigger 3] Turn completion check (Turn ${turnNumber}, preparing for next phase)`);
+                // 非同期要約（次ターン準備）
+                await this.performDynamicSummarization('TURN_COMPLETION', `Turn ${turnNumber} completed`);
+            }
+        }
+    }
+
+    /**
+     * タスク完了時のメタ要約
+     * トリガー層4: TASK_COMPLETION
+     */
+    async onTaskComplete(taskName: string): Promise<ConversationSummary | null> {
+        if (this.historyManager.messages.length > 0) {
+            console.log(`📋 [Trigger 4] Task completion meta-summary for: ${taskName}`);
+            
+            // メタ要約を生成（次タスクへの引き継ぎ用）
+            const conversationHistory = this.formatConversationForSummary();
+            const summarizePrompt = this.config.readPromptSummarizeFile(conversationHistory);
+            
+            const summaryResponse = await this.generateSummary({
+                fullConversationHistory: summarizePrompt,
+                model: this.config.get('llm.summaryModel', this.config.get('llm.model', 'gpt-4')),
+                temperature: 0.1
+            });
+            
+            if (summaryResponse.success) {
+                // 要約履歴に記録
+                this.recordSummarization('TASK_COMPLETION', `Task completed: ${taskName}`, this.historyManager.totalTokens, this.historyManager.messages.length);
+                return summaryResponse.summary;
+            }
+        }
+        
+        return null;
     }
 
     /**
@@ -64,6 +144,29 @@ class ConversationSummarizer {
      */
     getCurrentMessages(): Array<{ role: string, content: string }> {
         return this.historyManager.messages;
+    }
+
+    /**
+     * 要約履歴を取得
+     */
+    getSummarizationHistory() {
+        return this.historyManager.summarizationHistory;
+    }
+
+    /**
+     * 要約統計を取得
+     */
+    getSummarizationStats() {
+        return {
+            totalSummarizations: this.historyManager.summarizationHistory.length,
+            summaryTokensUsed: this.historyManager.summaryTokensUsed,
+            currentTokens: this.historyManager.totalTokens,
+            lastSummaryTurn: this.historyManager.lastSummaryTurn,
+            triggers: this.historyManager.summarizationHistory.reduce((acc, item) => {
+                acc[item.type] = (acc[item.type] || 0) + 1;
+                return acc;
+            }, {} as Record<SummarizationTriggerType, number>)
+        };
     }
 
     /**
@@ -79,25 +182,69 @@ class ConversationSummarizer {
     }
 
     /**
-     * 要約が必要かどうかを判定
+     * 要約が必要かどうかを判定（動的間隔調整付き）
      */
-    private shouldSummarize(): boolean {
+    private shouldSummarize(triggerType: SummarizationTriggerType): boolean {
         const exceedsThreshold = this.historyManager.totalTokens > this.historyManager.summaryThreshold;
-        const enoughMessagesSinceLastSummary = this.historyManager.messages.length - this.historyManager.lastSummaryTurn >= 5;
+        const messagesSinceLastSummary = this.historyManager.messages.length - this.historyManager.lastSummaryTurn;
+        
+        // トークン成長率を計算
+        let tokenGrowthRate = 1.0;
+        if (this.historyManager.lastTokenAtSummary > 0) {
+            tokenGrowthRate = this.historyManager.totalTokens / this.historyManager.lastTokenAtSummary;
+        }
+        
+        // 動的間隔調整: 成長率が高い場合は早めに要約
+        let minInterval = this.MIN_TURN_INTERVAL;
+        if (tokenGrowthRate > this.TOKEN_GROWTH_THRESHOLD) {
+            minInterval = Math.max(2, this.MIN_TURN_INTERVAL - 1);
+            console.log(`📈 High token growth rate detected: ${tokenGrowthRate.toFixed(2)}x, reducing interval to ${minInterval}`);
+        } else if (tokenGrowthRate < 1.2) {
+            minInterval = this.MIN_TURN_INTERVAL + 2;
+        }
+        
+        const enoughMessagesSinceLastSummary = messagesSinceLastSummary >= minInterval;
         
         return exceedsThreshold && enoughMessagesSinceLastSummary;
     }
 
     /**
+     * 要約履歴を記録
+     */
+    private recordSummarization(
+        type: SummarizationTriggerType,
+        reason: string,
+        tokenCount: number,
+        messageCount: number
+    ): void {
+        this.historyManager.summarizationHistory.push({
+            type,
+            reason,
+            timestamp: new Date().toISOString(),
+            tokenCount,
+            messageCount
+        });
+        
+        console.log(`📊 Summarization recorded: [${type}] ${reason} (${tokenCount} tokens, ${messageCount} messages)`);
+    }
+
+    /**
      * 動的要約の実行
      */
-    private async performDynamicSummarization(): Promise<Array<{ role: string, content: string }>> {
+    private async performDynamicSummarization(
+        triggerType: SummarizationTriggerType,
+        reason: string
+    ): Promise<Array<{ role: string, content: string }>> {
         try {
+            const beforeTokens = this.historyManager.totalTokens;
+            const beforeMessages = this.historyManager.messages.length;
+            
             // 1. 要約用のプロンプトを生成
             const conversationHistory = this.formatConversationForSummary();
             const summarizePrompt = this.config.readPromptSummarizeFile(conversationHistory);
             
             console.log(`📝 Sending ${summarizePrompt.length} characters to summarization...`);
+            console.log(`   Trigger: [${triggerType}] ${reason}`);
             
             // 2. 別のLLMインスタンスで要約を生成
             const summaryResponse = await this.generateSummary({
@@ -122,21 +269,34 @@ class ConversationSummarizer {
                 correctionGoals
             );
             
-            // 5. 新しい短い対話履歴に置き換え
+            // 5. 新しい短い対話履歴に置き換え（ただし、直前に追加された最新メッセージは保持）
             const systemMessage = this.historyManager.messages.find(msg => msg.role === 'system');
+            
+            // 要約が発動する直前に追加された最新のメッセージを保持（通常はファイル内容）
+            // これにより、Turn 2でファイル内容が失われるバグを防ぐ
+            const lastMessage = this.historyManager.messages[this.historyManager.messages.length - 1];
+            
             this.historyManager.messages = [
                 ...(systemMessage ? [systemMessage] : []),
-                { role: 'user', content: resumePrompt }
+                { role: 'user', content: resumePrompt },
+                lastMessage  // 最新メッセージ（ファイル内容など）を保持
             ];
             
             // 6. 統計を更新
+            this.historyManager.lastTokenAtSummary = beforeTokens; // 成長率計算用に保存
             this.historyManager.lastSummaryTurn = this.historyManager.messages.length;
             this.updateTokenCount();
             
+            // 要約履歴を記録
+            this.recordSummarization(triggerType, reason, beforeTokens, beforeMessages);
+            
+            const reductionRate = Math.round((1 - this.historyManager.totalTokens / beforeTokens) * 100);
+            
             console.log(`✅ Dynamic summarization completed:`);
-            console.log(`   Original: ${this.historyManager.totalTokens + conversationHistory.length / this.TOKEN_ESTIMATION_RATIO} tokens`);
-            console.log(`   Compressed: ${this.historyManager.totalTokens} tokens`);
-            console.log(`   Reduction: ${Math.round((1 - this.historyManager.totalTokens / (this.historyManager.totalTokens + conversationHistory.length / this.TOKEN_ESTIMATION_RATIO)) * 100)}%`);
+            console.log(`   Trigger: [${triggerType}] ${reason}`);
+            console.log(`   Original: ${beforeTokens} tokens, ${beforeMessages} messages`);
+            console.log(`   Compressed: ${this.historyManager.totalTokens} tokens, ${this.historyManager.messages.length} messages`);
+            console.log(`   Reduction: ${reductionRate}%`);
             
             return this.historyManager.messages;
             

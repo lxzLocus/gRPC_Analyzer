@@ -28,6 +28,7 @@ export class BatchProcessController {
     private progressTracker: ProgressTracker | null = null;
     private costCalculator: CostCalculator | null = null;
     private isShuttingDown: boolean = false;
+    private finalReportGenerated: boolean = false;
 
     constructor(options: BatchProcessingOptions = {}) {
         this.service = new BatchProcessingService(options);
@@ -263,12 +264,18 @@ export class BatchProcessController {
      * 最終レポート生成
      */
     private async generateFinalReport(): Promise<void> {
+        // 既にレポートが生成されている場合はスキップ
+        if (this.finalReportGenerated) {
+            return;
+        }
+        
         try {
             const statistics = this.service.getProcessingStatistics();
             const errorReport = await this.service.getErrorReports();
 
             await this.view.generateFinalReport(statistics, errorReport);
             
+            this.finalReportGenerated = true;
             console.log('📊 Final report generated successfully');
         } catch (error) {
             console.error('❌ Failed to generate final report:', error);

@@ -243,12 +243,31 @@ export type ConversationSummary = {
     open_correction_goals: string[];
 };
 
+// 要約トリガーの種類
+export type SummarizationTriggerType =
+    | 'TOKEN_THRESHOLD'      // トークン閾値超過
+    | 'PRE_SEND_CHECK'       // LLM送信直前チェック
+    | 'TURN_COMPLETION'      // ターン完了時
+    | 'TASK_COMPLETION'      // タスク完了時
+    | 'MANUAL';              // 手動トリガー
+
+// 要約トリガー情報
+export type SummarizationTrigger = {
+    type: SummarizationTriggerType;
+    reason: string;
+    timestamp: string;
+    tokenCount: number;
+    messageCount: number;
+};
+
 export type ConversationHistoryManager = {
     messages: Array<{ role: string, content: string }>;
     totalTokens: number;
     summaryThreshold: number; // トークン数の閾値
     lastSummaryTurn: number;  // 最後に要約した時のターン
     summaryTokensUsed: number; // 要約処理で消費した総トークン数
+    lastTokenAtSummary: number; // 前回要約時のトークン数（成長率計算用）
+    summarizationHistory: SummarizationTrigger[]; // 要約履歴
 };
 
 export type SummarizeRequest = {

@@ -12,7 +12,7 @@
     "temperature": 0.1,
     "timeout": 600000,
     "retryAttempts": 3,
-    "summaryThreshold": 25000,
+    "summaryThreshold": 240000,
     "summaryModel": "gpt-5",
     "summaryTemperature": 0.1,
     "qualityCheck": {

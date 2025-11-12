@@ -361,6 +361,9 @@ class LLMFlowController {
         this.totalPromptTokens += usage.prompt_tokens;
         this.totalCompletionTokens += usage.completion_tokens;
 
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
+
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
@@ -398,6 +401,10 @@ class LLMFlowController {
             this.correctionGoals // correctionGoals
         );
         this.currentMessages = await this.sendMessageWithSummarizer("user", promptReply);
+        
+        // トリガー層2: LLM送信直前の最終安全チェック
+        this.currentMessages = await this.conversationSummarizer.preSendCheck();
+        
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
 
@@ -406,6 +413,9 @@ class LLMFlowController {
         const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
         this.totalPromptTokens += usage.prompt_tokens;
         this.totalCompletionTokens += usage.completion_tokens;
+
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
 
         // ログ記録
         this.logger.addInteractionLog(
@@ -513,6 +523,13 @@ class LLMFlowController {
         if (parsed.has_fin_tag && hasProcessedFiles && hasGeneratedDiff) {
             // タスク完了(ただし最低限の処理が完了している場合のみ)
             console.log('📋 Task completion confirmed after proper processing flow');
+            
+            // トリガー層4: タスク完了時のメタ要約
+            const taskSummary = await this.conversationSummarizer.onTaskComplete('PR Analysis');
+            if (taskSummary) {
+                console.log('📊 Task completion summary generated for future reference');
+            }
+            
             this.state = State.End;
         } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
             // 追加情報要求
@@ -585,6 +602,9 @@ class LLMFlowController {
         const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
         this.totalPromptTokens += usage.prompt_tokens;
         this.totalCompletionTokens += usage.completion_tokens;
+
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
 
         // ログ記録
         this.logger.addInteractionLog(
@@ -1021,6 +1041,9 @@ class LLMFlowController {
         this.totalPromptTokens += usage.prompt_tokens;
         this.totalCompletionTokens += usage.completion_tokens;
 
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
+
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
@@ -1054,6 +1077,9 @@ class LLMFlowController {
         const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
         this.totalPromptTokens += usage.prompt_tokens;
         this.totalCompletionTokens += usage.completion_tokens;
+
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
 
         // ログ記録
         this.logger.addInteractionLog(
@@ -2608,6 +2634,9 @@ class LLMFlowController {
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
                 console.log(`🚀 LLM Request (attempt ${attempt + 1}/3) for ${context}`);
+                
+                // トリガー層2: LLM送信直前の最終安全チェック
+                this.currentMessages = await this.conversationSummarizer.preSendCheck();
                 
                 // プロンプトの強化（リトライ時）
                 if (attempt > 0 && bestMetrics) {

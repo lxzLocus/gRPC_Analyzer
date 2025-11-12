@@ -25,6 +25,10 @@ export class BatchProcessingService {
     private statistics: ProcessingStatistics;
     private errorReports: ErrorReport[] = []; // エラーレポート配列を追加
     private options: BatchProcessingOptions;
+    
+    // カテゴリとPRの重複カウントを防ぐためのSet
+    private countedCategories: Set<string> = new Set();
+    private countedPullRequests: Set<string> = new Set();
 
     constructor(options: BatchProcessingOptions = {}) {
         this.options = {
@@ -100,7 +104,15 @@ export class BatchProcessingService {
             const filtered = categories.filter(
                 cat => cat === this.options.targetPullRequest!.category
             );
-            this.statistics.totalCategories += filtered.length;
+            
+            // 重複カウントを防ぐ: まだカウントしていないカテゴリのみ
+            for (const cat of filtered) {
+                const key = `${repositoryName}/${cat}`;
+                if (!this.countedCategories.has(key)) {
+                    this.countedCategories.add(key);
+                    this.statistics.totalCategories++;
+                }
+            }
             
             if (filtered.length === 0) {
                 console.warn(`⚠️  Target category not found: ${this.options.targetPullRequest.category}`);
@@ -111,7 +123,15 @@ export class BatchProcessingService {
             return filtered;
         }
         
-        this.statistics.totalCategories += categories.length;
+        // 通常モードでも重複カウントを防ぐ
+        for (const cat of categories) {
+            const key = `${repositoryName}/${cat}`;
+            if (!this.countedCategories.has(key)) {
+                this.countedCategories.add(key);
+                this.statistics.totalCategories++;
+            }
+        }
+        
         return categories;
     }
 
@@ -136,7 +156,15 @@ export class BatchProcessingService {
             const filtered = pullRequests.filter(
                 pr => pr === this.options.targetPullRequest!.pullRequestTitle
             );
-            this.statistics.totalPullRequests += filtered.length;
+            
+            // 重複カウントを防ぐ: まだカウントしていないPRのみ
+            for (const pr of filtered) {
+                const key = `${repositoryName}/${category}/${pr}`;
+                if (!this.countedPullRequests.has(key)) {
+                    this.countedPullRequests.add(key);
+                    this.statistics.totalPullRequests++;
+                }
+            }
             
             if (filtered.length === 0) {
                 console.warn(`⚠️  Target pull request not found: ${this.options.targetPullRequest.pullRequestTitle}`);
@@ -147,7 +175,15 @@ export class BatchProcessingService {
             return filtered;
         }
         
-        this.statistics.totalPullRequests += pullRequests.length;
+        // 通常モードでも重複カウントを防ぐ
+        for (const pr of pullRequests) {
+            const key = `${repositoryName}/${category}/${pr}`;
+            if (!this.countedPullRequests.has(key)) {
+                this.countedPullRequests.add(key);
+                this.statistics.totalPullRequests++;
+            }
+        }
+        
         return pullRequests;
     }
 
