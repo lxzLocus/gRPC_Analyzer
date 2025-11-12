@@ -7,7 +7,7 @@
 import { BatchProcessingService } from '../Service/BatchProcessingService.js';
 import { BatchProcessView } from '../views/BatchProcessView.js';
 import { MemoryManagementService } from '../Service/MemoryManagementService.js';
-import ProgressTracker from '../modules/progressTracker.js';
+import { ProgressTracker } from '../modules/progressTracker.js';
 import CostCalculator from '../utils/CostCalculator.js';
 import Config from '../modules/config.js';
 import { 
@@ -29,8 +29,10 @@ export class BatchProcessController {
     private costCalculator: CostCalculator | null = null;
     private isShuttingDown: boolean = false;
     private finalReportGenerated: boolean = false;
+    private options: BatchProcessingOptions;
 
     constructor(options: BatchProcessingOptions = {}) {
+        this.options = options;
         this.service = new BatchProcessingService(options);
         this.view = new BatchProcessView();
         this.memoryService = new MemoryManagementService(options);
@@ -60,9 +62,9 @@ export class BatchProcessController {
             // 全PRの数を事前にカウント
             const totalPRs = await this.countTotalPullRequests(datasetDir, repositories);
             
-            // プログレストラッカーを初期化
+            // プログレストラッカーを初期化（forceTUIオプションを渡す）
             if (totalPRs > 0) {
-                this.progressTracker = new ProgressTracker(totalPRs);
+                this.progressTracker = new ProgressTracker(totalPRs, this.options.forceTUI || false);
                 console.log(`\n📊 Total Pull Requests to process: ${totalPRs}\n`);
             }
 

@@ -30,11 +30,12 @@ export class ProgressTracker {
     private terminalHeight: number;
     private logBuffer: string[] = [];
     private maxLogLines = 100;
+    private isTTY: boolean;  // TUI有効フラグ
     
     // トークン統計用のデータ
     private tokenHistory: number[] = []; // 各PRのトークン消費量を記録
 
-    constructor(total: number) {
+    constructor(total: number, forceTUI: boolean = false) {
         this.stats = {
             total,
             completed: 0,
@@ -48,31 +49,42 @@ export class ProgressTracker {
             summaryTokens: 0 // 要約トークン数を初期化
         };
 
-        // TTY状態の確認
-        const isTTY = process.stdout.isTTY;
+        // TTY状態の確認（forceTUIが指定されている場合は強制有効化）
+        const isTTY = forceTUI || process.stdout.isTTY || false;
         const terminalRows = process.stdout.rows || 24;
         const terminalCols = process.stdout.columns || 80;
         
         console.log('🖥️  Terminal Status:');
-        console.log(`   TTY: ${isTTY ? 'Yes' : 'No (TUI disabled)'}`);
+        if (forceTUI && !process.stdout.isTTY) {
+            console.log(`   TTY: No (but TUI FORCED enabled)`);
+        } else {
+            console.log(`   TTY: ${isTTY ? 'Yes' : 'No (TUI disabled)'}`);
+        }
         console.log(`   Rows: ${terminalRows}`);
         console.log(`   Cols: ${terminalCols}`);
         console.log(`   TERM: ${process.env.TERM || 'not set'}`);
         
         this.terminalHeight = terminalRows;
+        this.isTTY = isTTY;
         
-        // TTYでない場合はTUIを無効化
+        // TTYでない場合はTUIを無効化（ただしforceTUIの場合は続行）
         if (!isTTY) {
-            console.log('⚠️  TUI disabled: Not running in a TTY');
-            console.log('💡 To enable TUI, run with: docker exec -it <container> node ...');
-            return; // TUI機能をスキップ
+            if (!forceTUI) {
+                console.log('⚠️  TUI disabled: Not running in a TTY');
+                console.log('💡 To enable TUI, run with: docker exec -it <container> node ...');
+                return; // TUI機能をスキップ
+            } else {
+                console.log('⚠️  Not running in a TTY, but TUI FORCED - attempting to render anyway');
+            }
         }
         
         // ターミナルリサイズイベント
-        process.stdout.on('resize', () => {
-            this.terminalHeight = process.stdout.rows || 24;
-            this.render();
-        });
+        if (process.stdout.on) {
+            process.stdout.on('resize', () => {
+                this.terminalHeight = process.stdout.rows || 24;
+                this.render();
+            });
+        }
 
         // 初期レンダリング
         this.clearScreen();
@@ -119,7 +131,7 @@ export class ProgressTracker {
         }
 
         // TTYの場合のみTUI更新
-        if (process.stdout.isTTY) {
+        if (this.isTTY) {
             this.render();
         } else {
             // 非TTYの場合は進捗をシンプルに表示
@@ -142,11 +154,12 @@ export class ProgressTracker {
         if (this.logBuffer.length > this.maxLogLines) {
             this.logBuffer.shift();
         }
-        
-        // TTYの場合のみTUI更新、非TTYの場合は直接出力
-        if (process.stdout.isTTY) {
+
+        // TTYの場合のみTUI更新
+        if (this.isTTY) {
             this.render();
         } else {
+            // 非TTYの場合は直接コンソール出力
             console.log(logLine);
         }
     }

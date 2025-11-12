@@ -55,6 +55,7 @@ export interface BatchProcessingOptions {
     timeoutMs?: number;
     enableGarbageCollection?: boolean;
     enablePreVerification?: boolean;
+    forceTUI?: boolean;  // TUIを強制的に有効化（TTY検出を無視）
     // 単一PR実行用のフィルター（指定時は該当PRのみ処理）
     targetPullRequest?: {
         repositoryName: string;

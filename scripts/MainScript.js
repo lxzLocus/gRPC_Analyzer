@@ -113,9 +113,10 @@ async function main() {
         }
     }
     
-    // 引数無しの場合の特別処理
-    if (args.length === 0) {
-        console.log('🔧 No arguments provided - using defaults with pre-verification disabled');
+    // 引数無しの場合の特別処理（TUIを強制有効化）
+    const forceTUI = args.length === 0;
+    if (forceTUI) {
+        console.log('🔧 No arguments provided - using defaults with TUI enabled and pre-verification disabled');
         enablePreVerification = false;
     }
     
@@ -155,7 +156,8 @@ async function main() {
     const options = {
         ...DEFAULT_CONFIG.processingOptions,
         baseOutputDir: outputDir,
-        enablePreVerification: enablePreVerification
+        enablePreVerification: enablePreVerification,
+        forceTUI: forceTUI  // 引数なしの場合はTUIを強制有効化
     };
     
     console.log('\n⚙️ Processing Options:');
@@ -164,6 +166,7 @@ async function main() {
     console.log(`   Timeout: ${options.timeoutMs / 1000}s`);
     console.log(`   Garbage Collection: ${options.enableGarbageCollection ? 'Enabled' : 'Disabled'}`);
     console.log(`   Pre-Verification: ${options.enablePreVerification ? 'Enabled' : 'Disabled'}`);
+    console.log(`   Force TUI: ${options.forceTUI ? 'Enabled' : 'Disabled'}`);
     
     // Discord Webhook設定の表示
     if (DISCORD_WEBHOOK_URL) {

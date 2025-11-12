@@ -23,7 +23,7 @@ export class ProgressTracker {
     private updateIntervalMs: number = 1000; // 1秒ごとに更新
     private isTTY: boolean;
 
-    constructor(total: number) {
+    constructor(total: number, forceTUI: boolean = false) {
         this.stats = {
             total,
             processed: 0,
@@ -32,7 +32,8 @@ export class ProgressTracker {
             skipped: 0,
             startTime: Date.now()
         };
-        this.isTTY = process.stdout.isTTY || false;
+        // forceTUIが指定されている場合、またはTTYの場合にTUIを有効化
+        this.isTTY = forceTUI || process.stdout.isTTY || false;
     }
 
     /**
