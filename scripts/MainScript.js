@@ -13,6 +13,7 @@ import path from 'path';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { DiscordWebhook } from '../src/utils/DiscordWebhook.js';
+import Config from '../src/modules/config.js';
 
 // ES module環境での __dirname の取得
 const __filename = fileURLToPath(import.meta.url);
@@ -139,14 +140,17 @@ async function main() {
     console.log(`📝 Node.js Version: ${process.version}`);
     console.log(`🗑️ Garbage Collection: ${global.gc ? 'Available' : 'Not Available (use --expose-gc)'}`);
     
-    // LLM設定情報の表示
+    // LLM設定情報の表示（設定ファイルから取得）
+    const configInstance = new Config();
+    const provider = configInstance.get('llm.provider', process.env.LLM_PROVIDER || 'openai');
+    
     console.log('\n🤖 LLM Configuration:');
-    console.log(`   Provider: ${process.env.LLM_PROVIDER || 'openai'}`);
+    console.log(`   Provider: ${provider}`);
     console.log(`   Model: ${getLLMModel()}`);
     console.log(`   Temperature: ${getLLMTemperature()}`);
     console.log(`   Max Tokens: ${getLLMMaxTokens()}`);
     console.log(`   API Key Length: ${getLLMApiKeyLength()}`);
-    
+    console.log(`   Summary Threshold: ${configInstance.get('llm.summaryThreshold', 30000)} tokens`);
     // 処理オプションの表示
     const options = {
         ...DEFAULT_CONFIG.processingOptions,
@@ -329,47 +333,59 @@ function formatDuration(milliseconds) {
 }
 
 /**
- * LLMモデル名を取得
+ * LLMモデル名を取得（設定ファイルから）
  */
 function getLLMModel() {
-    const provider = process.env.LLM_PROVIDER || 'openai';
-    
-    if (provider === 'openai') {
-        return process.env.OPENAI_MODEL || 'gpt-4';
-    } else if (provider === 'gemini') {
-        return process.env.GEMINI_MODEL || 'gemini-1.5-pro';
-    } else {
+    try {
+        const configInstance = new Config();
+        const provider = configInstance.get('llm.provider', process.env.LLM_PROVIDER || 'openai');
+        
+        if (provider === 'openai') {
+            return configInstance.get('llm.model', process.env.OPENAI_MODEL || 'gpt-4');
+        } else if (provider === 'gemini') {
+            return configInstance.get('llm.model', process.env.GEMINI_MODEL || 'gemini-1.5-pro');
+        } else {
+            return configInstance.get('llm.model', 'unknown');
+        }
+    } catch (error) {
+        // フォールバック: 環境変数から取得
+        const provider = process.env.LLM_PROVIDER || 'openai';
+        if (provider === 'openai') {
+            return process.env.OPENAI_MODEL || 'gpt-4';
+        } else if (provider === 'gemini') {
+            return process.env.GEMINI_MODEL || 'gemini-1.5-pro';
+        }
         return 'unknown';
     }
 }
 
 /**
- * LLM温度設定を取得
+ * LLM温度設定を取得（設定ファイルから）
  */
 function getLLMTemperature() {
-    const provider = process.env.LLM_PROVIDER || 'openai';
-    
-    if (provider === 'openai') {
-        return process.env.OPENAI_TEMPERATURE || '0.7';
-    } else if (provider === 'gemini') {
-        return process.env.GEMINI_TEMPERATURE || '0.7';
-    } else {
-        return 'unknown';
+    try {
+        const configInstance = new Config();
+        return configInstance.get('llm.temperature', parseFloat(process.env.LLM_TEMPERATURE) || 0.7);
+    } catch (error) {
+        return parseFloat(process.env.LLM_TEMPERATURE) || 0.7;
     }
 }
 
 /**
- * LLM最大トークン数を取得
+ * LLM最大トークン数を取得（設定ファイルから）
  */
 function getLLMMaxTokens() {
-    const provider = process.env.LLM_PROVIDER || 'openai';
-    
-    if (provider === 'openai') {
-        return process.env.OPENAI_MAX_TOKENS || '4000';
-    } else if (provider === 'gemini') {
-        return process.env.GEMINI_MAX_TOKENS || '4000';
-    } else {
-        return 'unknown';
+    try {
+        const configInstance = new Config();
+        return configInstance.get('llm.maxTokens', parseInt(process.env.LLM_MAX_TOKENS) || 4000);
+    } catch (error) {
+        const provider = process.env.LLM_PROVIDER || 'openai';
+        if (provider === 'openai') {
+            return parseInt(process.env.OPENAI_MAX_TOKENS) || 4000;
+        } else if (provider === 'gemini') {
+            return parseInt(process.env.GEMINI_MAX_TOKENS) || 4000;
+        }
+        return 4000;
     }
 }
 
