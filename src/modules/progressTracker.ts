@@ -56,9 +56,9 @@ export class ProgressTracker {
         
         console.log('🖥️  Terminal Status:');
         if (forceTUI && !process.stdout.isTTY) {
-            console.log(`   TTY: No (but TUI FORCED enabled)`);
+            console.log(`   TTY: No (Enhanced progress display enabled)`);
         } else {
-            console.log(`   TTY: ${isTTY ? 'Yes' : 'No (TUI disabled)'}`);
+            console.log(`   TTY: ${isTTY ? 'Yes (Full TUI enabled)' : 'No (Basic progress display)'}`);
         }
         console.log(`   Rows: ${terminalRows}`);
         console.log(`   Cols: ${terminalCols}`);
@@ -70,11 +70,12 @@ export class ProgressTracker {
         // TTYでない場合はTUIを無効化（ただしforceTUIの場合は続行）
         if (!isTTY) {
             if (!forceTUI) {
-                console.log('⚠️  TUI disabled: Not running in a TTY');
-                console.log('💡 To enable TUI, run with: docker exec -it <container> node ...');
+                console.log('⚠️  Progress display: Basic mode (no TUI)');
+                console.log('💡 To enable full TUI, run with: docker exec -it <container> node ...');
                 return; // TUI機能をスキップ
             } else {
-                console.log('⚠️  Not running in a TTY, but TUI FORCED - attempting to render anyway');
+                console.log('✅ Progress display: Enhanced mode (TUI rendering attempted)');
+                console.log('💡 Note: Full TUI requires interactive terminal (docker exec -it)');
             }
         }
         

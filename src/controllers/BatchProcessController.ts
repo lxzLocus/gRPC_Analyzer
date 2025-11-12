@@ -62,14 +62,18 @@ export class BatchProcessController {
             // 全PRの数を事前にカウント
             const totalPRs = await this.countTotalPullRequests(datasetDir, repositories);
             
-            // プログレストラッカーを初期化（forceTUIオプションを渡す）
+            // 総PR数を表示（ProgressTracker初期化前）
             if (totalPRs > 0) {
-                this.progressTracker = new ProgressTracker(totalPRs, this.options.forceTUI || false);
                 console.log(`\n📊 Total Pull Requests to process: ${totalPRs}\n`);
             }
 
-            // コスト計算機を初期化
+            // コスト計算機を初期化（ProgressTracker初期化前）
             this.initializeCostCalculator();
+
+            // プログレストラッカーを初期化（全てのログ出力後に実行）
+            if (totalPRs > 0) {
+                this.progressTracker = new ProgressTracker(totalPRs, this.options.forceTUI || false);
+            }
 
             // 各リポジトリの処理
             for (const repositoryName of repositories) {
@@ -132,7 +136,12 @@ export class BatchProcessController {
      */
     private async processRepository(datasetDir: string, repositoryName: string): Promise<void> {
         try {
-            this.view.displayRepositoryProcessingStart(repositoryName);
+            // ProgressTrackerを使ってログ出力
+            if (this.progressTracker) {
+                this.progressTracker.log(`🔄 Processing repository: ${repositoryName}`);
+            } else {
+                this.view.displayRepositoryProcessingStart(repositoryName);
+            }
 
             // カテゴリ一覧取得
             const categories = await this.service.getCategories(datasetDir, repositoryName);
@@ -143,7 +152,12 @@ export class BatchProcessController {
                 await this.processCategory(datasetDir, repositoryName, category);
             }
 
-            this.view.displayRepositoryProcessingComplete(repositoryName);
+            // 完了メッセージもProgressTracker経由
+            if (this.progressTracker) {
+                this.progressTracker.log(`✅ Completed repository: ${repositoryName}`);
+            } else {
+                this.view.displayRepositoryProcessingComplete(repositoryName);
+            }
 
         } catch (error) {
             console.error(`❌ Error processing repository ${repositoryName}:`, error);
@@ -160,7 +174,12 @@ export class BatchProcessController {
         category: string
     ): Promise<void> {
         try {
-            this.view.displayCategoryProcessingStart(repositoryName, category);
+            // ProgressTrackerを使ってログ出力
+            if (this.progressTracker) {
+                this.progressTracker.log(`  📁 Category ${repositoryName}/${category}`);
+            } else {
+                this.view.displayCategoryProcessingStart(repositoryName, category);
+            }
 
             // プルリクエスト一覧取得
             const pullRequests = await this.service.getPullRequests(
@@ -183,7 +202,10 @@ export class BatchProcessController {
                 await this.performMemoryManagement();
             }
 
-            this.view.displayCategoryProcessingComplete(repositoryName, category);
+            // カテゴリ完了メッセージ（ProgressTracker使用時は省略）
+            if (!this.progressTracker) {
+                this.view.displayCategoryProcessingComplete(repositoryName, category);
+            }
 
         } catch (error) {
             console.error(`❌ Error processing category ${category}:`, error);
@@ -201,7 +223,12 @@ export class BatchProcessController {
         pullRequestTitle: string
     ): Promise<void> {
         try {
-            this.view.displayPullRequestProcessingStart(repositoryName, category, pullRequestTitle);
+            // ProgressTrackerを使ってログ出力
+            if (this.progressTracker) {
+                this.progressTracker.log(`    🔄 Processing: ${repositoryName}/${category}/${pullRequestTitle.substring(0, 60)}...`);
+            } else {
+                this.view.displayPullRequestProcessingStart(repositoryName, category, pullRequestTitle);
+            }
 
             // プルリクエスト処理実行
             const result = await this.service.processPullRequest(

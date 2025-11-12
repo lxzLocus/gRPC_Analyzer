@@ -113,10 +113,10 @@ async function main() {
         }
     }
     
-    // 引数無しの場合の特別処理（TUIを強制有効化）
+    // 引数無しの場合の特別処理（進捗表示を拡張）
     const forceTUI = args.length === 0;
     if (forceTUI) {
-        console.log('🔧 No arguments provided - using defaults with TUI enabled and pre-verification disabled');
+        console.log('🔧 No arguments provided - using defaults with enhanced progress display');
         enablePreVerification = false;
     }
     
@@ -166,7 +166,7 @@ async function main() {
     console.log(`   Timeout: ${options.timeoutMs / 1000}s`);
     console.log(`   Garbage Collection: ${options.enableGarbageCollection ? 'Enabled' : 'Disabled'}`);
     console.log(`   Pre-Verification: ${options.enablePreVerification ? 'Enabled' : 'Disabled'}`);
-    console.log(`   Force TUI: ${options.forceTUI ? 'Enabled' : 'Disabled'}`);
+    console.log(`   Progress Display: ${options.forceTUI ? 'Enhanced (with stats)' : 'Standard'}`);
     
     // Discord Webhook設定の表示
     if (DISCORD_WEBHOOK_URL) {
