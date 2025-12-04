@@ -56,11 +56,27 @@ export interface BatchProcessingOptions {
     enableGarbageCollection?: boolean;
     enablePreVerification?: boolean;
     forceTUI?: boolean;  // TUIを強制的に有効化（TTY検出を無視）
+    quietMode?: boolean;  // 詳細なログを抑制（TUI使用時）
     // 単一PR実行用のフィルター（指定時は該当PRのみ処理）
     targetPullRequest?: {
         repositoryName: string;
         category: string;
         pullRequestTitle: string;
+    };
+    // レジューム機能: 指定したPRから処理を再開
+    resumeFrom?: {
+        repositoryName: string;
+        category: string;
+        pullRequestTitle: string;
+    };
+    // 未処理PRのみ処理: 指定したPRリストのみ処理
+    unprocessedOnly?: {
+        enabled: boolean;
+        list: Array<{
+            repositoryName: string;
+            category: string;
+            pullRequestTitle: string;
+        }>;
     };
 }
 

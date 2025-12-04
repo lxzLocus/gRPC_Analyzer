@@ -31,11 +31,24 @@ export class ProgressTracker {
     private logBuffer: string[] = [];
     private maxLogLines = 100;
     private isTTY: boolean;  // TUI有効フラグ
+    private quietMode: boolean;  // 詳細ログ抑制フラグ
     
     // トークン統計用のデータ
     private tokenHistory: number[] = []; // 各PRのトークン消費量を記録
 
-    constructor(total: number, forceTUI: boolean = false) {
+    constructor(total: number, forceTUI: boolean = false, quietMode: boolean = false) {
+        this.quietMode = quietMode;  // 初期化
+        
+        // TTY状態の確認（forceTUIが指定されている場合は強制有効化）
+        const isTTY = forceTUI || process.stdout.isTTY || false;
+        this.isTTY = isTTY;
+        
+        // quietMode時は画面クリアをスキップ（MainScriptで既にクリア済み）
+        // TUIを使用する場合でquietModeでない場合のみ画面をクリア
+        if ((isTTY || forceTUI) && !quietMode) {
+            this.clearScreen();
+        }
+        
         this.stats = {
             total,
             completed: 0,
@@ -49,11 +62,10 @@ export class ProgressTracker {
             summaryTokens: 0 // 要約トークン数を初期化
         };
 
-        // TTY状態の確認（forceTUIが指定されている場合は強制有効化）
-        const isTTY = forceTUI || process.stdout.isTTY || false;
         const terminalRows = process.stdout.rows || 24;
         const terminalCols = process.stdout.columns || 80;
         
+        // quietModeでも初期化情報は表示
         console.log('🖥️  Terminal Status:');
         if (forceTUI && !process.stdout.isTTY) {
             console.log(`   TTY: No (Enhanced progress display enabled)`);
@@ -65,17 +77,20 @@ export class ProgressTracker {
         console.log(`   TERM: ${process.env.TERM || 'not set'}`);
         
         this.terminalHeight = terminalRows;
-        this.isTTY = isTTY;
         
         // TTYでない場合はTUIを無効化（ただしforceTUIの場合は続行）
         if (!isTTY) {
             if (!forceTUI) {
-                console.log('⚠️  Progress display: Basic mode (no TUI)');
-                console.log('💡 To enable full TUI, run with: docker exec -it <container> node ...');
+                if (!quietMode) {
+                    console.log('⚠️  Progress display: Basic mode (no TUI)');
+                    console.log('💡 To enable full TUI, run with: docker exec -it <container> node ...');
+                }
                 return; // TUI機能をスキップ
             } else {
-                console.log('✅ Progress display: Enhanced mode (TUI rendering attempted)');
-                console.log('💡 Note: Full TUI requires interactive terminal (docker exec -it)');
+                if (!quietMode) {
+                    console.log('✅ Progress display: Enhanced mode (TUI rendering attempted)');
+                    console.log('💡 Note: Full TUI requires interactive terminal (docker exec -it)');
+                }
             }
         }
         
@@ -87,8 +102,7 @@ export class ProgressTracker {
             });
         }
 
-        // 初期レンダリング
-        this.clearScreen();
+        // 初期レンダリング（既に画面クリア済み）
         this.render();
     }
 
@@ -109,12 +123,14 @@ export class ProgressTracker {
 
         // トークン数を追加（実際にリクエストが通った場合のみ）
         if (tokens && tokens.totalTokens && tokens.totalTokens > 0) {
-            console.log('🔍 ProgressTracker Token Debug:');
-            console.log(`   Received tokens:`, tokens);
-            console.log(`   promptTokens: ${tokens.promptTokens}`);
-            console.log(`   completionTokens: ${tokens.completionTokens}`);
-            console.log(`   totalTokens: ${tokens.totalTokens}`);
-            console.log(`   summaryTokens: ${tokens.summaryTokens || 0}`);
+            if (!this.quietMode) {
+                console.log('🔍 ProgressTracker Token Debug:');
+                console.log(`   Received tokens:`, tokens);
+                console.log(`   promptTokens: ${tokens.promptTokens}`);
+                console.log(`   completionTokens: ${tokens.completionTokens}`);
+                console.log(`   totalTokens: ${tokens.totalTokens}`);
+                console.log(`   summaryTokens: ${tokens.summaryTokens || 0}`);
+            }
             
             this.stats.promptTokens += tokens.promptTokens || 0;
             this.stats.completionTokens += tokens.completionTokens || 0;
@@ -124,22 +140,54 @@ export class ProgressTracker {
             // トークン履歴に記録（統計計算用）
             this.tokenHistory.push(tokens.totalTokens);
             
-            console.log(`   Total accumulated: ${this.stats.totalTokens}`);
-            console.log(`   Summary accumulated: ${this.stats.summaryTokens}`);
-            console.log(`   Request count with tokens: ${this.tokenHistory.length}`);
+            if (!this.quietMode) {
+                console.log(`   Total accumulated: ${this.stats.totalTokens}`);
+                console.log(`   Summary accumulated: ${this.stats.summaryTokens}`);
+                console.log(`   Request count with tokens: ${this.tokenHistory.length}`);
+            }
         } else {
-            console.log('⚠️  ProgressTracker: No tokens provided or zero tokens');
+            if (!this.quietMode) {
+                console.log('⚠️  ProgressTracker: No tokens provided or zero tokens');
+            }
         }
 
         // TTYの場合のみTUI更新
         if (this.isTTY) {
             this.render();
         } else {
-            // 非TTYの場合は進捗をシンプルに表示
+            // 非TTYの場合でも詳細な進捗情報を表示
             const percentage = this.stats.total > 0 
                 ? ((this.stats.completed / this.stats.total) * 100).toFixed(1)
                 : '0.0';
-            console.log(`🎯 Progress: ${this.stats.completed}/${this.stats.total} (${percentage}%) | ✅ ${this.stats.success} ❌ ${this.stats.failed} ⏭️  ${this.stats.skipped}`);
+            const elapsed = this.getElapsed();
+            const tokenStats = this.calculateTokenStats();
+            
+            // 進捗情報
+            console.log(
+                `🎯 Progress: ${this.stats.completed}/${this.stats.total} (${percentage}%) | ` +
+                `⏱️  ${elapsed} | ` +
+                `✅ ${this.stats.success} ❌ ${this.stats.failed} ⏭️  ${this.stats.skipped}`
+            );
+            
+            // トークン情報
+            if (this.stats.totalTokens > 0) {
+                console.log(
+                    `🎫 Tokens: ${this.formatTokens(this.stats.totalTokens)} ` +
+                    `(Prompt: ${this.formatTokens(this.stats.promptTokens)}, ` +
+                    `Completion: ${this.formatTokens(this.stats.completionTokens)})`
+                );
+            }
+            
+            // トークン統計（データがあれば）
+            if (tokenStats && tokenStats.count > 0) {
+                const estimated = this.getEstimatedRemainingTokens();
+                console.log(
+                    `📊 Avg: ${this.formatTokens(tokenStats.average)}/request | ` +
+                    `Min: ${this.formatTokens(tokenStats.min)} | ` +
+                    `Max: ${this.formatTokens(tokenStats.max)} | ` +
+                    `Est. Remaining: ${estimated ? this.formatTokens(estimated) : 'N/A'}`
+                );
+            }
         }
     }
 
@@ -248,8 +296,12 @@ export class ProgressTracker {
      * 画面をクリア
      */
     private clearScreen(): void {
+        // ANSI エスケープシーケンスで画面全体をクリア
+        process.stdout.write('\x1bc');  // 完全リセット
         process.stdout.write('\x1b[2J'); // 画面クリア
+        process.stdout.write('\x1b[3J'); // スクロールバックもクリア
         process.stdout.write('\x1b[H');  // カーソルをホームに移動
+        process.stdout.write('\x1b[0m'); // スタイルリセット
     }
 
     /**

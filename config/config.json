@@ -4,7 +4,7 @@
     "environment": "production"
   },
   "llm": {
-    "provider": "openai"
+    "provider": "openaiso"
   },
   "fileOperations": {
     "encoding": "utf-8",

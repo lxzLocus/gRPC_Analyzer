@@ -49,6 +49,7 @@ const PROCESSING_OPTIONS = {
     timeoutMs: 15 * 60 * 1000,      // 15分
     enableGarbageCollection: true,
     enablePreVerification: false,
+    forceTUI: true,  // TUI進捗表示を強制有効化
     
     // 単一PR実行モード用のフィルター
     targetPullRequest: {

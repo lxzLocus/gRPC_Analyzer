@@ -111,21 +111,26 @@ class LLMFlowController {
             exponentialBackoff: true
         }, this.config);  // Configを渡す
         
-        // 🔧 パス構築デバッグ - コンストラクタレベルでのパス情報を記録
-        console.log('🔧 LLMFlowController コンストラクタでのパス情報:');
-        console.log(`   受け取った pullRequestPath: ${pullRequestPath}`);
-        console.log(`   設定された inputPremergeDir: ${this.inputPremergeDir}`);
+        // デバッグログは環境変数で制御
+        const debugMode = process.env.DEBUG_MODE === 'true' || process.env.DEBUG_MODE === '1';
         
-        // デバッグ情報：環境変数の確認
-        console.log(`🔧 LLMFlowController initialized with path: ${pullRequestPath}`);
-        console.log(`📋 Pre-verification: ${this.enablePreVerification ? 'Enabled' : 'Disabled'}`);
-        console.log(`� [NEW VERSION 2025-07-31] LLMFlowController loaded`);
-        console.log(`�🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
-        console.log(`🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
-        console.log(`🔑 GEMINI_API_KEY length: ${(process.env.GEMINI_API_KEY || '').length}`);
-        console.log(`🤖 LLM_PROVIDER: ${process.env.LLM_PROVIDER || 'undefined'}`);
-        console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
-        console.log(`🐛 DEBUG_MODE: ${process.env.DEBUG_MODE || 'undefined'}`);
+        if (debugMode) {
+            // 🔧 パス構築デバッグ - コンストラクタレベルでのパス情報を記録
+            console.log('🔧 LLMFlowController コンストラクタでのパス情報:');
+            console.log(`   受け取った pullRequestPath: ${pullRequestPath}`);
+            console.log(`   設定された inputPremergeDir: ${this.inputPremergeDir}`);
+            
+            // デバッグ情報：環境変数の確認
+            console.log(`🔧 LLMFlowController initialized with path: ${pullRequestPath}`);
+            console.log(`📋 Pre-verification: ${this.enablePreVerification ? 'Enabled' : 'Disabled'}`);
+            console.log(`� [NEW VERSION 2025-07-31] LLMFlowController loaded`);
+            console.log(`�🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
+            console.log(`🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
+            console.log(`🔑 GEMINI_API_KEY length: ${(process.env.GEMINI_API_KEY || '').length}`);
+            console.log(`🤖 LLM_PROVIDER: ${process.env.LLM_PROVIDER || 'undefined'}`);
+            console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
+            console.log(`🐛 DEBUG_MODE: ${process.env.DEBUG_MODE || 'undefined'}`);
+        }
     }
 
     // 型変換ヘルパー

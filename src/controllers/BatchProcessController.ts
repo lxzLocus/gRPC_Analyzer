@@ -72,7 +72,17 @@ export class BatchProcessController {
 
             // プログレストラッカーを初期化（全てのログ出力後に実行）
             if (totalPRs > 0) {
-                this.progressTracker = new ProgressTracker(totalPRs, this.options.forceTUI || false);
+                this.progressTracker = new ProgressTracker(
+                    totalPRs, 
+                    this.options.forceTUI || false,
+                    this.options.quietMode || false
+                );
+                
+                // quietMode時はProgressTrackerをloggerに登録
+                if (this.options.quietMode && this.progressTracker) {
+                    const { setProgressTracker } = await import('../utils/logger.js');
+                    setProgressTracker(this.progressTracker);
+                }
             }
 
             // 各リポジトリの処理
@@ -136,6 +146,19 @@ export class BatchProcessController {
      */
     private async processRepository(datasetDir: string, repositoryName: string): Promise<void> {
         try {
+            // resumeFromオプションによるスキップ判定
+            if (this.options.resumeFrom && 
+                this.options.resumeFrom.repositoryName !== repositoryName) {
+                // まだ開始リポジトリに到達していない場合はスキップ
+                const resumeRepo = this.options.resumeFrom.repositoryName;
+                if (repositoryName < resumeRepo) {
+                    if (this.progressTracker) {
+                        this.progressTracker.log(`⏭️  Skipping repository: ${repositoryName} (before ${resumeRepo})`);
+                    }
+                    return;
+                }
+            }
+
             // ProgressTrackerを使ってログ出力
             if (this.progressTracker) {
                 this.progressTracker.log(`🔄 Processing repository: ${repositoryName}`);
@@ -174,6 +197,22 @@ export class BatchProcessController {
         category: string
     ): Promise<void> {
         try {
+            // resumeFromオプションによるスキップ判定
+            if (this.options.resumeFrom) {
+                const resume = this.options.resumeFrom;
+                
+                // 異なるリポジトリの場合はスキップ判定不要
+                if (repositoryName === resume.repositoryName) {
+                    // 開始カテゴリより前のカテゴリはスキップ
+                    if (category < resume.category) {
+                        if (this.progressTracker) {
+                            this.progressTracker.log(`  ⏭️  Skipping category: ${category} (before ${resume.category})`);
+                        }
+                        return;
+                    }
+                }
+            }
+
             // ProgressTrackerを使ってログ出力
             if (this.progressTracker) {
                 this.progressTracker.log(`  📁 Category ${repositoryName}/${category}`);
@@ -223,6 +262,39 @@ export class BatchProcessController {
         pullRequestTitle: string
     ): Promise<void> {
         try {
+            // unprocessedOnlyフィルタリング
+            if (this.options.unprocessedOnly?.enabled) {
+                const isInList = this.options.unprocessedOnly.list.some(item =>
+                    item.repositoryName === repositoryName &&
+                    item.category === category &&
+                    item.pullRequestTitle === pullRequestTitle
+                );
+                
+                if (!isInList) {
+                    // リストにないPRはスキップ
+                    if (this.progressTracker) {
+                        this.progressTracker.recordCompletion('skipped');
+                    }
+                    return;
+                }
+            }
+
+            // resumeFromオプションによるスキップ判定
+            if (this.options.resumeFrom) {
+                const resume = this.options.resumeFrom;
+                
+                // 同じリポジトリ・カテゴリの場合のみPRレベルでスキップ判定
+                if (repositoryName === resume.repositoryName && category === resume.category) {
+                    // 開始PRより前のPRはスキップ
+                    if (pullRequestTitle < resume.pullRequestTitle) {
+                        if (this.progressTracker) {
+                            this.progressTracker.recordCompletion('skipped');
+                        }
+                        return;
+                    }
+                }
+            }
+
             // ProgressTrackerを使ってログ出力
             if (this.progressTracker) {
                 this.progressTracker.log(`    🔄 Processing: ${repositoryName}/${category}/${pullRequestTitle.substring(0, 60)}...`);
@@ -242,10 +314,10 @@ export class BatchProcessController {
             if (this.progressTracker) {
                 const status = result.success ? 'success' : 'failed';
                 
-                // トークン情報のデバッグログ
-                console.log('🔍 Controller Token Debug:');
-                console.log(`   result.metrics:`, result.metrics);
-                console.log(`   Has metrics: ${!!result.metrics}`);
+                // トークン情報のデバッグログ（ProgressTracker使用時は省略）
+                // console.log('🔍 Controller Token Debug:');
+                // console.log(`   result.metrics:`, result.metrics);
+                // console.log(`   Has metrics: ${!!result.metrics}`);
                 
                 this.progressTracker.recordCompletion(status, {
                     promptTokens: result.metrics?.promptTokens,

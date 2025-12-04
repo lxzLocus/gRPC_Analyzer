@@ -57,28 +57,6 @@ const DEFAULT_CONFIG = {
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || null;
 const DISCORD_PROGRESS_INTERVAL = 2 * 60 * 60 * 1000; // 2時間（ミリ秒）
 
-/**
- * 初期プロンプト+PRタイトル入力
- * 
- */
-const WITH_PR_TITLE = {
-    selectedDatasetIndex: 0,    // filtered_fewChanged をデフォルト選択（より小さなファイル）
-    outputDir: "/app/output",
-    processingOptions: {
-        generateReport: true,
-        generateErrorReport: true,
-        processingOptions: {
-            baseOutputDir: "/app/output",
-            maxRetries: 3,
-            memoryCleanupInterval: 5,
-            timeoutMs: 10 * 60 * 1000,              // 10分
-            enableGarbageCollection: true,
-            enablePreVerification: false    // 無効
-        }
-    }
-}
-
-
 
 /**
  * メイン実行関数
@@ -92,6 +70,38 @@ async function main() {
     let datasetIndex = config.selectedDatasetIndex;
     let outputDir = config.outputDir;
     let enablePreVerification = config.processingOptions.enablePreVerification;
+    
+    // 引数無しの場合の特別処理（進捗表示を拡張）
+    const forceTUI = args.length === 0;
+    const quietMode = forceTUI;  // TUI使用時は詳細ログを抑制
+    
+    // quietMode有効化（他のモジュールのログも抑制）
+    if (quietMode) {
+        // 動的インポートでloggerモジュールを読み込み
+        const loggerModule = await import('../dist/js/utils/logger.js');
+        
+        // 最初に画面をクリア
+        process.stdout.write('\x1bc');  // 完全リセット
+        process.stdout.write('\x1b[2J'); // 画面クリア
+        process.stdout.write('\x1b[H');  // カーソルをホーム位置へ
+        
+        loggerModule.enableQuietMode();
+        // 重要な情報のみ表示
+        loggerModule.forceLog('╔════════════════════════════════════════════════════════════╗');
+        loggerModule.forceLog('║         � gRPC Analyzer - Enhanced Display Mode           ║');
+        loggerModule.forceLog('╚════════════════════════════════════════════════════════════╝');
+        loggerModule.forceLog('');
+        loggerModule.forceLog('📊 Dataset: filtered_fewChanged (86 PRs)');
+        loggerModule.forceLog('🤖 LLM: qwen/qwen3-coder-30b @ localhost:1234');
+        loggerModule.forceLog('🔇 Detailed logs suppressed - Progress will be shown below');
+        loggerModule.forceLog('');
+        loggerModule.forceLog('⏳ Initializing...');
+        loggerModule.forceLog('');
+        
+        // 少し待機してログが表示されるのを確保
+        await new Promise(resolve => setTimeout(resolve, 200));
+        enablePreVerification = false;
+    }
     
     // 引数の処理
     for (let i = 0; i < args.length; i++) {
@@ -111,13 +121,6 @@ async function main() {
             // パスっぽい引数をoutputDirとして使用
             outputDir = arg;
         }
-    }
-    
-    // 引数無しの場合の特別処理（進捗表示を拡張）
-    const forceTUI = args.length === 0;
-    if (forceTUI) {
-        console.log('🔧 No arguments provided - using defaults with enhanced progress display');
-        enablePreVerification = false;
     }
     
     // データセット選択の検証
@@ -157,7 +160,8 @@ async function main() {
         ...DEFAULT_CONFIG.processingOptions,
         baseOutputDir: outputDir,
         enablePreVerification: enablePreVerification,
-        forceTUI: forceTUI  // 引数なしの場合はTUIを強制有効化
+        forceTUI: forceTUI,  // 引数なしの場合はTUIを強制有効化
+        quietMode: quietMode  // 引数なしの場合は詳細ログを抑制
     };
     
     console.log('\n⚙️ Processing Options:');
@@ -198,6 +202,13 @@ async function main() {
         // 動的インポートでコントローラーを読み込み
         const controllerModule = await import('../src/Controller/Controller.js');
         const { datasetLoop } = controllerModule;
+        
+        if (quietMode) {
+            const loggerModule = await import('../dist/js/utils/logger.js');
+            loggerModule.forceLog('🎮 Controller loaded, starting processing...');
+        } else {
+            console.log('🎮 Starting batch processing...');
+        }
         
         // 2時間ごとに進捗を送信する定期処理を開始
         if (webhookClient) {
