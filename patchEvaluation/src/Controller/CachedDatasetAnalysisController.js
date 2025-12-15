@@ -376,11 +376,12 @@ export class CachedDatasetAnalysisController {
                 this.consoleView.showFinalModification(finalModInfo, aprDiffFiles);
 
                 // Ground Truth Diffの作成（キャッシュ機能適用）
-                if (paths.premergePath && paths.mergePath && aprDiffFiles.length > 0) {
+                // APRが修正したファイルリストではなく、実際に変更されたすべてのファイルを使用
+                if (paths.premergePath && paths.mergePath && changedFiles && changedFiles.length > 0) {
                     groundTruthDiff = await this.createGroundTruthDiff(
                         paths.premergePath, 
                         paths.mergePath, 
-                        aprDiffFiles
+                        changedFiles  // aprDiffFiles → changedFiles に変更
                     );
                 }
 
@@ -444,17 +445,16 @@ export class CachedDatasetAnalysisController {
      * Ground Truth Diffの作成（キャッシュ機能適用）
      * @param {string} premergePath - premergeパス
      * @param {string} mergePath - mergeパス
-     * @param {string[]} aprDiffFiles - APR差分ファイルリスト
+     * @param {string[]} changedFilesList - 変更されたファイルリスト
      * @returns {Promise<string|null>} 作成されたdiff
      */
-    async createGroundTruthDiff(premergePath, mergePath, aprDiffFiles) {
-        this.consoleView.showGroundTruthDiffStart(aprDiffFiles.length);
+    async createGroundTruthDiff(premergePath, mergePath, changedFilesList) {
+        this.consoleView.showGroundTruthDiffStart(changedFilesList.length);
         
         try {
-            // APRで修正されたファイルのみを対象にするため、
-            // 指定されたファイルリストのdiffを生成
-            if (!aprDiffFiles || aprDiffFiles.length === 0) {
-                console.log('⚠️ APR差分ファイルリストが空のため、Ground Truth Diffを生成できません');
+            // 変更されたファイルのdiffを生成
+            if (!changedFilesList || changedFilesList.length === 0) {
+                console.log('⚠️ 変更ファイルリストが空のため、Ground Truth Diffを生成できません');
                 return null;
             }
 
@@ -463,15 +463,15 @@ export class CachedDatasetAnalysisController {
             const groundTruthDiff = await generateGroundTruthDiff(
                 premergePath, 
                 mergePath, 
-                aprDiffFiles,
+                changedFilesList,
                 true // useCache = true
             );
             
             if (groundTruthDiff && groundTruthDiff.trim()) {
                 const diffLines = groundTruthDiff.split('\n').length;
                 this.consoleView.showGroundTruthDiffSuccess(diffLines);
-                this.consoleView.showGroundTruthDiffInfo(aprDiffFiles.length, aprDiffFiles);
-                console.log(`✅ Ground Truth Diff生成成功: ${diffLines}行, ${aprDiffFiles.length}ファイル`);
+                this.consoleView.showGroundTruthDiffInfo(changedFilesList.length, changedFilesList);
+                console.log(`✅ Ground Truth Diff生成成功: ${diffLines}行, ${changedFilesList.length}ファイル`);
             } else {
                 this.consoleView.showGroundTruthDiffFailure();
                 console.log('⚠️ Ground Truth Diffが空または生成失敗');

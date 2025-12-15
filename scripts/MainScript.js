@@ -31,14 +31,14 @@ const AVAILABLE_DATASETS = [
     "/app/dataset/filtered_confirmed",     // 確認済み
     "/app/dataset/filtered_commit",        // コミット履歴
     "/app/dataset/filtered_protoChanged",   // プロトコル変更
-    "/app/dataset/incorrect"                     // テスト用
+    "/app/dataset/incorrect_few"                     // テスト用
 ];
 
 /**
  * デフォルト設定
  */
 const DEFAULT_CONFIG = {
-    selectedDatasetIndex: 0,    // filtered_fewChanged をデフォルト選択（より小さなファイル）
+    selectedDatasetIndex: 4,    // incorrect_few をデフォルト選択（より小さなファイル）
     outputDir: "/app/output",
     processingOptions: {
         baseOutputDir: "/app/output",
@@ -107,7 +107,6 @@ async function main() {
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
         
-        if (arg === '--help' || arg === '-h') {
             showUsage();
             process.exit(0);
         } else if (arg === '--enable-pre-verification') {

@@ -7,13 +7,13 @@
   },
   "llm": {
     "provider": "openai",
-    "model": "gpt-5",
+    "model": "gpt-5.1-chat-latest",
     "maxTokens": 30000,
     "temperature": 0.1,
     "timeout": 600000,
     "retryAttempts": 3,
     "summaryThreshold": 240000,
-    "summaryModel": "gpt-5",
+    "summaryModel": "gpt-5.1-chat-latest",
     "summaryTemperature": 0.1,
     "qualityCheck": {
       "enabled": true,
