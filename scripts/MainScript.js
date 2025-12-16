@@ -107,6 +107,7 @@ async function main() {
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
         
+        if (arg === '--help' || arg === '-h') {
             showUsage();
             process.exit(0);
         } else if (arg === '--enable-pre-verification') {

@@ -108,7 +108,21 @@ class MessageHandler {
         for (const line of lines) {
             const trimmed = line.trim();
             
-            // 新しいタグ形式をサポート: %_Thought_%, %_Plan_%, %_Reply Required_%, %_Modified_%
+            // 【優先1】終了タグを最優先でチェック（正規表現マッチの前に判定）
+            if (trimmed === '%%_Fin_%%' || trimmed.includes('%%_Fin_%%')) {
+                sections.has_fin_tag = true;
+                console.log('🏁 Found %%_Fin_%% tag');
+                break;
+            }
+            
+            // 【優先2】最終確認準備完了タグ
+            if (trimmed === '%_Ready_For_Final_Check_%' || trimmed.includes('%_Ready_For_Final_Check_%')) {
+                sections.ready_for_final_check = true;
+                console.log('✅ Found %_Ready_For_Final_Check_% tag');
+                break;
+            }
+            
+            // 【優先3】通常タグ形式をサポート: %_Thought_%, %_Plan_%, %_Reply Required_%, %_Modified_%
             const tagMatch = trimmed.match(/^%_(.+?)_%$/);
 
             if (tagMatch) {
@@ -135,14 +149,6 @@ class MessageHandler {
                 }
                 console.log(`🏷️ Detected tag: ${tagName} -> ${currentTag}`);
                 continue;
-            } else if (trimmed === '%%_Fin_%%') {
-                sections.has_fin_tag = true;
-                console.log('🏁 Found %%_Fin_%% tag');
-                break;
-            } else if (trimmed === '%_Ready_For_Final_Check_%') {
-                sections.ready_for_final_check = true;
-                console.log('✅ Found %_Ready_For_Final_Check_% tag');
-                break;
             }
 
             if (currentTag) {
