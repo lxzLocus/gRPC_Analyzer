@@ -29,14 +29,15 @@ const AVAILABLE_DATASETS = [
     "/app/dataset/filtered_confirmed",     // 確認済み
     "/app/dataset/filtered_commit",        // コミット履歴
     "/app/dataset/filtered_protoChanged",   // プロトコル変更
-    "/app/dataset/incorrect"                     // テスト用
+    "/app/dataset/incorrect",                 // テスト用
+    "/app/dataset/incorrect_few"
 ];
 
 /**
  * デフォルト設定
  */
 const DEFAULT_CONFIG = {
-    selectedDatasetIndex: 0,    // filtered_fewChanged をデフォルト選択
+    selectedDatasetIndex: 5,    // incorrect_few をデフォルト選択
     outputDir: "/app/output",
     processingOptions: {
         baseOutputDir: "/app/output",
