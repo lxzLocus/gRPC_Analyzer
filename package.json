@@ -8,6 +8,7 @@
     "test:prompt": "node test_prompt_loading.js",
     "test:restapi": "npm run build && node scripts/testRestApiClient.js",
     "test:webhook": "node scripts/testDiscordWebhook.js",
+    "test:blessed": "npm run build && node dist/js/test/testBlessedView.js",
     "generate:prompts": "node dist/js/utils/generatePrompt.js",
     "batch:safe": "node scripts/safeBatchRunner.js",
     "batch:test": "node scripts/safeBatchRunner.js /app/dataset/test /app/output",
@@ -26,6 +27,8 @@
     "@octokit/rest": "^21.0.0",
     "acorn": "^8.12.1",
     "axios": "^1.7.2",
+    "blessed": "^0.1.81",
+    "blessed-contrib": "^4.11.0",
     "csv-parser": "^3.0.0",
     "dotenv": "^16.4.5",
     "esprima": "^4.0.1",
@@ -45,6 +48,7 @@
     "typescript": "^5.6.3"
   },
   "devDependencies": {
+    "@types/blessed": "^0.1.25",
     "@types/dotenv": "^6.1.1",
     "@types/handlebars": "^4.0.40",
     "@types/lodash": "^4.17.17",

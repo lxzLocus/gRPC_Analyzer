@@ -14,6 +14,7 @@ import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { DiscordWebhook } from '../src/utils/DiscordWebhook.js';
 import Config from '../dist/js/modules/config.js';
+import { consoleLogger } from '../dist/js/modules/consoleLogger.js';
 
 // ES module環境での __dirname の取得
 const __filename = fileURLToPath(import.meta.url);
@@ -28,17 +29,18 @@ config({ path: path.join(__dirname, '..', '.env') });
  */
 const AVAILABLE_DATASETS = [
     "/app/dataset/filtered_fewChanged",     // 少数変更ファイル
-    "/app/dataset/filtered_confirmed",     // 確認済み
-    "/app/dataset/filtered_commit",        // コミット履歴
+    "/app/dataset/filtered_confirmed",      // 確認済み
+    "/app/dataset/filtered_commit",         // コミット履歴
     "/app/dataset/filtered_protoChanged",   // プロトコル変更
-    "/app/dataset/incorrect_few"                     // テスト用
+    "/app/dataset/filtered_bugs",           // バグ修正（実データあり）
+    "/app/dataset/incorrect_few"            // テスト用（空）
 ];
 
 /**
  * デフォルト設定
  */
 const DEFAULT_CONFIG = {
-    selectedDatasetIndex: 4,    // incorrect_few をデフォルト選択（より小さなファイル）
+    selectedDatasetIndex: 4,    // filtered_bugs をデフォルト選択（実データあり）
     outputDir: "/app/output",
     processingOptions: {
         baseOutputDir: "/app/output",
@@ -70,38 +72,50 @@ async function main() {
     let datasetIndex = config.selectedDatasetIndex;
     let outputDir = config.outputDir;
     let enablePreVerification = config.processingOptions.enablePreVerification;
-    
-    // 引数無しの場合の特別処理（進捗表示を拡張）
+
+    // コンソール出力の制御フラグ
+    const hasNoConsoleLogArg = args.includes('--no-console-log');
+    const hasForceConsoleLogArg = args.includes('--force-console-log');
     const forceTUI = args.length === 0;
-    const quietMode = forceTUI;  // TUI使用時は詳細ログを抑制
+    const quietMode = forceTUI || hasNoConsoleLogArg;  // TUI使用時または明示指定時は詳細ログを抑制
+    const consoleLogEnabled = hasForceConsoleLogArg ? true : !quietMode;
     
+    // Blessed TUI View の有効化フラグ（環境変数）
+    const useBlessedView = process.env.USE_BLESSED_VIEW === 'true';
+    
+    // デバッグ: 環境変数の確認（quietModeに関わらず必ず出力）
+    consoleLogger.forceLog(`🔍 Debug: USE_BLESSED_VIEW=${process.env.USE_BLESSED_VIEW}, useBlessedView=${useBlessedView}, forceTUI=${forceTUI}, quietMode=${quietMode}`);
+
     // quietMode有効化（他のモジュールのログも抑制）
     if (quietMode) {
         // 動的インポートでloggerモジュールを読み込み
         const loggerModule = await import('../dist/js/utils/logger.js');
         
-        // 最初に画面をクリア
-        process.stdout.write('\x1bc');  // 完全リセット
-        process.stdout.write('\x1b[2J'); // 画面クリア
-        process.stdout.write('\x1b[H');  // カーソルをホーム位置へ
-        
-        loggerModule.enableQuietMode();
         // 重要な情報のみ表示
-        loggerModule.forceLog('╔════════════════════════════════════════════════════════════╗');
-        loggerModule.forceLog('║         � gRPC Analyzer - Enhanced Display Mode           ║');
-        loggerModule.forceLog('╚════════════════════════════════════════════════════════════╝');
-        loggerModule.forceLog('');
-        loggerModule.forceLog('📊 Dataset: filtered_fewChanged (86 PRs)');
-        loggerModule.forceLog('🤖 LLM: qwen/qwen3-coder-30b @ localhost:1234');
-        loggerModule.forceLog('🔇 Detailed logs suppressed - Progress will be shown below');
-        loggerModule.forceLog('');
-        loggerModule.forceLog('⏳ Initializing...');
-        loggerModule.forceLog('');
+        consoleLogger.forceLog('\n╔════════════════════════════════════════════════════════════╗');
+        consoleLogger.forceLog('║         🔬 gRPC Analyzer - Enhanced Display Mode           ║');
+        consoleLogger.forceLog('╚════════════════════════════════════════════════════════════╝');
+        consoleLogger.forceLog('');
+        if (useBlessedView) {
+            consoleLogger.forceLog('🎨 UI Mode: Blessed TUI (Interactive)');
+        } else {
+            consoleLogger.forceLog('🎨 UI Mode: ANSI TUI (Standard)');
+        }
+        consoleLogger.forceLog('📊 Dataset: filtered_bugs (実データあり)');
+        consoleLogger.forceLog('🤖 LLM: Configuration will be loaded from config');
+        consoleLogger.forceLog('🔇 Detailed logs suppressed - Progress will be shown below');
+        consoleLogger.forceLog('');
+        consoleLogger.forceLog('⏳ Initializing...\n');
         
-        // 少し待機してログが表示されるのを確保
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // logger.jsのquietModeを有効化（console.logを上書き）
+        loggerModule.enableQuietMode();
+        
         enablePreVerification = false;
     }
+    
+    // ログ出力クラスの設定（本ファイル全体で使用）
+    consoleLogger.setEnabled(consoleLogEnabled);
+    const log = (...messages) => consoleLogger.log(...messages);
     
     // 引数の処理
     for (let i = 0; i < args.length; i++) {
@@ -125,10 +139,10 @@ async function main() {
     
     // データセット選択の検証
     if (datasetIndex < 0 || datasetIndex >= AVAILABLE_DATASETS.length) {
-        console.error(`❌ Invalid dataset index: ${datasetIndex}`);
-        console.log('📂 Available datasets:');
+        consoleLogger.error(`❌ Invalid dataset index: ${datasetIndex}`);
+        log('📂 Available datasets:');
         AVAILABLE_DATASETS.forEach((dataset, index) => {
-            console.log(`   ${index}: ${dataset}`);
+            log(`   ${index}: ${dataset}`);
         });
         process.exit(1);
     }
@@ -136,52 +150,55 @@ async function main() {
     const selectedDataset = AVAILABLE_DATASETS[datasetIndex];
     
     // 実行情報の表示
-    console.log('🚀 MVC Batch Processing Starting...');
-    console.log('========================================');
-    console.log(`📂 Selected Dataset: ${selectedDataset} (index: ${datasetIndex})`);
-    console.log(`📁 Output Directory: ${outputDir}`);
-    console.log(`🐛 Process ID: ${process.pid}`);
-    console.log(`📝 Node.js Version: ${process.version}`);
-    console.log(`🗑️ Garbage Collection: ${global.gc ? 'Available' : 'Not Available (use --expose-gc)'}`);
+    log('🚀 MVC Batch Processing Starting...');
+    log('========================================');
+    log(`📂 Selected Dataset: ${selectedDataset} (index: ${datasetIndex})`);
+    log(`📁 Output Directory: ${outputDir}`);
+    log(`🐛 Process ID: ${process.pid}`);
+    log(`📝 Node.js Version: ${process.version}`);
+    log(`🗑️ Garbage Collection: ${global.gc ? 'Available' : 'Not Available (use --expose-gc)'}`);
     
     // LLM設定情報の表示（設定ファイルから取得）
     const configInstance = new Config();
     const provider = configInstance.get('llm.provider', process.env.LLM_PROVIDER || 'openai');
     
-    console.log('\n🤖 LLM Configuration:');
-    console.log(`   Provider: ${provider}`);
-    console.log(`   Model: ${getLLMModel()}`);
-    console.log(`   Temperature: ${getLLMTemperature()}`);
-    console.log(`   Max Tokens: ${getLLMMaxTokens()}`);
-    console.log(`   API Key Length: ${getLLMApiKeyLength()}`);
-    console.log(`   Summary Threshold: ${configInstance.get('llm.summaryThreshold', 30000)} tokens`);
+    log('\n🤖 LLM Configuration:');
+    log(`   Provider: ${provider}`);
+    log(`   Model: ${getLLMModel()}`);
+    log(`   Temperature: ${getLLMTemperature()}`);
+    log(`   Max Tokens: ${getLLMMaxTokens()}`);
+    log(`   API Key Length: ${getLLMApiKeyLength()}`);
+    log(`   Summary Threshold: ${configInstance.get('llm.summaryThreshold', 30000)} tokens`);
     // 処理オプションの表示
     const options = {
         ...DEFAULT_CONFIG.processingOptions,
         baseOutputDir: outputDir,
         enablePreVerification: enablePreVerification,
         forceTUI: forceTUI,  // 引数なしの場合はTUIを強制有効化
-        quietMode: quietMode  // 引数なしの場合は詳細ログを抑制
+        quietMode: quietMode,  // 引数なしの場合は詳細ログを抑制
+        useBlessedView: useBlessedView  // 環境変数 USE_BLESSED_VIEW=true で有効化
     };
     
-    console.log('\n⚙️ Processing Options:');
-    console.log(`   Max Retries: ${options.maxRetries}`);
-    console.log(`   Memory Cleanup Interval: ${options.memoryCleanupInterval}`);
-    console.log(`   Timeout: ${options.timeoutMs / 1000}s`);
-    console.log(`   Garbage Collection: ${options.enableGarbageCollection ? 'Enabled' : 'Disabled'}`);
-    console.log(`   Pre-Verification: ${options.enablePreVerification ? 'Enabled' : 'Disabled'}`);
-    console.log(`   Progress Display: ${options.forceTUI ? 'Enhanced (with stats)' : 'Standard'}`);
-    
+    log('\n⚙️ Processing Options:');
+    log(`   Max Retries: ${options.maxRetries}`);
+    log(`   Memory Cleanup Interval: ${options.memoryCleanupInterval}`);
+    log(`   Timeout: ${options.timeoutMs / 1000}s`);
+    log(`   Garbage Collection: ${options.enableGarbageCollection ? 'Enabled' : 'Disabled'}`);
+    log(`   Pre-Verification: ${options.enablePreVerification ? 'Enabled' : 'Disabled'}`);
+    log(`   Progress Display: ${options.forceTUI ? 'Enhanced (with stats)' : 'Standard'}`);
+    if (useBlessedView) {
+        log(`   UI Mode: Blessed TUI (Interactive)`);
+    }
     // Discord Webhook設定の表示
     if (DISCORD_WEBHOOK_URL) {
-        console.log('\n📢 Discord Webhook:');
-        console.log(`   Status: Enabled`);
-        console.log(`   Progress Interval: ${DISCORD_PROGRESS_INTERVAL / 1000 / 60} minutes`);
+        log('\n📢 Discord Webhook:');
+        log(`   Status: Enabled`);
+        log(`   Progress Interval: ${DISCORD_PROGRESS_INTERVAL / 1000 / 60} minutes`);
     } else {
-        console.log('\n📢 Discord Webhook: Disabled (DISCORD_WEBHOOK_URL not set)');
+        log('\n📢 Discord Webhook: Disabled (DISCORD_WEBHOOK_URL not set)');
     }
-    
-    console.log('========================================\n');
+
+    log('========================================\n');
 
     let controller = null;
     let webhookClient = null;
@@ -191,9 +208,9 @@ async function main() {
     if (DISCORD_WEBHOOK_URL) {
         try {
             webhookClient = new DiscordWebhook(DISCORD_WEBHOOK_URL);
-            console.log('✅ Discord Webhook client initialized');
+            log('✅ Discord Webhook client initialized');
         } catch (error) {
-            console.warn('⚠️  Discord Webhook initialization failed:', error.message);
+            consoleLogger.warn('⚠️  Discord Webhook initialization failed:', error.message);
             webhookClient = null;
         }
     }
@@ -207,14 +224,14 @@ async function main() {
             const loggerModule = await import('../dist/js/utils/logger.js');
             loggerModule.forceLog('🎮 Controller loaded, starting processing...');
         } else {
-            console.log('🎮 Starting batch processing...');
+            log('🎮 Starting batch processing...');
         }
         
         // 2時間ごとに進捗を送信する定期処理を開始
         if (webhookClient) {
             progressInterval = setInterval(async () => {
                 try {
-                    console.log('\n⏰ Sending periodic progress update to Discord...');
+                    log('\n⏰ Sending periodic progress update to Discord...');
                     // ProgressTrackerから統計を取得する必要があるため、
                     // ここでは仮の統計を送信（実際の統計は後で追加）
                     const currentStats = {
@@ -228,13 +245,13 @@ async function main() {
                     
                     // TODO: 実際のProgressTrackerの統計を取得
                     // await webhookClient.sendProgress(currentStats, selectedDataset);
-                    console.log('⏰ Progress update scheduled (implementation pending)');
+                    log('⏰ Progress update scheduled (implementation pending)');
                 } catch (webhookError) {
-                    console.warn('⚠️  Failed to send progress update:', webhookError.message);
+                    consoleLogger.warn('⚠️  Failed to send progress update:', webhookError.message);
                 }
             }, DISCORD_PROGRESS_INTERVAL);
             
-            console.log(`⏰ Progress update timer started (every ${DISCORD_PROGRESS_INTERVAL / 1000 / 60} minutes)\n`);
+            log(`⏰ Progress update timer started (every ${DISCORD_PROGRESS_INTERVAL / 1000 / 60} minutes)\n`);
         }
         
         // 処理の実行（patchEvaluationパターンを踏襲）
@@ -245,27 +262,27 @@ async function main() {
         });
 
         // 結果の表示
-        console.log('\n🎉 MVC batch processing completed successfully!');
-        console.log('========================================');
-        console.log(`✅ Success: ${stats.successfulPullRequests}/${stats.totalPullRequests}`);
+        log('\n🎉 MVC batch processing completed successfully!');
+        log('========================================');
+        log(`✅ Success: ${stats.successfulPullRequests}/${stats.totalPullRequests}`);
         
         if (stats.totalPullRequests > 0) {
-            console.log(`📊 Success Rate: ${((stats.successfulPullRequests / stats.totalPullRequests) * 100).toFixed(1)}%`);
+            log(`📊 Success Rate: ${((stats.successfulPullRequests / stats.totalPullRequests) * 100).toFixed(1)}%`);
         }
         
-        console.log(`❌ Failed: ${stats.failedPullRequests}`);
-        console.log(`⏭️ Skipped: ${stats.skippedPullRequests}`);
+        log(`❌ Failed: ${stats.failedPullRequests}`);
+        log(`⏭️ Skipped: ${stats.skippedPullRequests}`);
         
         if (stats.totalDuration) {
-            console.log(`⏱️ Total Duration: ${formatDuration(stats.totalDuration)}`);
+            log(`⏱️ Total Duration: ${formatDuration(stats.totalDuration)}`);
         }
         
-        console.log('========================================');
+        log('========================================');
         
         // Discord通知: 正常終了
         if (webhookClient) {
             try {
-                console.log('\n📤 Sending final results to Discord...');
+                log('\n📤 Sending final results to Discord...');
                 const finalStats = {
                     total: stats.totalPullRequests,
                     processed: stats.successfulPullRequests + stats.failedPullRequests + stats.skippedPullRequests,
@@ -275,9 +292,9 @@ async function main() {
                     startTime: Date.now() - (stats.totalDuration || 0)
                 };
                 await webhookClient.sendFinalResult(finalStats, selectedDataset, true);
-                console.log('✅ Final results sent to Discord');
+                log('✅ Final results sent to Discord');
             } catch (webhookError) {
-                console.warn('⚠️  Failed to send final results to Discord:', webhookError.message);
+                consoleLogger.warn('⚠️  Failed to send final results to Discord:', webhookError.message);
             }
         }
         
@@ -290,23 +307,23 @@ async function main() {
         process.exit(0);
 
     } catch (error) {
-        console.error('\n❌ Critical error in MVC batch processing:');
-        console.error('========================================');
-        console.error(`Error Type: ${error.constructor.name}`);
-        console.error(`Error Message: ${error.message}`);
+        consoleLogger.error('\n❌ Critical error in MVC batch processing:');
+        consoleLogger.error('========================================');
+        consoleLogger.error(`Error Type: ${error.constructor.name}`);
+        consoleLogger.error(`Error Message: ${error.message}`);
         if (error.stack) {
-            console.error(`Stack Trace:\n${error.stack}`);
+            consoleLogger.error(`Stack Trace:\n${error.stack}`);
         }
-        console.error('========================================');
+        consoleLogger.error('========================================');
         
         // Discord通知: エラー発生
         if (webhookClient) {
             try {
-                console.log('\n📤 Sending error notification to Discord...');
+                log('\n📤 Sending error notification to Discord...');
                 await webhookClient.sendError(error, 'MVC Batch Processing');
-                console.log('✅ Error notification sent to Discord');
+                log('✅ Error notification sent to Discord');
             } catch (webhookError) {
-                console.warn('⚠️  Failed to send error notification to Discord:', webhookError.message);
+                consoleLogger.warn('⚠️  Failed to send error notification to Discord:', webhookError.message);
             }
         }
         
@@ -317,11 +334,11 @@ async function main() {
         
         if (controller) {
             try {
-                console.log('🔄 Attempting graceful shutdown...');
+                log('🔄 Attempting graceful shutdown...');
                 await controller.shutdown();
-                console.log('✅ Graceful shutdown completed');
+                log('✅ Graceful shutdown completed');
             } catch (shutdownError) {
-                console.error('❌ Error during shutdown:', shutdownError.message);
+                consoleLogger.error('❌ Error during shutdown:', shutdownError.message);
             }
         }
         
@@ -422,23 +439,25 @@ function getLLMApiKeyLength() {
  * 使用方法の表示
  */
 function showUsage() {
-    console.log('📖 Usage: node scripts/MainScript.js [dataset_index] [output_dir] [options]');
-    console.log('\n📂 Available datasets:');
+    consoleLogger.forceLog('📖 Usage: node scripts/MainScript.js [dataset_index] [output_dir] [options]');
+    consoleLogger.forceLog('\n📂 Available datasets:');
     AVAILABLE_DATASETS.forEach((dataset, index) => {
-        console.log(`   ${index}: ${dataset}`);
+        consoleLogger.forceLog(`   ${index}: ${dataset}`);
     });
-    console.log('\n📁 Default output directory: /app/output');
-    console.log('\n🔧 Options:');
-    console.log('   --enable-pre-verification   Enable Devil\'s Advocate pre-verification step');
-    console.log('   --no-pre-verification       Disable pre-verification step (default for no args)');
-    console.log('   --help, -h                  Show this help message');
-    console.log('\n⚠️  Dataset 4 (incorrect_few) uses large prompt files and has 15-minute timeout');
-    console.log('\n🚀 Examples:');
-    console.log('   node scripts/MainScript.js                              # Use defaults, no pre-verification');
-    console.log('   node scripts/MainScript.js --enable-pre-verification    # Use defaults with pre-verification');
-    console.log('   node scripts/MainScript.js 0                            # Use filtered_fewChanged, no pre-verification');
-    console.log('   node scripts/MainScript.js 0 --enable-pre-verification  # Use filtered_fewChanged with pre-verification');
-    console.log('   node scripts/MainScript.js 4 /tmp/output                # Use test dataset with custom output');
+    consoleLogger.forceLog('\n📁 Default output directory: /app/output');
+    consoleLogger.forceLog('\n🔧 Options:');
+    consoleLogger.forceLog('   --enable-pre-verification   Enable Devil\'s Advocate pre-verification step');
+    consoleLogger.forceLog('   --no-pre-verification       Disable pre-verification step (default for no args)');
+    consoleLogger.forceLog('   --no-console-log            Suppress console.log output for TUI mode');
+    consoleLogger.forceLog('   --force-console-log         Force console.log output even in TUI mode');
+    consoleLogger.forceLog('   --help, -h                  Show this help message');
+    consoleLogger.forceLog('\n⚠️  Dataset 4 (incorrect_few) uses large prompt files and has 15-minute timeout');
+    consoleLogger.forceLog('\n🚀 Examples:');
+    consoleLogger.forceLog('   node scripts/MainScript.js                              # Use defaults, no pre-verification');
+    consoleLogger.forceLog('   node scripts/MainScript.js --enable-pre-verification    # Use defaults with pre-verification');
+    consoleLogger.forceLog('   node scripts/MainScript.js 0                            # Use filtered_fewChanged, no pre-verification');
+    consoleLogger.forceLog('   node scripts/MainScript.js 0 --enable-pre-verification  # Use filtered_fewChanged with pre-verification');
+    consoleLogger.forceLog('   node scripts/MainScript.js 4 /tmp/output                # Use test dataset with custom output');
 }
 
 // ヘルプオプションの処理は main() 関数内で行うため、ここでは削除
@@ -446,7 +465,7 @@ function showUsage() {
 // 直接実行された場合のみメイン関数を実行
 if (import.meta.url === `file://${process.argv[1]}`) {
     main().catch(error => {
-        console.error('💥 Unhandled error in main:', error);
+        consoleLogger.error('💥 Unhandled error in main:', error);
         process.exit(1);
     });
 }

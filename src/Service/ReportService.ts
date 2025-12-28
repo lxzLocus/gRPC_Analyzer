@@ -8,6 +8,7 @@ import * as path from 'path';
 import { DatasetRepository } from '../Repository/DatasetRepository.js';
 import { ProcessingStatistics, ErrorReport } from '../types/BatchProcessTypes.js';
 import { getJSTFileTimestamp, getJSTTimestamp, convertUTCtoJST } from '../utils/timeUtils.js';
+import { consoleLogger } from '../modules/consoleLogger.js';
 
 // Node.js型の宣言
 declare const process: any;
@@ -30,8 +31,8 @@ export class ReportService {
         // 出力ディレクトリの作成
         this.ensureOutputDirectory();
         
-        console.log(`📋 Error report will be saved to: ${this.errorReportFile}`);
-        console.log(`📋 Summary report will be saved to: ${this.summaryReportFile}`);
+        consoleLogger.log(`📋 Error report will be saved to: ${this.errorReportFile}`);
+        consoleLogger.log(`📋 Summary report will be saved to: ${this.summaryReportFile}`);
     }
 
     /**
@@ -55,12 +56,12 @@ export class ReportService {
                 JSON.stringify(existingErrors, null, 2)
             );
             
-            console.log(`❌ Error recorded: ${errorReport.pullRequestTitle} (${errorReport.errorType})`);
-            console.log(`   Error message: ${errorReport.errorMessage}`);
-            console.log(`   Total errors so far: ${existingErrors.length}`);
+            consoleLogger.log(`❌ Error recorded: ${errorReport.pullRequestTitle} (${errorReport.errorType})`);
+            consoleLogger.log(`   Error message: ${errorReport.errorMessage}`);
+            consoleLogger.log(`   Total errors so far: ${existingErrors.length}`);
             
         } catch (writeError) {
-            console.error('❌ Failed to write error report:', writeError);
+            consoleLogger.error('❌ Failed to write error report:', writeError);
         }
     }
 
@@ -81,7 +82,7 @@ export class ReportService {
             this.displayFinalSummary(statistics);
             
         } catch (error) {
-            console.error('❌ Failed to generate final report:', error);
+            consoleLogger.error('❌ Failed to generate final report:', error);
         }
     }
 
@@ -114,7 +115,7 @@ export class ReportService {
             this.summaryReportFile, 
             JSON.stringify(summary, null, 2)
         );
-        console.log(`📊 Summary report saved to: ${this.summaryReportFile}`);
+        consoleLogger.log(`📊 Summary report saved to: ${this.summaryReportFile}`);
     }
 
     /**
@@ -126,9 +127,9 @@ export class ReportService {
                 this.errorReportFile, 
                 JSON.stringify(this.errorReports, null, 2)
             );
-            console.log(`❌ Error report saved to: ${this.errorReportFile} (${this.errorReports.length} errors)`);
+            consoleLogger.log(`❌ Error report saved to: ${this.errorReportFile} (${this.errorReports.length} errors)`);
         } else {
-            console.log('✅ No errors to report');
+            consoleLogger.log('✅ No errors to report');
         }
     }
 
@@ -136,29 +137,29 @@ export class ReportService {
      * 最終サマリーの表示
      */
     private displayFinalSummary(statistics: ProcessingStatistics): void {
-        console.log('\n📊 FINAL PROCESSING SUMMARY');
-        console.log('================================');
-        console.log(`📦 Total Repositories: ${statistics.totalRepositories}`);
-        console.log(`📁 Total Categories: ${statistics.totalCategories}`);
-        console.log(`📋 Total Pull Requests: ${statistics.totalPullRequests}`);
-        console.log(`✅ Successful: ${statistics.successfulPullRequests}`);
-        console.log(`❌ Failed: ${statistics.failedPullRequests}`);
-        console.log(`⏭️ Skipped: ${statistics.skippedPullRequests}`);
-        console.log(`📈 Success Rate: ${statistics.successRate}%`);
-        console.log(`🚨 Total Errors: ${this.errorReports.length}`);
+        consoleLogger.log('\n📊 FINAL PROCESSING SUMMARY');
+        consoleLogger.log('================================');
+        consoleLogger.log(`📦 Total Repositories: ${statistics.totalRepositories}`);
+        consoleLogger.log(`📁 Total Categories: ${statistics.totalCategories}`);
+        consoleLogger.log(`📋 Total Pull Requests: ${statistics.totalPullRequests}`);
+        consoleLogger.log(`✅ Successful: ${statistics.successfulPullRequests}`);
+        consoleLogger.log(`❌ Failed: ${statistics.failedPullRequests}`);
+        consoleLogger.log(`⏭️ Skipped: ${statistics.skippedPullRequests}`);
+        consoleLogger.log(`📈 Success Rate: ${statistics.successRate}%`);
+        consoleLogger.log(`🚨 Total Errors: ${this.errorReports.length}`);
         
         if (Object.keys(statistics.errorsByType).length > 0) {
-            console.log('\n🔍 Error Types:');
+            consoleLogger.log('\n🔍 Error Types:');
             Object.entries(statistics.errorsByType)
                 .sort(([, a], [, b]) => b - a)
                 .forEach(([type, count]) => {
-                    console.log(`   ${type}: ${count}`);
+                    consoleLogger.log(`   ${type}: ${count}`);
                 });
         }
         
         const totalDuration = Date.now() - statistics.startTime.getTime();
-        console.log(`⏱️ Total Duration: ${this.formatDuration(totalDuration)}`);
-        console.log('================================');
+        consoleLogger.log(`⏱️ Total Duration: ${this.formatDuration(totalDuration)}`);
+        consoleLogger.log('================================');
     }
 
     /**
@@ -187,7 +188,7 @@ export class ReportService {
                 fs.mkdirSync(this.outputDir, { recursive: true });
             }
         } catch (error) {
-            console.error(`Error creating output directory ${this.outputDir}:`, error);
+            consoleLogger.error(`Error creating output directory ${this.outputDir}:`, error);
             throw error;
         }
     }
@@ -202,7 +203,7 @@ export class ReportService {
                 await this.generateErrorReportFile();
             }
         } catch (error) {
-            console.error('❌ Error during report service cleanup:', error);
+            consoleLogger.error('❌ Error during report service cleanup:', error);
         }
     }
 }

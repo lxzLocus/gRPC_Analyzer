@@ -29,10 +29,19 @@ export function enableQuietMode(): void {
     originalConsoleError = console.error;
     originalConsoleWarn = console.warn;
     
-    // console.logを選択的に抑制（重要なログのみ残す）
+    // console.logを選択的に抑制またはProgressTrackerにリダイレクト
     console.log = (...args: any[]) => {
         const message = args.join(' ');
-        // 重要なメッセージは表示
+        
+        // ProgressTrackerが利用可能な場合はログバッファに追加
+        if (progressTrackerInstance && progressTrackerInstance.log) {
+            // ProgressTrackerのログメソッドを使用（TUIのログ領域に表示）
+            // カラーコード: 通常ログは白（デフォルト）
+            progressTrackerInstance.log(`\x1b[37m${message}\x1b[0m`);
+            return;
+        }
+        
+        // ProgressTrackerがない場合は重要なメッセージのみ表示
         if (
             // 起動・完了メッセージ（最小限）
             message.includes('🚀') ||
@@ -47,21 +56,13 @@ export function enableQuietMode(): void {
             message.includes('Critical error') ||
             message.includes('Error') ||
             
-            // プログレスバー関連（━で始まる）
-            message.includes('━━━') ||
-            message.includes('🎯 Progress:') ||
-            
-            // ProgressTrackerからのログ（タイムスタンプ付き）
-            message.match(/^\[\d{1,2}:\d{2}:\d{2}\]/) ||
-            
             // 最終統計
             message.includes('Success Rate:') ||
             message.includes('Total Duration:') ||
             
-            // デバッグ: 初期化関連とTUI
-            message.includes('Terminal Status') ||
-            message.includes('TUI') ||
-            message.includes('Progress display')
+            // 初期化メッセージ
+            message.includes('Controller loaded') ||
+            message.includes('BatchProcessController initialized')
         ) {
             originalConsoleLog(...args);
         }
@@ -75,7 +76,8 @@ export function enableQuietMode(): void {
         
         // ProgressTrackerが利用可能ならログバッファに追加
         if (progressTrackerInstance && progressTrackerInstance.log) {
-            progressTrackerInstance.log(`❌ ${firstLine}`);
+            // カラーコード: エラーは赤色
+            progressTrackerInstance.log(`\x1b[31m❌ ${firstLine}\x1b[0m`);
         } else if (message.includes('Critical') || message.includes('Fatal')) {
             // Criticalエラーは表示
             originalConsoleError(...args);
@@ -91,7 +93,8 @@ export function enableQuietMode(): void {
         
         // ProgressTrackerが利用可能ならログバッファに追加
         if (progressTrackerInstance && progressTrackerInstance.log) {
-            progressTrackerInstance.log(`⚠️  ${firstLine}`);
+            // カラーコード: 警告は黄色
+            progressTrackerInstance.log(`\x1b[33m⚠️  ${firstLine}\x1b[0m`);
         } else {
             // その他は1行のみ
             originalConsoleWarn(firstLine);

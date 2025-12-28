@@ -4,6 +4,7 @@
  */
 
 import { BatchProcessingOptions, MemoryUsageInfo } from '../types/BatchProcessTypes.js';
+import { consoleLogger } from '../modules/consoleLogger.js';
 
 // Node.js型の宣言
 declare const process: any;
@@ -44,7 +45,7 @@ export class MemoryManagementService {
      */
     performGarbageCollection(): MemoryUsageInfo | null {
         if (!this.options.enableGarbageCollection || !global.gc) {
-            console.warn('⚠️ Garbage collection not available. Start Node.js with --expose-gc flag for better memory management.');
+            consoleLogger.warn('⚠️ Garbage collection not available. Start Node.js with --expose-gc flag for better memory management.');
             return null;
         }
 
@@ -55,11 +56,11 @@ export class MemoryManagementService {
         const rssDiff = afterGC.rss - beforeGC.rss;
         const heapDiff = afterGC.heapUsed - beforeGC.heapUsed;
 
-        console.log(`🗑️ Memory after GC: RSS=${afterGC.rss}MB (Δ${rssDiff}), Heap=${afterGC.heapUsed}MB (Δ${heapDiff})`);
+        consoleLogger.log(`🗑️ Memory after GC: RSS=${afterGC.rss}MB (Δ${rssDiff}), Heap=${afterGC.heapUsed}MB (Δ${heapDiff})`);
 
         // メモリ使用量が高い場合の警告
         if (afterGC.rss > 4000) { // 4GB以上
-            console.warn(`⚠️ High memory usage detected: ${afterGC.rss}MB RSS`);
+            consoleLogger.warn(`⚠️ High memory usage detected: ${afterGC.rss}MB RSS`);
         }
 
         return afterGC;
@@ -75,16 +76,16 @@ export class MemoryManagementService {
             
             // メモリ使用量が異常に高い場合の警告
             if (memoryInfo.rss > 6000) { // 6GB以上
-                console.warn(`⚠️ CRITICAL: Very high memory usage detected: ${memoryInfo.rss}MB`);
-                console.warn(`⚠️ Consider terminating the process to prevent system instability`);
+                consoleLogger.warn(`⚠️ CRITICAL: Very high memory usage detected: ${memoryInfo.rss}MB`);
+                consoleLogger.warn(`⚠️ Consider terminating the process to prevent system instability`);
                 
                 // 緊急ガベージコレクション
                 if (this.options.enableGarbageCollection && global.gc) {
-                    console.log('🚨 Running emergency garbage collection...');
+                    consoleLogger.log('🚨 Running emergency garbage collection...');
                     global.gc();
                 }
             } else if (memoryInfo.rss > 4000) { // 4GB以上
-                console.warn(`⚠️ High memory usage: ${memoryInfo.rss}MB - monitoring closely`);
+                consoleLogger.warn(`⚠️ High memory usage: ${memoryInfo.rss}MB - monitoring closely`);
             }
         }, 60000); // 60秒ごとにチェック
     }

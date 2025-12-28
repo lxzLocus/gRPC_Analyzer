@@ -8,6 +8,7 @@ import { LLMProcessingService } from './LLMProcessingService.js';
 import { ReportService } from './ReportService.js';
 import { MemoryManagementService } from './MemoryManagementService.js';
 import Logger from '../modules/logger.js';
+import { consoleLogger } from '../modules/consoleLogger.js';
 import { 
     ProcessingResult,
     ProcessingStatistics,
@@ -80,9 +81,9 @@ export class BatchProcessingService {
             this.statistics.totalRepositories = filtered.length;
             
             if (filtered.length === 0) {
-                console.warn(`⚠️  Target repository not found: ${this.options.targetPullRequest.repositoryName}`);
+                consoleLogger.warn(`⚠️  Target repository not found: ${this.options.targetPullRequest.repositoryName}`);
             } else {
-                console.log(`🎯 Filtered to target repository: ${this.options.targetPullRequest.repositoryName}`);
+                consoleLogger.log(`🎯 Filtered to target repository: ${this.options.targetPullRequest.repositoryName}`);
             }
             
             return filtered;

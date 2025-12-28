@@ -75,7 +75,8 @@ export class BatchProcessController {
                 this.progressTracker = new ProgressTracker(
                     totalPRs, 
                     this.options.forceTUI || false,
-                    this.options.quietMode || false
+                    this.options.quietMode || false,
+                    this.options.useBlessedView || false
                 );
                 
                 // quietMode時はProgressTrackerをloggerに登録

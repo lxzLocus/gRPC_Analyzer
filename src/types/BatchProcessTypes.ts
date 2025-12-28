@@ -57,6 +57,7 @@ export interface BatchProcessingOptions {
     enablePreVerification?: boolean;
     forceTUI?: boolean;  // TUIを強制的に有効化（TTY検出を無視）
     quietMode?: boolean;  // 詳細なログを抑制（TUI使用時）
+    useBlessedView?: boolean;  // Blessed TUI Viewを使用（高度なUI）
     // 単一PR実行用のフィルター（指定時は該当PRのみ処理）
     targetPullRequest?: {
         repositoryName: string;

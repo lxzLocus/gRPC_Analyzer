@@ -3,6 +3,7 @@ import { config as dotenvConfig } from 'dotenv';
 
 // MVCコンポーネントのインポート
 import { BatchProcessController } from '../../dist/js/controllers/BatchProcessController.js';
+import { consoleLogger } from '../../dist/js/modules/consoleLogger.js';
 
 // 環境変数の読み込み
 dotenvConfig({ path: '/app/.env' });
@@ -16,9 +17,9 @@ dotenvConfig({ path: '/app/.env' });
  * @returns {Promise<Object>} 処理結果の統計情報
  */
 export async function datasetLoop(datasetDir, outputPath, options = {}) {
-    console.log('🎮 MVC Controller Integration: Starting full implementation...');
-    console.log(`📂 Dataset: ${datasetDir}`);
-    console.log(`📁 Output: ${outputPath}`);
+    consoleLogger.log('🎮 MVC Controller Integration: Starting full implementation...');
+    consoleLogger.log(`📂 Dataset: ${datasetDir}`);
+    consoleLogger.log(`📁 Output: ${outputPath}`);
     
     // MVCコントローラーの初期化
     const processingOptions = {
@@ -37,7 +38,7 @@ export async function datasetLoop(datasetDir, outputPath, options = {}) {
     const startTime = Date.now();
     
     try {
-        console.log('🚀 Starting MVC batch processing...');
+        consoleLogger.log('🚀 Starting MVC batch processing...');
         
         // MVCアーキテクチャでバッチ処理実行
         await controller.runBatchProcessing(datasetDir);
