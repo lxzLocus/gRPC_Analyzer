@@ -21,7 +21,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 
-// 環境変数の設定
+// 環境変数の設定 
 config({ path: path.join(__dirname, '..', '.env') });
 
 /**
