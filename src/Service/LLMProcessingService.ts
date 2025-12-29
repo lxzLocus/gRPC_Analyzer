@@ -6,7 +6,7 @@
 import { DatasetRepository } from '../Repository/DatasetRepository.js';
 import { BatchProcessingOptions, LLMControllerResult } from '../types/BatchProcessTypes.js';
 import LLMFlowController from '../modules/llmFlowController.js';
-import Logger from '../modules/logger.js';
+import Logger from '../modules/Logger.js';
 
 // Node.js型の宣言
 declare const process: any;

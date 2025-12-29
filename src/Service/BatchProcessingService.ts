@@ -7,8 +7,8 @@ import { DatasetRepository } from '../Repository/DatasetRepository.js';
 import { LLMProcessingService } from './LLMProcessingService.js';
 import { ReportService } from './ReportService.js';
 import { MemoryManagementService } from './MemoryManagementService.js';
-import Logger from '../modules/logger.js';
-import { consoleLogger } from '../modules/consoleLogger.js';
+import Logger from '../modules/Logger.js';
+import { consoleLogger } from '../modules/ConsoleLogger.js';
 import { 
     ProcessingResult,
     ProcessingStatistics,

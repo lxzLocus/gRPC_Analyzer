@@ -16,8 +16,8 @@ import type {
     SummarizeResponse,
     SummarizationTriggerType
 } from './types.js';
-import Config from './config.js';
-import OpenAIClient from './openAIClient.js';
+import Config from './Config.js';
+import OpenAIClient from './OpenAIClient.js';
 
 class ConversationSummarizer {
     private config: Config;

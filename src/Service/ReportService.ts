@@ -8,7 +8,7 @@ import * as path from 'path';
 import { DatasetRepository } from '../Repository/DatasetRepository.js';
 import { ProcessingStatistics, ErrorReport } from '../types/BatchProcessTypes.js';
 import { getJSTFileTimestamp, getJSTTimestamp, convertUTCtoJST } from '../utils/timeUtils.js';
-import { consoleLogger } from '../modules/consoleLogger.js';
+import { consoleLogger } from '../modules/ConsoleLogger.js';
 
 // Node.js型の宣言
 declare const process: any;

@@ -7,9 +7,9 @@
 import { BatchProcessingService } from '../Service/BatchProcessingService.js';
 import { BatchProcessView } from '../views/BatchProcessView.js';
 import { MemoryManagementService } from '../Service/MemoryManagementService.js';
-import { ProgressTracker } from '../modules/progressTracker.js';
+import { ProgressTracker } from '../modules/ProgressTracker.js';
 import CostCalculator from '../utils/CostCalculator.js';
-import Config from '../modules/config.js';
+import Config from '../modules/Config.js';
 import { 
     ProcessingResult, 
     BatchProcessingOptions, 

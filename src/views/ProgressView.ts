@@ -4,7 +4,7 @@
  */
 
 import blessed from 'blessed';
-import { ProgressStats, TokenStats } from '../modules/progressTracker.js';
+import { ProgressStats, TokenStats } from '../modules/ProgressTracker.js';
 
 export interface ViewData {
     stats: ProgressStats;

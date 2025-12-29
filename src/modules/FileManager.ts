@@ -7,8 +7,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
 import { createRequire } from 'module';
-import Config from './config.js';
-import Logger from './logger.js';
+import Config from './Config.js';
+import Logger from './Logger.js';
 
 // ESModule環境でCommonJS moduleをimportするためのrequire関数
 const require = createRequire(import.meta.url);

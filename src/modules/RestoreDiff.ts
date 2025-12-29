@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import Logger from './logger.js';
+import Logger from './Logger.js';
 
 class RestoreDiff {
     private sourceCodePath: string;

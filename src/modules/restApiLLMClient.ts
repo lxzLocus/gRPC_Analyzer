@@ -4,7 +4,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios';
-import Config from './config.js';
+import Config from './Config.js';
 import { LLMClient, LLMRequest, LLMResponse } from './llmClient.js';
 
 export interface RestApiConfig {

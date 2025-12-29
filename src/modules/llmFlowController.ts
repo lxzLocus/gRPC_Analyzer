@@ -10,14 +10,14 @@ import { config } from 'dotenv';
 // 環境変数の設定
 config({ path: path.join(process.cwd(), '.env') });
 
-import RestoreDiff from './restoreDiff.js';
-import Logger from './logger.js';
-import Config from './config.js';
-import MessageHandler from './messageHandler.js';
-import FileManager from './fileManager.js';
-import OpenAIClient from './openAIClient.js';
+import RestoreDiff from './RestoreDiff.js';
+import Logger from './Logger.js';
+import Config from './Config.js';
+import MessageHandler from './MessageHandler.js';
+import FileManager from './FileManager.js';
+import OpenAIClient from './OpenAIClient.js';
 import LLMRetryEnhancer from './llmRetryEnhancer.js';
-import ConversationSummarizer from './conversationSummarizer.js';
+import ConversationSummarizer from './ConversationSummarizer.js';
 import { CrossReferenceAnalyzer } from './crossReferenceAnalyzer.js';
 import { 
     LLMParsed, 

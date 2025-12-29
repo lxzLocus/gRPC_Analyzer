@@ -3,7 +3,7 @@
  * modified: 0 lines などの不完全な応答を検出してリトライする
  */
 
-import Config from './config.js';
+import Config from './Config.js';
 
 export interface LLMRetryOptions {
     maxRetries: number;

@@ -12,7 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import Config from '../modules/config.js';
+import Config from '../modules/Config.js';
 import { LLMClientFactory } from '../modules/llmClientFactory.js';
 import { ThreePhaseFilteringEngine } from './threePhaseFilteringEngine.js';
 import { APREvaluation, ClassificationResult } from './datasetFilterClassifier.js';

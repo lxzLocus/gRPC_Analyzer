@@ -3,7 +3,7 @@
  * 新しいLLMクライアントシステムと既存コードの橋渡し
  */
 
-import Config from './config.js';
+import Config from './Config.js';
 import { LLMClientFactory } from './llmClientFactory.js';
 import { LLMClient } from './llmClient.js';
 

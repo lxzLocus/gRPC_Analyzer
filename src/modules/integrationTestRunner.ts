@@ -6,8 +6,8 @@
 import path from 'path';
 import fs from 'fs';
 import LLMFlowController from './llmFlowController.js';
-import Config from './config.js';
-import Logger from './logger.js';
+import Config from './Config.js';
+import Logger from './Logger.js';
 
 interface IntegrationTestConfig {
     projectPath: string;

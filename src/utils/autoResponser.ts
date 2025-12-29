@@ -15,8 +15,8 @@ import { getJSTTimestamp, getJSTFileTimestamp } from './timeUtils.js';
 /*
 modules
 */
-import Logger from "../modules/logger.js";
-import RestoreDiff from '../modules/restoreDiff.js';
+import Logger from "../modules/Logger.js";
+import RestoreDiff from '../modules/RestoreDiff.js';
 import LLMFlowController from '../modules/llmFlowController.js';
 
 //実行ファイルが置かれているパス

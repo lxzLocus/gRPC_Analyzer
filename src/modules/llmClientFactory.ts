@@ -3,7 +3,7 @@
  * 設定に基づいて適切なLLMクライアントを生成
  */
 
-import Config from './config.js';
+import Config from './Config.js';
 import { LLMClient } from './llmClient.js';
 import OpenAILLMClient from './openAILLMClient.js';
 import GeminiLLMClient from './geminiLLMClient.js';

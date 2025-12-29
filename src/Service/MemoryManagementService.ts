@@ -4,7 +4,7 @@
  */
 
 import { BatchProcessingOptions, MemoryUsageInfo } from '../types/BatchProcessTypes.js';
-import { consoleLogger } from '../modules/consoleLogger.js';
+import { consoleLogger } from '../modules/ConsoleLogger.js';
 
 // Node.js型の宣言
 declare const process: any;
