@@ -40,7 +40,7 @@ const AVAILABLE_DATASETS = [
  * デフォルト設定
  */
 const DEFAULT_CONFIG = {
-    selectedDatasetIndex: 4,    // filtered_bugs をデフォルト選択（実データあり）
+    selectedDatasetIndex: 0,    // filtered_bugs をデフォルト選択（実データあり）
     outputDir: "/app/output",
     processingOptions: {
         baseOutputDir: "/app/output",
@@ -230,7 +230,7 @@ async function main() {
         
         // コントローラーのインスタンスを作成
         controller = new BatchProcessController({
-            enableTUI: useBlessedView,
+            useBlessedView: useBlessedView,
             quietMode: quietMode,
             enablePreVerification: true,
             timeoutMs: 7200000, // 2時間
