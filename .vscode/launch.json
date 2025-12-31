@@ -26,15 +26,16 @@
             "name": "Docker Debug TypeScript",
             "type": "node",
             "request": "launch",
-            "preLaunchTask": "Compile TypeScript",
             "program": "${file}",
             "cwd": "${workspaceFolder}",
+            "runtimeArgs": ["--loader", "ts-node/esm"],
             "outFiles": ["${workspaceFolder}/**/*.js"],
             "env": {
                 "NODE_ENV": "development",
                 "DEBUG_MODE": "true"
             },
-            "envFile": "${workspaceFolder}/.env"
+            "envFile": "${workspaceFolder}/.env",
+            "console": "integratedTerminal"
         },
         {
             "name": "Docker Debug go",

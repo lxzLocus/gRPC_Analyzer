@@ -7,11 +7,11 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * 指定されたディレクトリの周辺構造を取得
- * @param targetPath - 対象のファイルまたはディレクトリパス
- * @param maxDepth - 最大探索深度（デフォルト: 3）
+ * 指定されたディレクトリの直下の構造を取得（1階層のみ）
+ * @param targetPath - 対象のディレクトリパス
+ * @param maxDepth - 使用されません（後方互換性のため残してあります）
  * @param excludePatterns - 除外するパターン
- * @returns ディレクトリ構造情報
+ * @returns ディレクトリ構造情報（機械可読形式）
  */
 export default function getSurroundingDirectoryStructure(
     targetPath: string, 
@@ -27,59 +27,46 @@ export default function getSurroundingDirectoryStructure(
         'tmp',
         'temp'
     ]
-): { structure: string; files: string[] } {
-    const basePath = path.dirname(targetPath);
+): { path: string; directories: string[]; files: string[]; note: string } {
+    const directories: string[] = [];
     const files: string[] = [];
     
-    /**
-     * 再帰的にディレクトリ構造を取得
-     */
-    function buildStructure(dirPath: string, depth: number = 0, prefix: string = ''): string {
-        if (depth > maxDepth) {
-            return '';
-        }
+    try {
+        const items = fs.readdirSync(targetPath, { withFileTypes: true });
         
-        let structure = '';
+        // 除外パターンのフィルタリング
+        const filteredItems = items.filter(item => 
+            !excludePatterns.some(pattern => item.name.includes(pattern))
+        );
         
-        try {
-            const items = fs.readdirSync(dirPath, { withFileTypes: true });
-            
-            // 除外パターンのフィルタリング
-            const filteredItems = items.filter(item => 
-                !excludePatterns.some(pattern => item.name.includes(pattern))
-            );
-            
-            filteredItems.forEach((item, index) => {
-                const isLast = index === filteredItems.length - 1;
-                const currentPrefix = isLast ? '└── ' : '├── ';
-                const nextPrefix = isLast ? '    ' : '│   ';
-                
-                structure += `${prefix}${currentPrefix}${item.name}\n`;
-                
-                const fullPath = path.join(dirPath, item.name);
-                
-                if (item.isDirectory()) {
-                    structure += buildStructure(
-                        fullPath, 
-                        depth + 1, 
-                        prefix + nextPrefix
-                    );
-                } else {
-                    files.push(fullPath);
-                }
-            });
-        } catch (error) {
-            console.warn(`Warning: Cannot read directory ${dirPath}:`, error);
-        }
+        // ディレクトリとファイルを分離
+        filteredItems.forEach((item) => {
+            if (item.isDirectory()) {
+                directories.push(item.name);
+            } else if (item.isFile()) {
+                files.push(item.name);
+            }
+        });
         
-        return structure;
+        // アルファベット順にソート
+        directories.sort();
+        files.sort();
+        
+    } catch (error) {
+        console.warn(`Warning: Cannot read directory ${targetPath}:`, error);
+        return {
+            path: targetPath,
+            directories: [],
+            files: [],
+            note: `Error: ${(error as Error).message}`
+        };
     }
     
-    const structure = buildStructure(basePath);
-    
     return {
-        structure: structure || 'No accessible directory structure found',
-        files: files.slice(0, 100) // 最大100ファイルまで
+        path: targetPath,
+        directories,
+        files,
+        note: "One-level listing only. Use DIRECTORY_LISTING again for deeper levels."
     };
 }
 

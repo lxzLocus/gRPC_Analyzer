@@ -44,12 +44,10 @@ import getChangedFiles from '../modules/generateFileChanged.js';
 // @ts-ignore: JS モジュールのため型チェックを無視
 import getPathTree from '../modules/generateDirPathLists.js';
 // @ts-ignore: JS モジュールのため型チェックを無視
-import getSurroundingDirectoryStructure from '../modules/generatePeripheralStructure.js';
-// @ts-ignore: JS モジュールのため型チェックを無視
 import {mergeStructures, findAllAndMergeProjectRoots} from '../modules/editFilePathStructure.js';
 
 /*config*/
-const datasetDir = '/app/dataset/test';
+const datasetDir = '/app/dataset/tmp';
 
 /* __MAIN__ */
 // main処理をasync関数でラップ
@@ -306,37 +304,103 @@ async function main() {
 
 
                 // ステップB: トップダウンでプロジェクト全体の詳細な構造を一度に取得
-                const structureSourcePath = pullRequestPath;
-                // ❗❗【最重要ポイント】❗❗
-                // depthを十分に大きく設定 (5〜6程度あれば殆どのプロジェクトで詳細まで取得可能)
-                // これにより、骨格と詳細の情報を一度で正確に取得します。
-                const rawStructure = getSurroundingDirectoryStructure(structureSourcePath, 5);
-
-                // rawStructureからpremerge_やmerge_等の中身をすべて探し、1つにマージする
-                const finalProjectStructure = findAllAndMergeProjectRoots(rawStructure);
-
-
-                // ステップC: 取得した構造がルートディレクトリか判定し、形式を整える
-                function isLikelyRepoRoot(structure: any) {
-                    const rootIndicators = ['.gitignore', 'LICENSE', 'README.md', 'Makefile', 'Tiltfile', 'go.mod', 'package.json', 'pyproject.toml', '.github', '.circleci'];
-                    return rootIndicators.some(indicator => Object.prototype.hasOwnProperty.call(structure, indicator));
-                }
-
-                let directoryStructure = {};
-                if (Object.keys(finalProjectStructure).length > 0) {
-                    if (isLikelyRepoRoot(finalProjectStructure)) {
-                        console.log("Final structure is likely a repository root. Wrapping with 'root' key.");
-                        directoryStructure = { "root": finalProjectStructure };
-                    } else {
-                        console.log("Final structure is likely a subdirectory. Using as is.");
-                        directoryStructure = finalProjectStructure;
+                // pullRequestPathの直下のcommit_snapshot_*またはmerge_*、premerge_*ディレクトリのみをスキャン
+                const entries = fs.readdirSync(pullRequestPath);
+                const projectRootDirs = entries.filter(entry => {
+                    const fullPath = path.join(pullRequestPath, entry);
+                    return fs.statSync(fullPath).isDirectory() && 
+                           (entry.startsWith('commit_snapshot_') || entry.startsWith('merge_') || entry.startsWith('premerge'));
+                });
+                
+                // 各プロジェクトルートの構造を取得してマージ
+                let finalProjectStructure: any = {};
+                for (const dir of projectRootDirs) {
+                    const dirPath = path.join(pullRequestPath, dir);
+                    const structure = getPathTree(dirPath);
+                    // 構造を直接マージ
+                    for (const key in structure) {
+                        if (!finalProjectStructure[key]) {
+                            finalProjectStructure[key] = structure[key];
+                        }
                     }
                 }
 
 
+                // ステップC': LLM向け「要約構造」を生成
+                /**
+                 * LLM初期入力用の要約構造を生成
+                 * - トップレベルディレクトリ一覧
+                 * - 変更ファイル近傍のみ展開（maxDepth階層まで）
+                 * @param fullStructure フル構造
+                 * @param changedFiles 変更ファイルリスト
+                 * @param maxDepth 展開する最大深度（デフォルト3）
+                 */
+                function buildLLMSummaryStructure(
+                    fullStructure: any,
+                    changedFiles: string[],
+                    maxDepth: number = 3
+                ): any {
+                    const summary: any = {};
+
+                    // トップレベルディレクトリをfullStructureから取得
+                    const topLevelDirsSet = new Set<string>();
+                    
+                    // fullStructureの全トップレベルキー（ディレクトリのみ）を追加
+                    if (fullStructure && typeof fullStructure === 'object') {
+                        Object.keys(fullStructure).forEach(key => {
+                            // ディレクトリのみを追加（値がnullでないもの=オブジェクトであるもの）
+                            if (fullStructure[key] !== null && typeof fullStructure[key] === 'object') {
+                                topLevelDirsSet.add(key);
+                            }
+                        });
+                    }
+                    
+                    // 念のため変更ファイルからも抽出（fullStructureに含まれていない場合のフォールバック）
+                    changedFiles.forEach(f => {
+                        const firstDir = f.split('/')[0];
+                        if (firstDir) {
+                            topLevelDirsSet.add(firstDir);
+                        }
+                    });
+
+                    summary.top_level = Array.from(topLevelDirsSet).sort();
+
+                    // 変更点近傍の骨格を構築（パスのみ、深さmaxDepthまで）
+                    summary.near_changed = {};
+                    
+                    changedFiles.forEach(filePath => {
+                        const parts = filePath.split('/');
+                        let currentLevel: any = summary.near_changed;
+                        
+                        // maxDepth階層まで、またはファイルの親ディレクトリまで
+                        const depth = Math.min(maxDepth, parts.length - 1);
+                        
+                        for (let i = 0; i < depth; i++) {
+                            const part = parts[i];
+                            if (!currentLevel[part]) {
+                                currentLevel[part] = {};
+                            }
+                            currentLevel = currentLevel[part];
+                        }
+                    });
+
+                    // LLMへの明示的な注記
+                    summary.note = "Partial project map focused on changed areas. Other directories exist at top_level. Use %_Reply Required_% for deeper exploration.";
+
+                    return summary;
+                }
+
+                // 要約構造を生成
+                const llmSummaryStructure = buildLLMSummaryStructure(
+                    finalProjectStructure,
+                    changedFiles,
+                    3 // 変更点から3階層まで展開
+                );
+
+
                 // ステップD: 最終的な出力オブジェクトを構築
                 const masterOutput = {
-                    "directory_structure": directoryStructure,
+                    "directory_structure": llmSummaryStructure, // ← 要約構造を使用
                     "categorized_changed_files": {
                         "proto_files": protoFiles,
                         "generated_files": generatedFiles,
