@@ -183,7 +183,7 @@ class FileManager {
         };
     }
 
-    readFirstPromptFile(): string {
+    readFirstPromptFile(pullRequestTitle?: string): string {
         console.log('📋 プロンプトファイルの読み込みを開始...');
         
         // メインプロンプトファイルの読み込み
@@ -216,7 +216,7 @@ class FileManager {
 
         // テンプレートコンテキストの構築と検証
         const context: PromptTemplateContext = {
-            pullRequestTitle: this.extractPullRequestTitle(),
+            pullRequestTitle: pullRequestTitle || this.extractPullRequestTitle(),
             protoFile: protoFileContent,
             protoFileChanges: protoFileChanges,
             fileChanges: fileChangesContent,

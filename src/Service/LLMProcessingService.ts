@@ -3,6 +3,7 @@
  * LLMFlowController の実行とリトライ処理を管理
  */
 
+import path from 'path';
 import { DatasetRepository } from '../Repository/DatasetRepository.js';
 import { BatchProcessingOptions, LLMControllerResult } from '../types/BatchProcessTypes.js';
 import LLMFlowController from '../modules/llmFlowController.js';
@@ -91,7 +92,12 @@ export class LLMProcessingService {
         const startTime = Date.now();
 
         try {
-            this.currentController = new LLMFlowController(premergeDir, {
+            // pullRequestTitleを抽出（パスから取得）
+            const pathParts = premergeDir.split(path.sep);
+            const prTitle = pathParts[pathParts.length - 2] || '';
+            const pullRequestTitle = prTitle.replace(/_/g, ' ');
+            
+            this.currentController = new LLMFlowController(premergeDir, pullRequestTitle, {
                 enablePreVerification: this.options.enablePreVerification ?? true
             });
             

@@ -83,6 +83,7 @@ class LLMFlowController {
     private startTime: string = '';
     private totalPromptTokens: number = 0;
     private totalCompletionTokens: number = 0;
+    private pullRequestTitle: string = '';
     
     // 対話状態管理
     private correctionGoals: string = ''; // 修正目標を保持
@@ -93,8 +94,9 @@ class LLMFlowController {
     // 処理オプション
     private enablePreVerification: boolean = true; // 事前検証を有効にするかどうか
 
-    constructor(pullRequestPath: string, options?: { enablePreVerification?: boolean }) {
+    constructor(pullRequestPath: string, pullRequestTitle?: string, options?: { enablePreVerification?: boolean }) {
         this.inputPremergeDir = pullRequestPath;
+        this.pullRequestTitle = pullRequestTitle || '';
         this.startTime = new Date().toISOString();
         
         // オプションの設定
@@ -334,7 +336,7 @@ class LLMFlowController {
         );
 
         // 初期プロンプト生成
-        this.next_prompt_content = this.fileManager.readFirstPromptFile();
+        this.next_prompt_content = this.fileManager.readFirstPromptFile(this.pullRequestTitle);
         this.prompt_template_name = this.config.promptTextfile;
         
         // ConversationSummarizer に初期メッセージを追加
