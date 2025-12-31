@@ -80,8 +80,10 @@ async function main() {
     const quietMode = forceTUI || hasNoConsoleLogArg;  // TUI使用時または明示指定時は詳細ログを抑制
     const consoleLogEnabled = hasForceConsoleLogArg ? true : !quietMode;
     
-    // Blessed TUI View の有効化フラグ（環境変数）
-    const useBlessedView = process.env.USE_BLESSED_VIEW === 'true';
+    // Blessed TUI View の有効化フラグ
+    // 環境変数が設定されていない場合は、引数なし実行時（forceTUI=true）にデフォルトで有効化
+    const useBlessedView = process.env.USE_BLESSED_VIEW === 'true' || 
+                           (process.env.USE_BLESSED_VIEW !== 'false' && forceTUI);
     
     // デバッグ: 環境変数の確認（quietModeに関わらず必ず出力）
     consoleLogger.forceLog(`🔍 Debug: USE_BLESSED_VIEW=${process.env.USE_BLESSED_VIEW}, useBlessedView=${useBlessedView}, forceTUI=${forceTUI}, quietMode=${quietMode}`);
