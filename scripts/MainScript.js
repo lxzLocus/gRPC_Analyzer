@@ -217,8 +217,7 @@ async function main() {
 
     try {
         // 動的インポートでコントローラーを読み込み
-        const controllerModule = await import('../src/Controller/Controller.js');
-        const { datasetLoop } = controllerModule;
+        const { BatchProcessController } = await import('../dist/js/controllers/BatchProcessController.js');
         
         if (quietMode) {
             const loggerModule = await import('../dist/js/utils/logger.js');
@@ -226,6 +225,15 @@ async function main() {
         } else {
             log('🎮 Starting batch processing...');
         }
+        
+        // コントローラーのインスタンスを作成
+        controller = new BatchProcessController({
+            enableTUI: useBlessedView,
+            quietMode: quietMode,
+            enablePreVerification: true,
+            timeoutMs: 7200000, // 2時間
+            maxRetries: 3
+        });
         
         // 2時間ごとに進捗を送信する定期処理を開始
         if (webhookClient) {
@@ -254,21 +262,13 @@ async function main() {
             log(`⏰ Progress update timer started (every ${DISCORD_PROGRESS_INTERVAL / 1000 / 60} minutes)\n`);
         }
         
-        // 処理の実行（patchEvaluationパターンを踏襲）
-        const stats = await datasetLoop(selectedDataset, outputDir, {
-            generateReport: true,
-            generateErrorReport: true,
-            processingOptions: options
-        });
+        // 処理の実行（BatchProcessControllerを使用）
+        log(`\n🚀 Starting batch processing for dataset: ${selectedDataset}`);
+        await controller.runBatchProcessing(selectedDataset);
 
         // 結果の表示
         log('\n🎉 MVC batch processing completed successfully!');
         log('========================================');
-        log(`✅ Success: ${stats.successfulPullRequests}/${stats.totalPullRequests}`);
-        
-        if (stats.totalPullRequests > 0) {
-            log(`📊 Success Rate: ${((stats.successfulPullRequests / stats.totalPullRequests) * 100).toFixed(1)}%`);
-        }
         
         log(`❌ Failed: ${stats.failedPullRequests}`);
         log(`⏭️ Skipped: ${stats.skippedPullRequests}`);
