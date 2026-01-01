@@ -237,25 +237,25 @@ async function main() {
             maxRetries: 3
         });
         
+        // 開始時刻を記録
+        const batchStartTime = Date.now();
+        
         // 2時間ごとに進捗を送信する定期処理を開始
         if (webhookClient) {
             progressInterval = setInterval(async () => {
                 try {
                     log('\n⏰ Sending periodic progress update to Discord...');
-                    // ProgressTrackerから統計を取得する必要があるため、
-                    // ここでは仮の統計を送信（実際の統計は後で追加）
-                    const currentStats = {
-                        total: 0,
-                        processed: 0,
-                        successful: 0,
-                        failed: 0,
-                        skipped: 0,
-                        startTime: Date.now()
-                    };
                     
-                    // TODO: 実際のProgressTrackerの統計を取得
-                    // await webhookClient.sendProgress(currentStats, selectedDataset);
-                    log('⏰ Progress update scheduled (implementation pending)');
+                    // ControllerのProgressTrackerから統計を取得
+                    const tracker = controller.getProgressTracker();
+                    if (tracker) {
+                        const currentStats = tracker.getStats();
+                        currentStats.startTime = batchStartTime;
+                        await webhookClient.sendProgress(currentStats, selectedDataset);
+                        log('✅ Progress update sent to Discord');
+                    } else {
+                        log('⚠️  ProgressTracker not available yet');
+                    }
                 } catch (webhookError) {
                     consoleLogger.warn('⚠️  Failed to send progress update:', webhookError.message);
                 }
@@ -266,32 +266,39 @@ async function main() {
         
         // 処理の実行（BatchProcessControllerを使用）
         log(`\n🚀 Starting batch processing for dataset: ${selectedDataset}`);
-        await controller.runBatchProcessing(selectedDataset);
+        const stats = await controller.runBatchProcessing(selectedDataset);
 
         // 結果の表示
         log('\n🎉 MVC batch processing completed successfully!');
         log('========================================');
         
-        log(`❌ Failed: ${stats.failedPullRequests}`);
-        log(`⏭️ Skipped: ${stats.skippedPullRequests}`);
-        
-        if (stats.totalDuration) {
-            log(`⏱️ Total Duration: ${formatDuration(stats.totalDuration)}`);
+        if (stats) {
+            log(`✅ Successful: ${stats.successfulPullRequests || stats.successful || 0}`);
+            log(`❌ Failed: ${stats.failedPullRequests || stats.failed || 0}`);
+            log(`⏭️ Skipped: ${stats.skippedPullRequests || stats.skipped || 0}`);
+            
+            if (stats.totalDuration) {
+                log(`⏱️ Total Duration: ${formatDuration(stats.totalDuration)}`);
+            }
+        } else {
+            log('⚠️  No statistics available');
         }
         
         log('========================================');
         
         // Discord通知: 正常終了
-        if (webhookClient) {
+        if (webhookClient && stats) {
             try {
                 log('\n📤 Sending final results to Discord...');
                 const finalStats = {
-                    total: stats.totalPullRequests,
-                    processed: stats.successfulPullRequests + stats.failedPullRequests + stats.skippedPullRequests,
-                    successful: stats.successfulPullRequests,
-                    failed: stats.failedPullRequests,
-                    skipped: stats.skippedPullRequests,
-                    startTime: Date.now() - (stats.totalDuration || 0)
+                    total: stats.totalPullRequests || stats.total || 0,
+                    processed: (stats.successfulPullRequests || stats.successful || 0) + 
+                              (stats.failedPullRequests || stats.failed || 0) + 
+                              (stats.skippedPullRequests || stats.skipped || 0),
+                    successful: stats.successfulPullRequests || stats.successful || 0,
+                    failed: stats.failedPullRequests || stats.failed || 0,
+                    skipped: stats.skippedPullRequests || stats.skipped || 0,
+                    startTime: batchStartTime
                 };
                 await webhookClient.sendFinalResult(finalStats, selectedDataset, true);
                 log('✅ Final results sent to Discord');

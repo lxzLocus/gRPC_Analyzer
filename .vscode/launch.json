@@ -38,6 +38,20 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Docker Debug TypeScript (tsx)",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npx",
+            "runtimeArgs": ["tsx", "${file}"],
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "NODE_ENV": "development",
+                "DEBUG_MODE": "true"
+            },
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Docker Debug go",
             "type": "go",
             "request": "launch",

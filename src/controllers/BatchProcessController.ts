@@ -117,6 +117,14 @@ export class BatchProcessController {
     }
 
     /**
+     * ProgressTrackerインスタンスを取得
+     * MainScriptからの定期報告用
+     */
+    public getProgressTracker(): ProgressTracker | null {
+        return this.progressTracker;
+    }
+
+    /**
      * 全PRの総数を事前にカウント
      */
     private async countTotalPullRequests(datasetDir: string, repositories: string[]): Promise<number> {
@@ -352,13 +360,10 @@ export class BatchProcessController {
             }
             
             console.error(`❌ Error processing pull request ${pullRequestTitle}:`, error);
-            await this.service.recordError(
-                repositoryName,
-                category,
-                pullRequestTitle,
-                error,
-                'PULLREQUEST_PROCESSING'
-            );
+            
+            // エラーはBatchProcessingService内で既に記録されているため、
+            // ここでは重複記録を避ける（Controllerレベルの致命的エラー時のみ記録）
+            // await this.service.recordError(...) は削除
         }
     }
 

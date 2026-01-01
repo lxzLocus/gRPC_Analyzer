@@ -358,6 +358,11 @@ export class ProgressTracker {
                  message.includes('Error') || 
                  message.includes('Failed') ||
                  message.includes('[ERROR')) {
+            // 重複チェック: 同じメッセージが最後に追加されている場合はスキップ
+            const lastError = this.errorLogs[this.errorLogs.length - 1];
+            if (lastError === message) {
+                return; // 重複エラーをスキップ
+            }
             this.errorLogs.push(message);
             if (this.errorLogs.length > 10) {
                 this.errorLogs.shift();

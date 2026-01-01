@@ -1056,6 +1056,8 @@ export class HTMLReportService {
             if (pair.evaluationSkipReason) {
                 // スキップされたケース
                 const skipData = this.extractPairDetails(pair, 'SKIPPED');
+                // skipReasonを明示的に追加
+                skipData.skipReason = pair.evaluationSkipReason;
                 detailedData.correctnessLevels.skipped.push(skipData);
                 detailedData.plausibilityLevels.skipped.push(skipData);
                 return;
@@ -1070,6 +1072,10 @@ export class HTMLReportService {
                 evaluation = pair.finalModification.llmEvaluation;
                 if (evaluation.error) {
                     const errorData = this.extractPairDetails(pair, 'ERROR');
+                    // スキップ理由を設定
+                    if (pair.finalModification.evaluationSkipped && pair.finalModification.skipReason) {
+                        errorData.skipReason = pair.finalModification.skipReason;
+                    }
                     detailedData.correctnessLevels.skipped.push(errorData);
                     detailedData.plausibilityLevels.skipped.push(errorData);
                     return;
@@ -1083,6 +1089,10 @@ export class HTMLReportService {
             } else {
                 // 評価結果なし
                 const errorData = this.extractPairDetails(pair, 'ERROR');
+                // finalModificationにskipReasonがある場合は設定
+                if (pair.finalModification && pair.finalModification.evaluationSkipped && pair.finalModification.skipReason) {
+                    errorData.skipReason = pair.finalModification.skipReason;
+                }
                 detailedData.correctnessLevels.skipped.push(errorData);
                 detailedData.plausibilityLevels.skipped.push(errorData);
                 return;
@@ -1260,9 +1270,12 @@ export class HTMLReportService {
             console.log(`📋 評価結果抽出: ${pair.evaluationResult.result} (スコア: ${details.semanticSimilarityScore}) (${pair.datasetEntry})`);
         }
 
-        // エラー情報の抽出
+        // エラー情報の抽出（複数のソースから試行）
         if (pair.evaluationSkipReason) {
             details.skipReason = pair.evaluationSkipReason;
+        } else if (pair.finalModification && pair.finalModification.evaluationSkipped && pair.finalModification.skipReason) {
+            // finalModificationにskipReasonがある場合
+            details.skipReason = pair.finalModification.skipReason;
         }
 
         return details;

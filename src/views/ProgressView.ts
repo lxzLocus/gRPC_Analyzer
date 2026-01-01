@@ -33,7 +33,7 @@ export class ProgressView {
         this.screen = blessed.screen({
             smartCSR: true,
             title: 'APR Processing Monitor',
-            fullUnicode: false,
+            fullUnicode: true,  // Unicode絵文字を正しく表示
             dockBorders: true,
             autoPadding: true
         });
@@ -172,12 +172,24 @@ export class ProgressView {
 
     private stripEmojis(text: string): string {
         return text
-            .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-            .replace(/[\u{2600}-\u{26FF}]/gu, '')
-            .replace(/[\u{2700}-\u{27BF}]/gu, '')
+            // ANSIエスケープシーケンスを削除
+            .replace(/\x1b\[[0-9;]*m/g, '')
+            // 絵文字ブロック（包括的）
+            .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+            // 追加の絵文字ブロック
+            .replace(/[\u{2600}-\u{27BF}]/gu, '')
+            // 異体字セレクタ
             .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
-            .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')
-            .replace(/🔍|🚀|✅|❌|⚠️|📊|🎨|🔄|💡|📦|🤖|🕒|📈|🔇|🎮|🎉|🎯|⏱️|⏭️|🎫|📤|💰/g, '')
+            // ゼロ幅文字
+            .replace(/[\u{200D}\u{200C}]/gu, '')
+            // 一般的な絵文字（フォールバック）
+            .replace(/\uD83C[\uDF00-\uDFFF]|\uD83D[\uDC00-\uDE4F]|\uD83D[\uDE80-\uDEFF]|[\u2600-\u27BF]/g, '')
+            // Box Drawing Characters (囲み線)
+            .replace(/[\u2500-\u257F]/g, '')
+            // Block Elements
+            .replace(/[\u2580-\u259F]/g, '')
+            // 複数のスペースを1つに
+            .replace(/ {2,}/g, ' ')
             .trim();
     }
 

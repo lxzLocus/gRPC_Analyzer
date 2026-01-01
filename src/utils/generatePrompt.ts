@@ -3,6 +3,9 @@ Docs
 
 プロンプトに埋め込むための，txtファイルを出力するプログラム
 
+
+npx tsx generatePrompt.ts
+
 対象
 - 01_proto.txt
 - 02_protoFileChanges.txt

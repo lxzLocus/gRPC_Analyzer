@@ -7,6 +7,7 @@
  */
 
 import axios from 'axios';
+import { consoleLogger } from '../../dist/js/modules/consoleLogger.js';
 
 export class DiscordWebhook {
     /**
@@ -34,15 +35,16 @@ export class DiscordWebhook {
             };
 
             const response = await axios.post(this.webhookUrl, payload);
-            console.log(`📤 Discord webhook sent - Status: ${response.status}`);
+            consoleLogger.forceLog(`📤 Discord webhook sent - Status: ${response.status}`);
             return response.status;
         } catch (error) {
-            console.error(`❌ Discord webhook error: ${error.message}`);
+            consoleLogger.warn(`❌ Discord webhook error: ${error.message}`);
             if (error.response) {
-                console.error(`   Status: ${error.response.status}`);
-                console.error(`   Data: ${JSON.stringify(error.response.data)}`);
+                consoleLogger.warn(`   Status: ${error.response.status}`);
+                consoleLogger.warn(`   Data: ${JSON.stringify(error.response.data)}`);
             }
-            throw error;
+            // エラーをthrowせず、処理を継続させる
+            return error.response ? error.response.status : 0;
         }
     }
 
