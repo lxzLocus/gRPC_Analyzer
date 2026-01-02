@@ -100,7 +100,6 @@ class Config {
     inputDir: string;
     promptDir: string;
     promptTextfile: string;
-    promptRefineTextfile: string;
     tmpDiffRestorePath: string;
     maxTokens: number;
 
@@ -123,7 +122,6 @@ class Config {
         this.inputDir = path.join(APP_DIR, 'input');
         this.promptDir = this.getConfigValue('paths.promptDir', path.join(APP_DIR, 'prompts'));
         this.promptTextfile = '00_prompt_gem.txt'; // Gemini用プロンプトに変更
-        this.promptRefineTextfile = '00_promptRefine.txt';
         this.tmpDiffRestorePath = path.join(this.outputDir + 'tmpDiffRestore.txt');
         this.maxTokens = this.getConfigValue('llm.maxTokens', 128000);
 
@@ -346,31 +344,7 @@ class Config {
         return template(context);
     }
 
-    readPromptModifiedFile(
-        modifiedFiles: string, 
-        currentPlan?: string, 
-        currentThought?: string,
-        filesRequested?: string,
-        previousModifications?: string,
-        previousThought?: string,
-        previousPlan?: string,
-        correctionGoals?: string
-    ): string {
-        const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified.txt'), 'utf-8');
-
-        const context = {
-            modifiedFiles: modifiedFiles, // diff that was just applied or restored
-            currentPlan: currentPlan || '', // 現在のプラン
-            currentThought: currentThought || '', // 現在の思考
-            filesRequested: filesRequested || '', // リクエストされたファイル
-            previousModifications: previousModifications || '', // 過去の修正
-            previousThought: previousThought || '', // 過去の思考
-            previousPlan: previousPlan || '', // 過去のプラン
-            correctionGoals: correctionGoals || '' // 修正目標
-        };
-        const template = Handlebars.compile(promptRefineText, { noEscape: true });
-        return template(context);
-    }
+    // readPromptModifiedFile は readPromptModifiedEnhancedFile に置き換えられました
 
     /**
      * 対話履歴要約用プロンプトファイルを読み込み
