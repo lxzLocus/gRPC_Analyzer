@@ -1803,6 +1803,34 @@ Please respond again using only the allowed tags.`;
                 console.log(`✅ Status updated to 'Completed (Implicit)' based on post-processing logic.`);
                 console.log(`   Reason: Found %_Modified_% tag without explicit %%_Fin_%% tag`);
             }
+            // 修正不要と判断したケース: 最終ターンのreply_requiredが空で、思考に"no modifications"的な内容がある
+            else {
+                const interactionLog = this.logger.getInteractionLog();
+                if (interactionLog.length > 0) {
+                    const lastTurn = interactionLog[interactionLog.length - 1] as any;
+                    const replyRequired = lastTurn.llm_response?.parsed_content?.reply_required;
+                    const thought = lastTurn.llm_response?.parsed_content?.thought || '';
+                    
+                    if (replyRequired && Array.isArray(replyRequired) && replyRequired.length === 0) {
+                        const noModsKeywords = [
+                            'no code modifications',
+                            'no modifications needed',
+                            'no fixes needed',
+                            'nothing to change',
+                            'not appropriate',
+                            'preparatory only',
+                            'no changes required',
+                            'no modifications are appropriate'
+                        ];
+                        
+                        if (noModsKeywords.some(keyword => thought.toLowerCase().includes(keyword))) {
+                            status = 'Completed (No Changes Needed)';
+                            console.log(`✅ Status updated to 'Completed (No Changes Needed)' based on analysis.`);
+                            console.log(`   Reason: Empty reply_required with "no modifications" reasoning`);
+                        }
+                    }
+                }
+            }
         }
         
         // LLMプロバイダー情報を取得（Configクラスから）
