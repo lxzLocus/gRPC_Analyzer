@@ -4,6 +4,9 @@
  */
 
 import type { LLMParsed, RequiredFileInfo } from './types.js';
+import type { AgentState } from '../types/AgentState.js';
+import { ALLOWED_ACTIONS_BY_STATE } from '../types/AgentState.js';
+import { ValidationError } from '../types/ValidationError.js';
 
 class MessageHandler {
     messagesTemplate: Array<{ role: string, content: string }>;
@@ -26,7 +29,27 @@ class MessageHandler {
         return this.messagesTemplate;
     }
 
-    analyzeMessages(messages: string): LLMParsed {
+    /**
+     * アクション型の検証
+     * @param requestedAction リクエストされたアクション型
+     * @param currentState 現在のFSM状態
+     * @param path 対象パス
+     * @throws ValidationError アクション型が状態で許可されていない場合
+     */
+    private validateActionType(requestedAction: string, currentState: AgentState, path: string): void {
+        const allowedActions = ALLOWED_ACTIONS_BY_STATE[currentState];
+        
+        if (!allowedActions.includes(requestedAction)) {
+            throw new ValidationError({
+                type: 'ACTION_NOT_ALLOWED_IN_STATE',
+                requestedAction: requestedAction as 'FILE_CONTENT' | 'DIRECTORY_LISTING',
+                path: path,
+                allowedActions: allowedActions
+            });
+        }
+    }
+
+    analyzeMessages(messages: string, currentState?: AgentState): LLMParsed {
         const sections = {
             thought: null as string | null,
             plan: null as string | null,
@@ -68,6 +91,12 @@ class MessageHandler {
                                         type: item.type === 'DIRECTORY_LISTING' ? 'DIRECTORY_LISTING' : 'FILE_CONTENT',
                                         path: path
                                     };
+                                    
+                                    // アクション型の検証（現在の状態が提供されている場合）
+                                    if (currentState) {
+                                        this.validateActionType(fileInfo.type, currentState, path);
+                                    }
+                                    
                                     sections.requiredFileInfos.push(fileInfo);
                                     sections.requiredFilepaths.push(path);
                                     console.log(`📄 Added file from standalone JSON: ${path} (${fileInfo.type})`);
@@ -528,6 +557,11 @@ class MessageHandler {
                     if (pathMatch) {
                         const path = pathMatch[1];
                         const type = (typeMatch && typeMatch[1] === 'DIRECTORY_LISTING') ? 'DIRECTORY_LISTING' : 'FILE_CONTENT';
+                        
+                        // アクション型の検証（現在の状態が提供されている場合）
+                        if (currentState) {
+                            this.validateActionType(type, currentState, path);
+                        }
                         
                         console.log(`📁 Extracted: ${type} - ${path}`);
                         const fileInfo: RequiredFileInfo = { type, path };

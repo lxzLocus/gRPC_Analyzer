@@ -35,6 +35,14 @@ IMPORTANT: Do not use `%%_Fin_%%` unless you are in READY_TO_FINISH state. The s
 ---
 ## Context ##
 
+{{#if errorContext}}
+### Error Context ###
+{{errorContext}}
+
+### Current Working Set ###
+{{currentWorkingSet}}
+
+{{/if}}
 ### Pull Request Title (Hint) ###
 {{pullRequestTitle}}
 
@@ -77,8 +85,14 @@ IMPORTANT: Do not use `%%_Fin_%%` unless you are in READY_TO_FINISH state. The s
 %_Reply Required_%
 [
   {"type": "FILE_CONTENT", "path": "path/to/needed_file_A.ext"},
-  {"type": "DIRECTORY_LISTING", "path": "path/to/some_directory/"} // New capability
+  {"type": "DIRECTORY_LISTING", "path": "path/to/some_directory/"}
 ]
+
+**IMPORTANT - Action Types**:
+- The "type" field in %_Reply Required_% must use ONLY the allowed action types listed in System State
+- Do NOT invent new action types (e.g., "SEARCH", "READ_FILE", etc.)
+- Available types are defined by your current FSM state
+- The "action" field in %_Plan_% is for documentation only and is NOT executed by the system
 
 **Guideline**: Prioritize completing your analysis and plan before requesting files. However, do not hesitate to use `%_Reply Required_%` if you determine that essential information is missing to create a correct and complete patch.
 

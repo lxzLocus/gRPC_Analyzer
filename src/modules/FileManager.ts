@@ -21,6 +21,7 @@ import type {
     FileProcessingSummary,
     FileOperationConfig
 } from './types.js';
+import { ValidationError } from '../types/ValidationError.js';
 // @ts-ignore: 動的インポートのため型チェックを無視  
 import getSurroundingDirectoryStructure from './generatePeripheralStructure.js';
 
@@ -54,6 +55,45 @@ class FileManager {
     constructor(config: Config, logger: Logger) {
         this.config = config;
         this.logger = logger;
+    }
+
+    /**
+     * パス種別の検証
+     * @param requestedAction リクエストされたアクション型
+     * @param targetPath 対象パス
+     * @throws ValidationError パスの種別とアクション型が一致しない場合
+     */
+    validatePathType(requestedAction: 'FILE_CONTENT' | 'DIRECTORY_LISTING', targetPath: string): void {
+        const fullPath = path.join(this.config.inputProjectDir, targetPath);
+        
+        try {
+            const stats = fs.statSync(fullPath);
+            
+            if (requestedAction === 'FILE_CONTENT' && stats.isDirectory()) {
+                throw new ValidationError({
+                    type: 'INVALID_ACTION_FOR_PATH',
+                    requestedAction: 'FILE_CONTENT',
+                    path: targetPath,
+                    hint: 'DIRECTORY_LISTING'
+                });
+            }
+            
+            if (requestedAction === 'DIRECTORY_LISTING' && stats.isFile()) {
+                throw new ValidationError({
+                    type: 'INVALID_ACTION_FOR_PATH',
+                    requestedAction: 'DIRECTORY_LISTING',
+                    path: targetPath,
+                    hint: 'FILE_CONTENT'
+                });
+            }
+        } catch (error) {
+            // ValidationErrorはそのまま再スロー
+            if (error instanceof ValidationError) {
+                throw error;
+            }
+            // ファイル/ディレクトリが存在しない場合はバリデーションスキップ
+            // （後続の処理でファイル不在エラーとして処理される）
+        }
     }
 
     /**
@@ -181,6 +221,72 @@ class FileManager {
             isValid: errors.length === 0,
             errors
         };
+    }
+
+    /**
+     * エラーリカバリー用の初期プロンプトファイル読み込み
+     * 通常プロンプトにError ContextとCurrent Working Setを注入
+     * @param systemState FSM状態情報
+     * @param errorContext エラーコンテキスト（YAML形式）
+     * @param currentWorkingSet 現在の作業セット
+     * @returns 生成されたプロンプト文字列
+     */
+    readFirstPromptFileWithErrorContext(systemState: string, errorContext: string, currentWorkingSet: string): string {
+        console.log('📋 エラーリカバリー用プロンプトファイルの読み込みを開始...');
+        
+        // メインプロンプトファイルの読み込み（通常と同じ）
+        const promptText = this.safeReadPromptFile(
+            this.config.promptTextfile,
+            '# デフォルトプロンプト\n\nFix or improve program code related to gRPC. It may contain potential bugs. Refer to the proto to make code corrections.\n\n{{protoFile}}\n{{protoFileChanges}}\n{{fileChanges}}\n{{surroundedFilePath}}\n{{suspectedFiles}}'
+        );
+
+        // 各プロンプトファイルの読み込み（通常と同じ）
+        const protoFileContent = this.safeReadPromptFile(
+            this.defaultPromptFiles.protoFile,
+            '# プロトファイル情報が利用できません'
+        );
+        const protoFileChanges = this.safeReadPromptFile(
+            this.defaultPromptFiles.protoFileChanges,
+            '# プロトファイル変更情報が利用できません'
+        );
+        const fileChangesContent = this.safeReadPromptFile(
+            this.defaultPromptFiles.fileChanges,
+            '# ファイル変更情報が利用できません'
+        );
+        const surroundedFilePath = this.safeReadPromptFile(
+            this.defaultPromptFiles.surroundedFilePath,
+            '# ファイルパス情報が利用できません'
+        );
+        const suspectedFiles = this.safeReadPromptFile(
+            this.defaultPromptFiles.suspectedFiles,
+            '# 疑わしいファイル情報が利用できません'
+        );
+
+        // テンプレートコンテキストの構築（Error Contextを追加）
+        const context: any = {
+            pullRequestTitle: this.extractPullRequestTitle(),
+            protoFile: protoFileContent,
+            protoFileChanges: protoFileChanges,
+            fileChanges: fileChangesContent,
+            surroundedFilePath: surroundedFilePath,
+            suspectedFiles: suspectedFiles,
+            systemState: systemState,
+            // エラーリカバリー用の追加情報
+            errorContext: errorContext,
+            currentWorkingSet: currentWorkingSet
+        };
+
+        // Handlebarsテンプレートのコンパイルと実行
+        try {
+            const template = Handlebars.compile(promptText, { noEscape: true });
+            const result = template(context);
+            console.log('✅ エラーリカバリー用プロンプトファイルの読み込み完了');
+            return result;
+        } catch (error) {
+            console.error('❌ Handlebarsテンプレートのコンパイルエラー:', (error as Error).message);
+            console.warn('⚠️  フォールバック: 変数展開なしのプロンプトテキストを返します');
+            return promptText;
+        }
     }
 
     readFirstPromptFile(systemState?: string): string {

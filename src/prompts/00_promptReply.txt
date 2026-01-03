@@ -59,6 +59,11 @@ Review the new information in the `Context` section. In the `%_Thought_%` sectio
   {"type": "FILE_CONTENT", "path": "path/to/another_file.ext"}
 ]
 
+**IMPORTANT - Action Types**:
+- The "type" field must use ONLY the allowed action types listed in System State
+- Do NOT invent new action types (e.g., "SEARCH", "READ_FILE", etc.)
+- Available types are defined by your current FSM state
+
 // --- OR ---
 
 %_Modified_%

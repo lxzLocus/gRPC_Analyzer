@@ -71,6 +71,45 @@ export const ALLOWED_TAGS_BY_STATE: Record<AgentState, string[]> = {
 };
 
 /**
+ * 各状態で許可されるアクションタイプの定義
+ * %_Reply Required_% タグ内で使用可能なアクションを制限
+ * 
+ * アクションタイプ:
+ * - FILE_CONTENT: ファイルの内容を取得
+ * - DIRECTORY_LISTING: ディレクトリの一覧を取得
+ * 
+ * 注意: 
+ * - LLMが新しいアクションタイプを発明してはいけない
+ * - 未知のアクションタイプはcorrective retryの対象
+ */
+export const ALLOWED_ACTIONS_BY_STATE: Record<AgentState, string[]> = {
+  [AgentState.ANALYSIS]: [
+    'FILE_CONTENT',
+    'DIRECTORY_LISTING'
+  ],
+  [AgentState.AWAITING_INFO]: [
+    // 内部専用状態：LLMはこの状態を見ない
+  ],
+  [AgentState.MODIFYING]: [
+    'FILE_CONTENT',
+    'DIRECTORY_LISTING'
+  ],
+  [AgentState.VERIFYING]: [
+    // 検証フェーズでは通常ファイルリクエスト不要
+  ],
+  [AgentState.READY_TO_FINISH]: [
+    // 終了準備状態ではファイルリクエスト不要
+  ],
+  [AgentState.FINISHED]: [
+    // 終了状態
+  ],
+  [AgentState.ERROR]: [
+    'FILE_CONTENT',
+    'DIRECTORY_LISTING'
+  ]
+};
+
+/**
  * 状態遷移の定義
  * 各状態から遷移可能な次の状態を定義
  * 
@@ -162,6 +201,7 @@ export interface AgentStateContext {
  * プロンプトの System State セクションに埋め込むための関数
  * 
  * @param state 現在のエージェント状態
+ * @param tagViolationNote タグ違反時の補足メッセージ（オプション）
  * @returns フォーマットされたシステム状態文字列
  * 
  * @example
@@ -173,13 +213,20 @@ export interface AgentStateContext {
  * //   - %_Verification_Report_%
  * //   - %_Thought_%
  * // Do not output any other tags.
+ * // 
+ * // allowed_actions (for %_Reply Required_%):
+ * //   - FILE_CONTENT
+ * //   - DIRECTORY_LISTING
+ * // Do not use any other action types.
  * ```
  */
 export function formatSystemState(state: AgentState, tagViolationNote?: string): string {
   const allowedTags = ALLOWED_TAGS_BY_STATE[state];
+  const allowedActions = ALLOWED_ACTIONS_BY_STATE[state];
   
   let result = `current_state: ${state}\n`;
   
+  // 許可されたタグの列挙
   if (allowedTags.length > 0) {
     result += `allowed_tags:\n`;
     allowedTags.forEach(tag => {
@@ -188,6 +235,18 @@ export function formatSystemState(state: AgentState, tagViolationNote?: string):
     result += `Do not output any other tags.`;
   } else {
     result += `allowed_tags: []\nNo tags are allowed in this state.`;
+  }
+  
+  // 許可されたアクションの列挙
+  result += `\n\n`;
+  if (allowedActions.length > 0) {
+    result += `allowed_actions (for %_Reply Required_%):\n`;
+    allowedActions.forEach(action => {
+      result += `  - ${action}\n`;
+    });
+    result += `Do not use any other action types.`;
+  } else {
+    result += `allowed_actions: []\nNo file requests are allowed in this state.`;
   }
   
   // 状態遷移のフローと%%_Fin_%%の使用条件を追加
