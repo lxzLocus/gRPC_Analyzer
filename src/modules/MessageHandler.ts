@@ -59,6 +59,7 @@ class MessageHandler {
             modifiedDiff: '',
             commentText: '',
             has_fin_tag: false,
+            has_no_changes_needed: false,
             ready_for_final_check: false // 最終確認フラグ
         };
 
@@ -144,7 +145,14 @@ class MessageHandler {
                 break;
             }
             
-            // 【優先2】最終確認準備完了タグ
+            // 【優先2】修正不要タグ
+            if (trimmed === '%_No_Changes_Needed_%' || trimmed.includes('%_No_Changes_Needed_%')) {
+                sections.has_no_changes_needed = true;
+                console.log('✅ Found %_No_Changes_Needed_% tag');
+                break;
+            }
+            
+            // 【優先3】最終確認準備完了タグ
             if (trimmed === '%_Ready_For_Final_Check_%' || trimmed.includes('%_Ready_For_Final_Check_%')) {
                 sections.ready_for_final_check = true;
                 console.log('✅ Found %_Ready_For_Final_Check_% tag');

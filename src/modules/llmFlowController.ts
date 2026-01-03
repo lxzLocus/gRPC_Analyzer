@@ -1790,8 +1790,13 @@ Please respond again using only the allowed tags.`;
         // 基本的なステータス判定
         let status = this.context.llmParsed?.has_fin_tag ? 'Completed (%%_Fin_%%)' : 'Incomplete';
         
-        // 後処理による完了判定ロジック（安全策）
-        if (status === 'Incomplete' && !this.context.llmParsed?.has_fin_tag) {
+        // 優先1: %_No_Changes_Needed_%タグによる完了
+        if (this.context.llmParsed?.has_no_changes_needed) {
+            status = 'Completed (No Changes Needed)';
+            console.log(`✅ Status: 'Completed (No Changes Needed)' via explicit tag`);
+        }
+        // 後処理による完了判定ロジック（安全策・フォールバック）
+        else if (status === 'Incomplete' && !this.context.llmParsed?.has_fin_tag) {
             // ログ内に一度でも%_Modified_%が存在した場合の暗黙的完了判定
             const hasModification = this.logger.getInteractionLog().some((turn: any) => 
                 turn.llm_response?.parsed_content?.modified_diff || 
@@ -1803,7 +1808,7 @@ Please respond again using only the allowed tags.`;
                 console.log(`✅ Status updated to 'Completed (Implicit)' based on post-processing logic.`);
                 console.log(`   Reason: Found %_Modified_% tag without explicit %%_Fin_%% tag`);
             }
-            // 修正不要と判断したケース: 最終ターンのreply_requiredが空で、思考に"no modifications"的な内容がある
+            // 修正不要と判断したケース（暗黙的検出・フォールバック）
             else {
                 const interactionLog = this.logger.getInteractionLog();
                 if (interactionLog.length > 0) {
@@ -1824,9 +1829,9 @@ Please respond again using only the allowed tags.`;
                         ];
                         
                         if (noModsKeywords.some(keyword => thought.toLowerCase().includes(keyword))) {
-                            status = 'Completed (No Changes Needed)';
-                            console.log(`✅ Status updated to 'Completed (No Changes Needed)' based on analysis.`);
-                            console.log(`   Reason: Empty reply_required with "no modifications" reasoning`);
+                            status = 'Completed (No Changes Needed - Implicit)';
+                            console.log(`✅ Status updated to 'Completed (No Changes Needed - Implicit)' based on analysis.`);
+                            console.log(`   Reason: Empty reply_required with "no modifications" reasoning (fallback detection)`);
                         }
                     }
                 }

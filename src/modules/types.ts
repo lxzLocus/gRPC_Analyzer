@@ -69,6 +69,7 @@ export type LLMParsed = {
     modifiedDiff: string;
     commentText: string;
     has_fin_tag: boolean;
+    has_no_changes_needed: boolean; // 修正不要タグ
     ready_for_final_check?: boolean; // 最終確認フラグ
     // 新しいフィールド：LLMからの進行状況指示
     suggestedPhase?: ProcessingPhase;

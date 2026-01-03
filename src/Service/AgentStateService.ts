@@ -202,6 +202,16 @@ export class AgentStateService {
       return undefined;
     }
 
+    // %_No_Changes_Needed_%タグはANALYSIS状態から直接READY_TO_FINISHへ
+    if (tags.includes('%_No_Changes_Needed_%')) {
+      if (currentState === AgentState.ANALYSIS) {
+        console.log('✅ No changes needed, transitioning directly to READY_TO_FINISH');
+        return AgentState.READY_TO_FINISH;
+      }
+      console.warn(`⚠️  No_Changes_Needed tag detected in invalid state: ${currentState}`);
+      return undefined;
+    }
+
     if (tags.includes('%_Ready_For_Final_Check_%')) {
       return AgentState.READY_TO_FINISH;
     }
