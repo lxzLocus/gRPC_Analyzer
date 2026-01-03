@@ -168,7 +168,8 @@ class LLMFlowController {
                 reply_required: [],
                 modified_diff: null,
                 commentText: null,
-                has_fin_tag: false
+                has_fin_tag: false,
+                has_no_changes_needed: false
             };
         }
 
@@ -208,7 +209,8 @@ class LLMFlowController {
             reply_required: parsed.requiredFilepaths.map(path => ({ type: "FILE_CONTENT", path })),
             modified_diff: parsed.modifiedDiff || null,
             commentText: parsed.commentText || null,
-            has_fin_tag: parsed.has_fin_tag
+            has_fin_tag: parsed.has_fin_tag,
+            has_no_changes_needed: parsed.has_no_changes_needed
         };
     }
 

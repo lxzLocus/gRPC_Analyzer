@@ -88,6 +88,7 @@ export type ParsedContentLog = {
     modified_diff: string | null;
     commentText: string | null;
     has_fin_tag: boolean;
+    has_no_changes_needed: boolean;
 };
 
 export type Context = {
