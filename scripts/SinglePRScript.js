@@ -32,8 +32,8 @@ const TARGET_PR_CONFIG = {
     // 例: /app/dataset/filtered_fewChanged/repository_name/category_name/pr_title/
     // 以下はサンプルです。実際のデータに合わせて変更してください
     repositoryName: "boulder",           // リポジトリ名（例: "etcd-io_etcd"）
-    category: "issue",             // カテゴリ名（例: "breaking_changes"）
-    pullRequestTitle: "ratelimits-_Exempt_renewals_from_NewOrdersPerAccount_and_CertificatesPerDomain_limits",           // PRタイトル（例: "Pull_13207"）
+    category: "pullrequest",             // カテゴリ名（例: "breaking_changes"）
+    pullRequestTitle: "Add_certificateProfileName_to_RA-_SA-_and_Core_order_protos",           // PRタイトル（例: "Pull_13207"）
     
     // 出力ディレクトリ
     outputDir: "/app/output/single_pr"
@@ -135,40 +135,22 @@ async function main() {
 
     try {
         // 動的インポートでコントローラーを読み込み
-        const controllerModule = await import('../src/Controller/Controller.js');
-        const { datasetLoop } = controllerModule;
+        const { BatchProcessController } = await import('../dist/js/controllers/BatchProcessController.js');
         
         console.log('🚀 Starting single PR processing...\n');
         
-        // 処理の実行
-        const stats = await datasetLoop(
-            TARGET_PR_CONFIG.datasetDir, 
-            TARGET_PR_CONFIG.outputDir, 
-            {
-                generateReport: true,
-                generateErrorReport: true,
-                processingOptions: PROCESSING_OPTIONS
-            }
-        );
+        // コントローラーのインスタンス化
+        const controller = new BatchProcessController({
+            generateReport: true,
+            generateErrorReport: true,
+            ...PROCESSING_OPTIONS
+        });
+        
+        // 単一PR処理の実行
+        await controller.runBatchProcessing(TARGET_PR_CONFIG.datasetDir);
 
-        // 結果の表示
-        console.log('\n🎉 Single PR processing completed successfully!');
-        console.log('========================================');
-        console.log(`✅ Success: ${stats.successfulPullRequests}/${stats.totalPullRequests}`);
-        
-        if (stats.totalPullRequests > 0) {
-            console.log(`📊 Success Rate: ${((stats.successfulPullRequests / stats.totalPullRequests) * 100).toFixed(1)}%`);
-        }
-        
-        console.log(`❌ Failed: ${stats.failedPullRequests}`);
-        console.log(`⏭️ Skipped: ${stats.skippedPullRequests}`);
-        
-        if (stats.totalDuration) {
-            console.log(`⏱️ Total Duration: ${formatDuration(stats.totalDuration)}`);
-        }
-        
-        console.log('========================================');
-        console.log(`\n📄 Check output files in: ${TARGET_PR_CONFIG.outputDir}`);
+        console.log('\n🎉 Single PR processing completed!');
+        console.log(`📄 Check output files in: ${TARGET_PR_CONFIG.outputDir}`);
         
         // 正常終了
         process.exit(0);
@@ -184,23 +166,6 @@ async function main() {
         console.error('========================================');
         
         process.exit(1);
-    }
-}
-
-/**
- * 継続時間のフォーマット
- */
-function formatDuration(milliseconds) {
-    const seconds = Math.floor(milliseconds / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-
-    if (hours > 0) {
-        return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
-    } else if (minutes > 0) {
-        return `${minutes}m ${seconds % 60}s`;
-    } else {
-        return `${seconds}s`;
     }
 }
 

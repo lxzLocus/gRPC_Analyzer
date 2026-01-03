@@ -1,4 +1,4 @@
-## Final Verification Step ##
+## Instructions ##
 
 You have completed your solution review and indicated that all goals are achieved with `%_Ready_For_Final_Check_%`.
 
@@ -7,6 +7,11 @@ You have completed your solution review and indicated that all goals are achieve
 
 ### Modified Files Status ###
 {{modifiedFilesStatus}}
+
+---
+
+## System State ##
+{{systemState}}
 
 ---
 

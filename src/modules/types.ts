@@ -139,6 +139,7 @@ export type PromptTemplateContext = {
     fileChanges: string;
     surroundedFilePath: string;
     suspectedFiles: string;
+    systemState?: string; // FSM状態情報（オプション）
 };
 
 export type PromptFileConfig = {

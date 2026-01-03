@@ -1,12 +1,17 @@
 # Template 5: Context Discrepancy Notification Prompt
 
-## ⚠️ Context Warning: Discrepancy Between Provided Files and Expected State ##
+## Instructions ##
 
 The files you requested have been modified in this commit.
 Due to my operational constraints, I can only provide file contents from the **pre-change state (`premerge` state)**.
 
 There may be discrepancies between the latest `.proto` definitions you have and the file contents I'm about to provide.
 Recognizing this contradiction, please analyze the provided older version file contents and appropriately update/execute your plan to reach the final goal (post-change state).
+
+---
+
+## System State ##
+{{systemState}}
 
 ---
 
@@ -60,10 +65,6 @@ Leverage this constraint to maximize your differential reasoning capabilities.
 // Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
 
 **IMPORTANT RULE: After you output a %_Modified_% tag, the system will apply it and show you the result. You MUST wait for this verification step. Output %%_Fin_%% only in a subsequent turn after you have verified that all your Correction Goals have been met.**
-
----
----
-## Your Task & Response Format ##
 
 **Phase 1: Analysis, Planning, and Initial Information Request**
 

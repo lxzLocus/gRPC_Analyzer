@@ -116,19 +116,26 @@ export class AgentStateMachine {
 
   /**
    * LLMレスポンスから検出されたタグを検証
-   * @param detectedTags 検出されたタグの配列
-   * @returns 検証結果 { valid: boolean, invalidTags: string[], allowedTags: string[] }
+   * @param input 検出されたタグの配列、または検証するテキスト
+   * @returns 検証結果
    */
-  validateTags(detectedTags: string[]): {
-    valid: boolean;
+  validateTags(input: string | string[]): {
+    isValid: boolean;
+    detectedTags: string[];
     invalidTags: string[];
     allowedTags: string[];
   } {
+    // 文字列の場合はタグを検出
+    const detectedTags = typeof input === 'string' 
+      ? TagParser.detectTags(input)
+      : input;
+    
     const allowedTags = this.getAllowedTags();
     const invalidTags = detectedTags.filter(tag => !this.isTagAllowed(tag));
 
     return {
-      valid: invalidTags.length === 0,
+      isValid: invalidTags.length === 0,
+      detectedTags,
       invalidTags,
       allowedTags
     };

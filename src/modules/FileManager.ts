@@ -183,7 +183,7 @@ class FileManager {
         };
     }
 
-    readFirstPromptFile(): string {
+    readFirstPromptFile(systemState?: string): string {
         console.log('📋 プロンプトファイルの読み込みを開始...');
         
         // メインプロンプトファイルの読み込み
@@ -221,7 +221,8 @@ class FileManager {
             protoFileChanges: protoFileChanges,
             fileChanges: fileChangesContent,
             surroundedFilePath: surroundedFilePath,
-            suspectedFiles: suspectedFiles
+            suspectedFiles: suspectedFiles,
+            systemState: systemState || '' // FSM状態情報
         };
 
         const validation = this.validateTemplateContext(context);
@@ -1265,7 +1266,8 @@ class FileManager {
      */
     readPromptFileWithChangeDetection(
         useFileVersionMismatchTemplate: boolean = false, 
-        requestedFileContent: string = ''
+        requestedFileContent: string = '',
+        systemState?: string
     ): string {
         console.log('📋 プロンプトファイルの読み込みを開始（変更検知対応）...');
         
@@ -1330,6 +1332,7 @@ Leverage this constraint to maximize your differential reasoning capabilities.`
             fileChanges: fileChangesContent,
             surroundedFilePath: surroundedFilePath,
             suspectedFiles: suspectedFiles,
+            systemState: systemState || '', // FSM状態情報
             ...(useFileVersionMismatchTemplate && { fileVersionMismatch: fileVersionMismatchContent })
         };
 

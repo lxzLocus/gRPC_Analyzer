@@ -329,7 +329,8 @@ class Config {
         commentText: string, 
         previousThought?: string, 
         previousPlan?: string,
-        correctionGoals?: string
+        correctionGoals?: string,
+        systemState?: string
     ): string {
         const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptReply.txt'), 'utf-8');
 
@@ -338,7 +339,8 @@ class Config {
             previousModifications: modifiedDiff, // diff from previous step
             previousThought: previousThought || '', // 前回の思考内容
             previousPlan: previousPlan || '', // 前回の計画内容
-            correctionGoals: correctionGoals || '' // 修正目標
+            correctionGoals: correctionGoals || '', // 修正目標
+            systemState: systemState || '' // FSM状態情報
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
@@ -349,11 +351,12 @@ class Config {
     /**
      * 対話履歴要約用プロンプトファイルを読み込み
      */
-    readPromptSummarizeFile(fullConversationHistory: string): string {
+    readPromptSummarizeFile(fullConversationHistory: string, systemState?: string): string {
         const promptSummarizeText = fs.readFileSync(path.join(this.promptDir, '00_prompt_summarize.txt'), 'utf-8');
 
         const context = {
-            full_conversation_history: fullConversationHistory
+            full_conversation_history: fullConversationHistory,
+            systemState: systemState || ''
         };
         const template = Handlebars.compile(promptSummarizeText, { noEscape: true });
         return template(context);
@@ -365,14 +368,16 @@ class Config {
     readPromptResumeFromSummaryFile(
         summaryOfHistory: string,
         previousActionResult: string,
-        correctionGoals: string = ''
+        correctionGoals: string = '',
+        systemState?: string
     ): string {
         const promptResumeText = fs.readFileSync(path.join(this.promptDir, '00_prompt_resume_from_summary.txt'), 'utf-8');
 
         const context = {
             summary_of_history: summaryOfHistory,
             previous_action_result: previousActionResult,
-            correctionGoals: correctionGoals
+            correctionGoals: correctionGoals,
+            systemState: systemState || ''
         };
         const template = Handlebars.compile(promptResumeText, { noEscape: true });
         return template(context);
@@ -390,7 +395,8 @@ class Config {
         previousThought?: string,
         previousPlan?: string,
         correctionGoals?: string,
-        crossReferenceContext?: string
+        crossReferenceContext?: string,
+        systemState?: string
     ): string {
         const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptModified_enhanced.txt'), 'utf-8');
 
@@ -403,7 +409,8 @@ class Config {
             previousThought: previousThought || '', // 過去の思考
             previousPlan: previousPlan || '', // 過去のプラン
             correctionGoals: correctionGoals || '', // 修正目標
-            crossReferenceContext: crossReferenceContext || '' // 相互参照コンテキスト
+            crossReferenceContext: crossReferenceContext || '', // 相互参照コンテキスト
+            systemState: systemState || '' // FSM状態情報
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
@@ -414,15 +421,36 @@ class Config {
      */
     readPromptFinalCheckFile(
         verificationSummary: string,
-        modifiedFilesStatus: string
+        modifiedFilesStatus: string,
+        systemState?: string
     ): string {
         const promptFinalCheckText = fs.readFileSync(path.join(this.promptDir, '00_promptFinalCheck.txt'), 'utf-8');
 
         const context = {
             verificationSummary: verificationSummary,
-            modifiedFilesStatus: modifiedFilesStatus
+            modifiedFilesStatus: modifiedFilesStatus,
+            systemState: systemState || ''
         };
         const template = Handlebars.compile(promptFinalCheckText, { noEscape: true });
+        return template(context);
+    }
+
+    /**
+     * エラー回復プロンプトファイルを読み込み
+     */
+    readPromptErrorFile(
+        errorContext: string,
+        currentWorkingSet: string,
+        systemState?: string
+    ): string {
+        const promptErrorText = fs.readFileSync(path.join(this.promptDir, '00_prompt_error.txt'), 'utf-8');
+
+        const context = {
+            errorContext: errorContext,
+            currentWorkingSet: currentWorkingSet,
+            systemState: systemState || ''
+        };
+        const template = Handlebars.compile(promptErrorText, { noEscape: true });
         return template(context);
     }
 }

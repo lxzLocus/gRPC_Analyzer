@@ -19,6 +19,9 @@ import OpenAIClient from './OpenAIClient.js';
 import LLMRetryEnhancer from './llmRetryEnhancer.js';
 import ConversationSummarizer from './ConversationSummarizer.js';
 import { CrossReferenceAnalyzer } from './crossReferenceAnalyzer.js';
+import { AgentStateService } from '../Service/AgentStateService.js';
+import { AgentState, formatSystemState } from '../types/AgentState.js';
+import { AgentStateRepository } from '../Repository/AgentStateRepository.js';
 import { 
     LLMParsed, 
     ParsedContentLog, 
@@ -72,6 +75,7 @@ class LLMFlowController {
     private retryEnhancer: LLMRetryEnhancer;
     private conversationSummarizer!: ConversationSummarizer;
     private crossReferenceAnalyzer!: CrossReferenceAnalyzer;
+    private agentStateService!: AgentStateService;
 
     // 作業用データ
     private currentMessages: Array<{ role: string, content: string }> = [];
@@ -90,8 +94,29 @@ class LLMFlowController {
     private initialPlan: string = ''; // 初回の計画内容
     private protoFileChanges: string = ''; // プロト変更内容
     
+    // タグ違反リトライ管理
+    private tagViolationRetryCount: number = 0;
+    private maxTagViolationRetries: number = 2; // 最大リトライ回数
+    
     // 処理オプション
     private enablePreVerification: boolean = true; // 事前検証を有効にするかどうか
+    
+    // エラー発生時のコンテキスト保持
+    private errorRecoveryContext: {
+        previousState: AgentState | null;
+        errorMessage: string | null;
+        errorType: string | null;
+        occurredAt: string | null;
+        modifiedFilesSnapshot: string[];
+        requestedFilesSnapshot: string[];
+    } = {
+        previousState: null,
+        errorMessage: null,
+        errorType: null,
+        occurredAt: null,
+        modifiedFilesSnapshot: [],
+        requestedFilesSnapshot: []
+    };
 
     constructor(pullRequestPath: string, options?: { enablePreVerification?: boolean }) {
         this.inputPremergeDir = pullRequestPath;
@@ -192,6 +217,14 @@ class LLMFlowController {
 
     async run() {
         while (this.state !== State.End) {
+            // FSM状態チェック: FINISHED状態なら終了
+            const currentFSMState = this.agentStateService?.getCurrentState();
+            if (currentFSMState === AgentState.FINISHED) {
+                console.log('🏁 FSM: FINISHED state detected, ending main loop');
+                this.state = State.End;
+                break;
+            }
+            
             switch (this.state) {
                 case State.Start:
                     this.state = State.PrepareInitialContext;
@@ -232,16 +265,22 @@ class LLMFlowController {
 
                 case State.GetFileContent:
                     await this.getFileContent();
+                    // AWAITING_INFO状態を内部専用にする：即座にANALYSIS状態に戻す
+                    await this.transitionFromAwaitingInfoToAnalysis();
                     this.state = State.SendInfoToLLM;
                     break;
 
                 case State.GetDirectoryListing:
                     await this.getDirectoryListing();
+                    // AWAITING_INFO状態を内部専用にする：即座にANALYSIS状態に戻す
+                    await this.transitionFromAwaitingInfoToAnalysis();
                     this.state = State.SendInfoToLLM;
                     break;
 
                 case State.ProcessRequiredInfos:
                     await this.processRequiredInfos();
+                    // AWAITING_INFO状態を内部専用にする：即座にANALYSIS状態に戻す
+                    await this.transitionFromAwaitingInfoToAnalysis();
                     this.state = State.SendInfoToLLM;
                     break;
 
@@ -322,6 +361,18 @@ class LLMFlowController {
         this.messageHandler = new MessageHandler();
         this.openAIClient = new OpenAIClient(this.config); // Configインスタンスを渡す
         this.crossReferenceAnalyzer = new CrossReferenceAnalyzer(this.config.inputProjectDir);
+        
+        // FSM (AgentStateService) を初期化
+        const agentStateRepository = new AgentStateRepository();
+        const agentId = `llm-flow-${Date.now()}`;
+        this.agentStateService = new AgentStateService(agentId, agentStateRepository, {
+            autoSave: false,  // 自動保存は無効（パフォーマンス考慮）
+            enableTagValidation: true,
+            autoRetryOnInvalidTags: false,
+            debug: false
+        });
+        await this.agentStateService.initialize();
+        console.log('🤖 FSM initialized with state:', this.agentStateService.getCurrentState());
 
         // OpenAIClientの初期化完了を待機
         await (this.openAIClient as any).initPromise;
@@ -333,8 +384,10 @@ class LLMFlowController {
             () => this.correctionGoals // correctionGoalsのコールバック
         );
 
-        // 初期プロンプト生成
-        this.next_prompt_content = this.fileManager.readFirstPromptFile();
+        // 初期プロンプト生成 (FSM System State込み)
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
+        this.next_prompt_content = this.fileManager.readFirstPromptFile(systemState);
         this.prompt_template_name = this.config.promptTextfile;
         
         // ConversationSummarizer に初期メッセージを追加
@@ -389,21 +442,39 @@ class LLMFlowController {
         );
     }
 
+    /**
+     * AWAITING_INFO状態を内部専用にするヘルパー
+     * ファイル取得完了後、即座にANALYSIS状態に戻す
+     */
+    private async transitionFromAwaitingInfoToAnalysis() {
+        const currentState = this.agentStateService.getCurrentState();
+        if (currentState === AgentState.AWAITING_INFO) {
+            console.log('🔄 FSM: AWAITING_INFO is internal-only, transitioning back to ANALYSIS');
+            await this.agentStateService.transition(AgentState.ANALYSIS, 'info_received_return_to_analysis');
+        }
+    }
+
     private async sendInfoToLLM() {
-        // 取得したファイル内容をLLMへ送信
+        // 取得したファイル内容をLLMへ送信（既にANALYSIS状態に戻っている）
         const parsed = this.context.llmParsed;
         const filesRequested = typeof this.context.fileContent === 'string' ? this.context.fileContent : '';
         const modifiedDiff = parsed?.modifiedDiff || '';
         const commentText = parsed?.commentText || '';
         const previousThought = parsed?.thought || '';
         const previousPlan = parsed?.plan || '';
+        
+        // FSM System Stateを取得（ANALYSIS状態になっている）
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
+        
         const promptReply = this.config.readPromptReplyFile(
             filesRequested, 
             modifiedDiff, 
             commentText, 
             previousThought, 
             previousPlan,
-            this.correctionGoals // correctionGoals
+            this.correctionGoals, // correctionGoals
+            systemState // FSM System State
         );
         this.currentMessages = await this.sendMessageWithSummarizer("user", promptReply);
         
@@ -471,6 +542,29 @@ class LLMFlowController {
             if (this.context.llmParsed.correctionGoals && !this.correctionGoals) {
                 this.correctionGoals = this.context.llmParsed.correctionGoals;
             }
+            
+            // FSM: LLM応答を検証して状態遷移
+            try {
+                const validationResult = this.agentStateService.validateLLMResponse(llm_content);
+                if (!validationResult.valid) {
+                    console.warn('⚠️ FSM: Invalid tags detected:', validationResult.invalidTags);
+                    console.log('✅ FSM: Allowed tags:', validationResult.allowedTags);
+                    // タグエラーをログに記録（リトライは上位層で処理）
+                    this.logger.logError(`FSM Tag Validation Failed: ${JSON.stringify(validationResult)}`);
+                } else {
+                    // 有効な場合は推奨される次の状態に遷移
+                    if (validationResult.suggestedNextState) {
+                        await this.agentStateService.transition(
+                            validationResult.suggestedNextState, 
+                            'llm_response_analyzed'
+                        );
+                    }
+                }
+                console.log(`🤖 FSM: State transitioned to ${this.agentStateService.getCurrentState()}`);
+            } catch (fsmError) {
+                console.error('❌ FSM validation error:', fsmError);
+                // FSMエラーは致命的ではないため、処理は続行
+            }
 
         } catch (error) {
             // 解析エラーの詳細ログ
@@ -499,6 +593,30 @@ class LLMFlowController {
                 'LLM_Response_Reanalysis',
                 async () => this.messageHandler.analyzeMessages(content)
             );
+            
+            // FSM: 再解析時の応答検証（AWAITING_INFOは内部専用なのでここではANALYSIS状態）
+            try {
+                const validationResult = this.agentStateService.validateLLMResponse(content);
+                const currentState = this.agentStateService.getCurrentState();
+                
+                // AWAITING_INFOの場合は既にANALYSISに戻っているはず
+                if (currentState === AgentState.AWAITING_INFO) {
+                    console.warn('⚠️ FSM: Unexpected AWAITING_INFO state in reanalysis, fixing');
+                    await this.agentStateService.transition(AgentState.ANALYSIS, 'fix_awaiting_info');
+                }
+                
+                if (!validationResult.valid) {
+                    console.warn('⚠️ FSM (Reanalyze): Invalid tags detected:', validationResult.invalidTags);
+                }
+                
+                // 注意: ここでsuggestedNextStateへの遷移はしない
+                // ファイル情報取得後、llmDecision()で適切に処理される
+                
+                console.log(`🤖 FSM (Reanalyze): State = ${this.agentStateService.getCurrentState()}`);
+            } catch (fsmError) {
+                console.error('❌ FSM reanalysis validation error:', fsmError);
+            }
+            
         } catch (error) {
             this.logger.logLLMParsingError(
                 content,
@@ -513,49 +631,180 @@ class LLMFlowController {
     }
 
     private async llmDecision() {
-        // LLMの判断
-        // context.llmParsedの内容に応じて分岐
+        // FSMベースの完全な状態管理
+        // LLMの応答をFSMで検証し、状態遷移を決定
+        
         const parsed = this.context.llmParsed;
         if (!parsed) {
+            console.error('❌ No parsed LLM response');
+            this.captureErrorContext('No parsed LLM response available');
+            await this.agentStateService.transition(AgentState.ERROR, 'no_parsed_response');
             this.state = State.End;
             return;
         }
-
-        // 早期終了の防止: 最低限の処理フローを保証
-        const hasProcessedFiles = this.internalProgress.contextAccumulated.sourceFiles.length > 0;
-        const hasGeneratedDiff = this.currentTurn >= 2; // 最低2ターンは実行
-
-        if (parsed.has_fin_tag && hasProcessedFiles && hasGeneratedDiff) {
-            // タスク完了(ただし最低限の処理が完了している場合のみ)
-            console.log('📋 Task completion confirmed after proper processing flow');
+        
+        const content = this.context.llmResponse?.choices?.[0]?.message?.content || '';
+        
+        // FSM: LLM応答を検証
+        const validationResult = this.agentStateService.validateLLMResponse(content);
+        const currentFSMState = this.agentStateService.getCurrentState();
+        
+        console.log(`🤖 FSM (Decision): Current state = ${currentFSMState}`);
+        console.log(`🤖 FSM (Decision): Detected tags = [${validationResult.detectedTags.join(', ')}]`);
+        console.log(`🤖 FSM (Decision): Valid = ${validationResult.valid}`);
+        
+        // ターン数上限チェック（無限ループ防止）
+        if (this.currentTurn >= 15) {
+            console.warn('⚠️ Reached maximum turns (15), forcing termination');
+            this.captureErrorContext('Maximum turns (15) exceeded - forcing termination');
+            // ERROR状態に遷移してから、直接State.Endへ
+            // FINISHED状態へは遷移せず、処理を終了
+            const currentState = this.agentStateService.getCurrentState();
+            if (currentState !== AgentState.ERROR) {
+                await this.agentStateService.transition(AgentState.ERROR, 'max_turns_exceeded');
+            }
+            this.state = State.End;
+            return;
+        }
+        
+        if (!validationResult.valid) {
+            // 不正なタグが検出された
+            console.warn(`⚠️ FSM: Invalid tags detected: [${validationResult.invalidTags.join(', ')}]`);
+            console.log(`✅ FSM: Allowed tags in ${currentFSMState}: [${validationResult.allowedTags.join(', ')}]`);
             
-            // トリガー層4: タスク完了時のメタ要約
-            const taskSummary = await this.conversationSummarizer.onTaskComplete('PR Analysis');
-            if (taskSummary) {
-                console.log('📊 Task completion summary generated for future reference');
+            // リトライ回数をチェック
+            if (this.tagViolationRetryCount < this.maxTagViolationRetries) {
+                // 軽量なcorrective retryを実行
+                this.tagViolationRetryCount++;
+                console.log(`🔄 FSM: Tag violation detected, performing corrective retry (attempt ${this.tagViolationRetryCount}/${this.maxTagViolationRetries})`);
+                
+                // FSM状態は変更せず、同じプロンプトを補助文付きで再送信
+                await this.performCorrectiveRetry(currentFSMState);
+                return;
             }
             
-            this.state = State.End;
-        } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
-            // 追加情報要求
-            this.state = State.SystemAnalyzeRequest;
-        } else if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
-            // 修正案(diff)生成
-            this.state = State.SystemParseDiff;
-        } else if (!hasProcessedFiles && this.currentTurn <= 3) {
-            // 初回または2回目で、まだファイル処理していない場合は情報要求を強制
-            console.log('📋 Forcing file content analysis to prevent early termination');
-            // プロト関連ファイルのデフォルト要求を生成
-            if (this.context.llmParsed) {
-                this.context.llmParsed.requiredFilepaths = this.generateDefaultFileRequests();
-                this.state = State.SystemAnalyzeRequest;
+            // リトライ上限到達：ERROR eventとして扱う
+            console.error(`❌ FSM: Tag violation retry limit reached (${this.maxTagViolationRetries})`);
+            this.logger.logError(`FSM Tag Validation Failed after ${this.maxTagViolationRetries} retries: ${JSON.stringify(validationResult)}`);
+            
+            // エラーコンテキスト保存
+            this.captureErrorContext(`Invalid tags after ${this.maxTagViolationRetries} retries: [${validationResult.invalidTags.join(', ')}]`);
+            
+            // ERROR状態への遷移（既にERROR状態の場合は遷移しない）
+            if (currentFSMState !== AgentState.ERROR) {
+                await this.agentStateService.transition(AgentState.ERROR, 'invalid_tags_detected');
             } else {
-                this.state = State.End;
+                console.log('⚠️ FSM: Already in ERROR state, skipping ERROR->ERROR transition');
             }
-        } else {
-            // その他(最低限の処理完了後のみ終了)
-            console.log('📋 Ending after processing flow completion');
-            this.state = State.End;
+            
+            // ERROR eventとしてANALYSISに戻す
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
+        // タグ検証成功：リトライカウンターをリセット
+        this.tagViolationRetryCount = 0;
+        
+        // 有効なタグ: 推奨される次の状態に遷移（既に同じ状態の場合はスキップ）
+        if (validationResult.suggestedNextState) {
+            const targetState = validationResult.suggestedNextState;
+            if (targetState !== currentFSMState) {
+                console.log(`🤖 FSM: Transitioning to suggested state: ${targetState}`);
+                await this.agentStateService.transition(
+                    targetState,
+                    'llm_response_validated'
+                );
+            } else {
+                console.log(`⚠️ FSM: Already in ${currentFSMState} state, skipping transition`);
+            }
+        }
+        
+        // FSM状態に基づいて次のアクションを決定
+        const nextFSMState = this.agentStateService.getCurrentState();
+        console.log(`🤖 FSM: New state = ${nextFSMState}`);
+        
+        // FSM状態ごとの処理
+        switch (nextFSMState) {
+            case AgentState.FINISHED:
+                // 完了状態: タスク完了
+                console.log('✅ FSM: Task completed in FINISHED state');
+                
+                // タスク完了要約を生成
+                const taskSummary = await this.conversationSummarizer.onTaskComplete('PR Analysis');
+                if (taskSummary) {
+                    console.log('📊 Task completion summary generated');
+                }
+                
+                this.state = State.End;
+                break;
+                
+            case AgentState.AWAITING_INFO:
+                // 情報待ち状態: ファイルコンテンツ取得
+                if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
+                    console.log(`📝 FSM: Requesting ${parsed.requiredFilepaths.length} files`);
+                    this.state = State.SystemAnalyzeRequest;
+                } else {
+                    console.warn('⚠️ FSM: In AWAITING_INFO but no file requests, forcing default requests');
+                    if (this.context.llmParsed) {
+                        this.context.llmParsed.requiredFilepaths = this.generateDefaultFileRequests();
+                        if (this.context.llmParsed.requiredFilepaths.length > 0) {
+                            this.state = State.SystemAnalyzeRequest;
+                        } else {
+                            this.state = State.SendErrorToLLM;
+                        }
+                    } else {
+                        this.state = State.SendErrorToLLM;
+                    }
+                }
+                break;
+                
+            case AgentState.MODIFYING:
+                // 修正中状態: パッチ適用
+                if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
+                    console.log('🔧 FSM: Applying patch in MODIFYING state');
+                    this.state = State.SystemParseDiff;
+                } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
+                    console.log('📝 FSM: Requesting additional files before modification');
+                    this.state = State.SystemAnalyzeRequest;
+                } else {
+                    console.warn('⚠️ FSM: In MODIFYING but no patch or file requests');
+                    this.state = State.SendErrorToLLM;
+                }
+                break;
+                
+            case AgentState.VERIFYING:
+                // 検証中状態: 検証プロンプト送信
+                console.log('🔍 FSM: Moving to verification phase');
+                this.state = State.SendFinalCheckToLLM;
+                break;
+                
+            case AgentState.READY_TO_FINISH:
+                // 完了準備状態: 最終確認送信
+                console.log('🏁 FSM: Ready to finish, sending final check');
+                this.state = State.SendFinalCheckToLLM;
+                break;
+                
+            case AgentState.ERROR:
+                // エラー状態: エラープロンプト送信
+                console.log('❌ FSM: In ERROR state, sending error prompt');
+                this.state = State.SendErrorToLLM;
+                break;
+                
+            case AgentState.ANALYSIS:
+            default:
+                // 分析状態: デフォルトの処理
+                if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
+                    console.log('📝 FSM: Continuing analysis with file requests');
+                    this.state = State.SystemAnalyzeRequest;
+                } else if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
+                    console.log('🔧 FSM: Found patch in analysis, applying');
+                    this.state = State.SystemParseDiff;
+                } else {
+                    console.log('🔄 FSM: Analysis complete, requesting next step');
+                    // 次のステップを要求
+                    this.state = State.LLMNextStep;
+                }
+                break;
         }
     }
 
@@ -592,10 +841,15 @@ class LLMFlowController {
         // 検証レポートのサマリーを作成
         const verificationSummary = this.extractVerificationSummary(parsed);
         const modifiedFilesStatus = this.context.diff || 'No files modified';
+        
+        // FSM System Stateを取得
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
 
         const finalCheckPrompt = this.config.readPromptFinalCheckFile(
             verificationSummary,
-            modifiedFilesStatus
+            modifiedFilesStatus,
+            systemState // FSM System State
         );
 
         this.currentMessages = await this.sendMessageWithSummarizer("user", finalCheckPrompt);
@@ -632,26 +886,66 @@ class LLMFlowController {
     }
 
     private async llmFinalDecision() {
-        // 最終判断の解析
+        // FSMベースの最終判断
         if (!this.context.llmResponse?.choices?.[0]?.message?.content) {
+            console.error('❌ No LLM response for final decision');
+            this.captureErrorContext('No LLM response for final decision');
+            await this.agentStateService.transition(AgentState.ERROR, 'no_final_response');
             this.state = State.End;
             return;
         }
         
         const content = this.context.llmResponse.choices[0].message.content;
         this.context.llmParsed = this.messageHandler.analyzeMessages(content);
-
-        // LLMの最終判断を解析
-        if (this.context.llmParsed.has_fin_tag) {
-            console.log('✅ LLM confirmed completion with %%_Fin_%% tag');
+        
+        // FSM検証
+        const validationResult = this.agentStateService.validateLLMResponse(content);
+        const currentFSMState = this.agentStateService.getCurrentState();
+        
+        console.log(`🤖 FSM (FinalDecision): Current state = ${currentFSMState}`);
+        console.log(`🤖 FSM (FinalDecision): Detected tags = [${validationResult.detectedTags.join(', ')}]`);
+        
+        if (!validationResult.valid) {
+            console.warn(`⚠️ FSM: Invalid tags in final decision: [${validationResult.invalidTags.join(', ')}]`);
+            this.captureErrorContext(`Invalid tags in final decision: [${validationResult.invalidTags.join(', ')}]`);
+            await this.agentStateService.transition(AgentState.ERROR, 'invalid_final_tags');
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
+        // 有効な応答: 推奨状態に遷移（既に同じ状態の場合はスキップ）
+        if (validationResult.suggestedNextState) {
+            const targetState = validationResult.suggestedNextState;
+            if (targetState !== currentFSMState) {
+                await this.agentStateService.transition(
+                    targetState,
+                    'final_decision_validated'
+                );
+            } else {
+                console.log(`⚠️ FSM: Already in ${currentFSMState} state, skipping transition`);
+            }
+        }
+        
+        const nextFSMState = this.agentStateService.getCurrentState();
+        
+        if (nextFSMState === AgentState.FINISHED) {
+            console.log('✅ FSM: Task completed with %%_Fin_%% tag in final decision');
+            
+            // タスク完了要約
+            const taskSummary = await this.conversationSummarizer.onTaskComplete('PR Analysis');
+            if (taskSummary) {
+                console.log('📊 Task completion summary generated');
+            }
+            
             this.state = State.End;
         } else if (this.context.llmParsed.modifiedDiff) {
-            console.log('🔄 LLM provided additional modifications, applying patch');
+            console.log('🔄 FSM: Additional modifications in final decision, applying patch');
             this.context.diff = this.context.llmParsed.modifiedDiff;
+            await this.agentStateService.transition(AgentState.MODIFYING, 'additional_modifications');
             this.state = State.SystemParseDiff;
         } else {
-            console.log('⚠️ Unexpected response in final decision, ending');
-            this.state = State.End;
+            console.log(`🔄 FSM: Final decision leads to state ${nextFSMState}, continuing`);
+            this.state = State.LLMDecision;
         }
     }
 
@@ -686,13 +980,41 @@ class LLMFlowController {
     }
 
     private async llmErrorReanalyze() {
-        // LLM: エラーに基づき再分析・計画修正
+        // FSMベースのエラー再分析
         if (!this.context.llmResponse?.choices?.[0]?.message?.content) {
+            console.error('❌ No LLM response for error reanalysis');
+            // エラーが続く場合は強制終了
+            await this.agentStateService.transition(AgentState.FINISHED, 'error_reanalysis_failed');
             this.state = State.End;
             return;
         }
+        
         const content = this.context.llmResponse.choices[0].message.content;
         this.context.llmParsed = this.messageHandler.analyzeMessages(content);
+        
+        // FSM検証
+        const validationResult = this.agentStateService.validateLLMResponse(content);
+        const currentFSMState = this.agentStateService.getCurrentState();
+        
+        console.log(`🤖 FSM (ErrorReanalyze): Current state = ${currentFSMState}`);
+        console.log(`🤖 FSM (ErrorReanalyze): Detected tags = [${validationResult.detectedTags.join(', ')}]`);
+        
+        if (!validationResult.valid) {
+            console.warn(`⚠️ FSM: Invalid tags in error reanalysis: [${validationResult.invalidTags.join(', ')}]`);
+            // エラーが続く場合は警告を出して続行
+            this.logger.logError('Multiple validation failures detected');
+        }
+        
+        // 注意: ここでsuggestedNextStateへの遷移はしない
+        // ERROR状態からの回復はANALYSIS状態への遷移のみを許可
+        
+        // ANALYSIS状態に戻して再試行（既にANALYSISの場合はスキップ）
+        if (currentFSMState !== AgentState.ANALYSIS) {
+            console.log('🔄 FSM: Returning to ANALYSIS for retry');
+            await this.agentStateService.transition(AgentState.ANALYSIS, 'error_retry');
+        } else {
+            console.log('⚠️ FSM: Already in ANALYSIS state, skipping transition');
+        }
     }
 
     // =============================================================================
@@ -1024,6 +1346,10 @@ class LLMFlowController {
             crossReferenceContext = 'Cross-reference analysis failed. Proceeding without additional context.';
         }
         
+        // FSM System Stateを取得
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
+        
         const promptModified = this.config.readPromptModifiedEnhancedFile(
             modifiedFiles, 
             enhancedPlan, 
@@ -1033,7 +1359,8 @@ class LLMFlowController {
             '', // previousThought (必要に応じて設定)
             '', // previousPlan (必要に応じて設定)
             this.correctionGoals, // correctionGoals
-            crossReferenceContext // crossReferenceContext
+            crossReferenceContext, // crossReferenceContext
+            systemState // FSM System State
         );
         
         this.currentMessages = await this.sendMessageWithSummarizer("user", promptModified);
@@ -1070,9 +1397,47 @@ class LLMFlowController {
     }
 
     private async sendErrorToLLM() {
-        // エラー情報をLLMへ送信
-        const errorMessage = this.context.error || 'Unknown error occurred';
-        const errorPrompt = `エラーが発生しました: ${errorMessage}\n\n修正案を再検討してください。`;
+        // エラーコンテキストが保存されている場合はそれを使用
+        let previousState: AgentState;
+        let errorMessage: string;
+        let errorType: string;
+        
+        if (this.errorRecoveryContext.previousState) {
+            // 保存されたコンテキストを使用
+            previousState = this.errorRecoveryContext.previousState;
+            errorMessage = this.errorRecoveryContext.errorMessage || 'Unknown error';
+            errorType = this.errorRecoveryContext.errorType || 'UnknownError';
+            console.log(`🔄 Using captured error context: ${errorType} from ${previousState}`);
+        } else {
+            // フォールバック: 現在の状態を使用
+            previousState = this.agentStateService.getCurrentState();
+            const rawError = this.context.error || 'Invalid tags detected in your previous response';
+            errorMessage = typeof rawError === 'string' ? rawError : rawError.message;
+            errorType = this.determineErrorType(errorMessage);
+            console.warn(`⚠️ No captured error context, using current state: ${previousState}`);
+        }
+        
+        // FSM: ERROR状態からANALYSIS状態に遷移
+        console.log(`🔄 FSM: Transitioning from ${previousState} to ANALYSIS for recovery`);
+        await this.agentStateService.transition(AgentState.ANALYSIS, 'error_recovery_start');
+        
+        // Error Contextの構築（指定フォーマット）
+        const errorContext = this.buildErrorContext(errorType, errorMessage, previousState);
+        
+        // Current Working Setの構築（指定フォーマット）
+        const currentWorkingSet = this.buildCurrentWorkingSet();
+        
+        // FSM System Stateを取得（ANALYSIS状態）
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
+        
+        // エラープロンプトを生成
+        const errorPrompt = this.config.readPromptErrorFile(
+            errorContext,
+            currentWorkingSet,
+            systemState
+        );
+        
         this.currentMessages = await this.sendMessageWithSummarizer("user", errorPrompt);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
@@ -1091,7 +1456,7 @@ class LLMFlowController {
             this.currentTurn,
             new Date().toISOString(),
             {
-                prompt_template: 'error_prompt',
+                prompt_template: '00_prompt_error.txt',
                 full_prompt_content: errorPrompt
             },
             {
@@ -1100,10 +1465,260 @@ class LLMFlowController {
                 usage: usage
             },
             {
-                type: 'ERROR_HANDLING',
-                details: `Error sent to LLM: ${errorMessage}`
+                type: 'ERROR_RECOVERY',
+                details: `Error recovery prompt sent. FSM state: ANALYSIS. Error type: ${errorType}, Message: ${errorMessage}`
             }
         );
+    }
+
+    /**
+     * タグ違反時の軽量なcorrective retryを実行
+     * FSM状態は変更せず、補助文付きで同じプロンプトを再送信
+     */
+    private async performCorrectiveRetry(currentState: AgentState) {
+        console.log('🔄 Performing corrective retry with tag violation note');
+        
+        // タグ違反通知文
+        const tagViolationNote = `Note:
+The previous response used a tag that is not allowed in the current state.
+Please respond again using only the allowed tags.`;
+        
+        // FSM System State（補助文付き）
+        const systemState = formatSystemState(currentState, tagViolationNote);
+        
+        // 最後に送信したプロンプトと同じ内容を再構築
+        // （currentMessagesの最後のuserメッセージを使用）
+        const lastUserMessage = this.currentMessages[this.currentMessages.length - 1];
+        if (!lastUserMessage || lastUserMessage.role !== 'user') {
+            console.error('❌ Cannot perform corrective retry: no user message found');
+            return;
+        }
+        
+        // 元のプロンプトのsystemState部分だけを置き換え
+        // （簡易実装: 直接LLMに再送信）
+        const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
+        this.context.llmResponse = llm_response;
+        
+        // LLM応答を解析（ターン数は増やさない）
+        const content = llm_response?.choices?.[0]?.message?.content || '';
+        this.context.llmParsed = this.messageHandler.analyzeMessages(content);
+        
+        // トークン数のみ更新
+        const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
+        this.totalPromptTokens += usage.prompt_tokens;
+        this.totalCompletionTokens += usage.completion_tokens;
+        
+        console.log(`✅ Corrective retry completed (retry ${this.tagViolationRetryCount}/${this.maxTagViolationRetries})`);
+        
+        // llmDecision()に戻って再検証
+        await this.llmDecision();
+    }
+
+    /**
+     * エラー発生時のコンテキストを保存
+     */
+    private captureErrorContext(errorMessage: string | Error) {
+        const currentState = this.agentStateService.getCurrentState();
+        const errorString = typeof errorMessage === 'string' ? errorMessage : errorMessage.message;
+        
+        this.errorRecoveryContext = {
+            previousState: currentState,
+            errorMessage: errorString,
+            errorType: this.determineErrorType(errorString),
+            occurredAt: new Date().toISOString(),
+            modifiedFilesSnapshot: this.extractModifiedFiles(),
+            requestedFilesSnapshot: [...this.internalProgress.contextAccumulated.sourceFiles]
+        };
+        
+        console.log(`📸 Error context captured: ${this.errorRecoveryContext.errorType} at ${currentState}`);
+    }
+
+    /**
+     * エラータイプを決定
+     */
+    private determineErrorType(errorMessage: string): string {
+        if (errorMessage.includes('tag') || errorMessage.includes('Tag')) {
+            return 'TagValidationError';
+        } else if (errorMessage.includes('patch') || errorMessage.includes('diff') || errorMessage.includes('hunk')) {
+            return 'PatchApplyError';
+        } else if (errorMessage.includes('parse') || errorMessage.includes('Parse')) {
+            return 'ResponseParseError';
+        } else if (errorMessage.includes('state') || errorMessage.includes('State')) {
+            return 'StateTransitionError';
+        } else {
+            return 'UnknownError';
+        }
+    }
+
+    /**
+     * Error Contextを構築（指定フォーマット）
+     */
+    private buildErrorContext(errorType: string, errorMessage: string, previousState: AgentState): string {
+        let errorContext = 'last_error:\n';
+        errorContext += `  type: ${errorType}\n`;
+        errorContext += `  message: "${errorMessage}"\n`;
+        errorContext += `  previous_state: ${previousState}\n`;
+        return errorContext;
+    }
+
+    /**
+     * 現在の作業セット（これまでの処理内容）を構築（指定フォーマット）
+     */
+    private buildCurrentWorkingSet(): string {
+        let workingSet = '';
+
+        // Proto change summary
+        const protoChangeSummary = this.extractProtoChangeSummary();
+        if (protoChangeSummary) {
+            workingSet += `- proto change summary: ${protoChangeSummary}\n`;
+        }
+
+        // Last modified files
+        const modifiedFiles = this.extractModifiedFiles();
+        if (modifiedFiles.length > 0) {
+            workingSet += '- last modified files:\n';
+            modifiedFiles.forEach(file => {
+                workingSet += `  - ${file}\n`;
+            });
+        }
+
+        // Last requested files
+        const requestedFiles = this.internalProgress.contextAccumulated.sourceFiles;
+        if (requestedFiles.length > 0) {
+            workingSet += '- last requested files:\n';
+            requestedFiles.slice(-5).forEach(file => { // 最後の5ファイルのみ
+                workingSet += `  - ${file}\n`;
+            });
+        }
+
+        if (!workingSet) {
+            workingSet = '- no previous work recorded (early-stage error)\n';
+        }
+
+        return workingSet;
+    }
+
+    /**
+     * Proto変更のサマリーを抽出
+     */
+    private extractProtoChangeSummary(): string {
+        // protoFileChangesから主要な変更を抽出
+        try {
+            const protoChanges = this.protoFileChanges || '';
+            if (!protoChanges) return '';
+            
+            // 簡単なパターンマッチングで主要な変更を抽出
+            const lines = protoChanges.split('\n');
+            const additions = lines.filter(line => line.trim().startsWith('+')).slice(0, 3);
+            
+            if (additions.length > 0) {
+                return additions.map(line => line.trim().substring(1).trim()).join(', ');
+            }
+            
+            return 'proto structure changes detected';
+        } catch (error) {
+            return 'proto changes (details unavailable)';
+        }
+    }
+
+    /**
+     * 修正したファイル一覧を抽出
+     */
+    private extractModifiedFiles(): string[] {
+        const modifiedFiles: string[] = [];
+        
+        try {
+            // context.diffからファイル名を抽出
+            if (this.context.diff) {
+                const diffLines = this.context.diff.split('\n');
+                for (const line of diffLines) {
+                    if (line.startsWith('---') || line.startsWith('+++')) {
+                        const match = line.match(/[+-]{3}\s+([^\s]+)/);
+                        if (match && match[1] !== '/dev/null') {
+                            const filename = match[1].replace(/^[ab]\//, '');
+                            if (!modifiedFiles.includes(filename)) {
+                                modifiedFiles.push(filename);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // ログからも抽出
+            const logs = this.logger.getInteractionLog();
+            for (const log of logs.slice(-3)) { // 最後の3ターン
+                const parsedContent = log.llm_response?.parsed_content;
+                if (parsedContent?.modified_diff) {
+                    const diffLines = parsedContent.modified_diff.split('\n');
+                    for (const line of diffLines) {
+                        if (line.startsWith('---') || line.startsWith('+++')) {
+                            const match = line.match(/[+-]{3}\s+([^\s]+)/);
+                            if (match && match[1] !== '/dev/null') {
+                                const filename = match[1].replace(/^[ab]\//, '');
+                                if (!modifiedFiles.includes(filename)) {
+                                    modifiedFiles.push(filename);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to extract modified files:', error);
+        }
+        
+        return modifiedFiles.slice(0, 5); // 最大5ファイルまで
+    }
+
+    /**
+     * 旧buildCurrentWorkingSet（下位互換性のため保持）
+     * @deprecated Use the new buildCurrentWorkingSet() instead
+     */
+    private buildCurrentWorkingSetLegacy(): string {
+        const parsed = this.context.llmParsed;
+        let workingSet = '';
+
+        // 前回の思考内容
+        if (parsed?.thought) {
+            workingSet += `### Your Previous Thought ###\n${parsed.thought}\n\n`;
+        }
+
+        // 前回の計画
+        if (parsed?.plan) {
+            workingSet += `### Your Previous Plan ###\n`;
+            if (typeof parsed.plan === 'string') {
+                workingSet += `${parsed.plan}\n\n`;
+            } else {
+                workingSet += `${JSON.stringify(parsed.plan, null, 2)}\n\n`;
+            }
+        }
+
+        // Correction Goals
+        if (this.correctionGoals) {
+            workingSet += `### Correction Goals ###\n${this.correctionGoals}\n\n`;
+        }
+
+        // これまでに要求したファイル
+        const requestedFiles = this.internalProgress.contextAccumulated.sourceFiles;
+        if (requestedFiles.length > 0) {
+            workingSet += `### Files You Have Requested ###\n`;
+            requestedFiles.forEach(file => {
+                workingSet += `- ${file}\n`;
+            });
+            workingSet += '\n';
+        }
+
+        // これまでに生成したパッチ
+        if (this.context.diff) {
+            workingSet += `### Your Previous Modifications ###\n`;
+            workingSet += `\`\`\`diff\n${this.context.diff.substring(0, 500)}...\n\`\`\`\n\n`;
+        }
+
+        if (!workingSet) {
+            workingSet = 'No previous work recorded yet. This is an early-stage error.\n';
+        }
+
+        return workingSet;
     }
 
     // =============================================================================

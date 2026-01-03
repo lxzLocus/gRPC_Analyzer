@@ -1,7 +1,13 @@
-## Instruction ##
+## Instructions ##
 You are an AI assistant that summarizes the progress of a multi-turn code modification task. Analyze the provided conversation log between a System and an AI Agent. Your task is to extract only the most critical information and output it in a structured JSON format. Do not add any conversational text or explanations.
 
 ---
+
+## System State ##
+{{systemState}}
+
+---
+
 ## Conversation Log to Summarize ##
 
 {{full_conversation_history}}

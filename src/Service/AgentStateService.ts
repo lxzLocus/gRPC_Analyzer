@@ -46,8 +46,8 @@ export interface LLMResponseValidation {
  * エージェント状態管理Service
  * FSMの状態遷移ロジックとビジネスルールを管理
  * 
- * 注意: プロンプトがまだ対応していないため、実際の処理には未使用
- * 将来のプロンプト対応時に有効化予定
+ * 統合状態: llmFlowControllerに統合済み（2026-01-02）
+ * MainScript.js, SinglePRScript.js の両方で有効
  */
 export class AgentStateService {
   private stateMachine: AgentStateMachine;
@@ -163,15 +163,15 @@ export class AgentStateService {
     const validation = this.stateMachine.validateTags(detectedTags);
     
     const result: LLMResponseValidation = {
-      valid: validation.valid,
+      valid: validation.isValid,
       detectedTags,
       allowedTags: validation.allowedTags,
       invalidTags: validation.invalidTags,
-      requiresRegeneration: !validation.valid && this.config.autoRetryOnInvalidTags === true
+      requiresRegeneration: !validation.isValid && this.config.autoRetryOnInvalidTags === true
     };
 
     // 検出されたタグに基づいて推奨される次の状態を決定
-    if (validation.valid) {
+    if (validation.isValid) {
       result.suggestedNextState = this.inferNextState(detectedTags);
     }
 

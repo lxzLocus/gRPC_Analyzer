@@ -1,8 +1,16 @@
-## Situation ##
+## Instructions ##
 The conversation has become long, so I have prepared a summary of our progress so far. Please review this summary to refresh your context before proceeding.
 
 ---
-## Context Summary ##
+
+## System State ##
+{{systemState}}
+
+---
+
+## Context ##
+
+### Context Summary ###
 {{summary_of_history}} 
 
 ---

@@ -1,9 +1,9 @@
 ## Instructions ##
 
-1. **Analyze & Think**: Review all provided context. Output your understanding of the changes and potential impacts in the `%_Thought_%` section.
-2. **Plan**: Based on your analysis, create a step-by-step plan in the `%_Plan_%` section. This plan should outline which files you intend to inspect or modify, and why. **Follow this plan systematically.**
-3. **Define Success**: Based on your plan, list the specific conditions that must be met for the fix to be considered complete in a `%_Correction_Goals_%` section.
-4. **Execute Plan**: Follow your plan step by step. Use `%_Reply Required_%` to gather information, `%_Modified_%` to make changes, always referring back to your correction goals.
+1. **Analyze & Think**: Review all provided context including error information. Output your understanding in the `%_Thought_%` section.
+2. **Plan**: Based on your analysis, create a step-by-step plan in the `%_Plan_%` section to address the error and complete the task.
+3. **Define Success**: List the specific conditions that must be met for the fix to be considered complete.
+4. **Execute Plan**: Follow your plan step by step. Use `%_Reply Required_%` to gather information, `%_Modified_%` to make changes.
 5. **Verify & Complete**: After modifications, use `%_Verification_Report_%` to verify your changes. The system will guide you to completion.
 
 IMPORTANT: The `%%_Fin_%%` tag can ONLY be used when the system transitions you to READY_TO_FINISH state. Do not use it in any other state.
@@ -35,23 +35,11 @@ IMPORTANT: Do not use `%%_Fin_%%` unless you are in READY_TO_FINISH state. The s
 ---
 ## Context ##
 
-### Pull Request Title (Hint) ###
-{{pullRequestTitle}}
+### Error Context ###
+{{errorContext}}
 
-### Proto file ###
-{{protoFile}}
-
-### Proto file changes ###
-{{protoFileChanges}}
-
-### Changed files (Annotation - Paths only) ###
-{{fileChanges}}
-
-### List of All File Paths (Consider this a global view, prioritize targeted requests) ###
-{{surroundedFilePath}}
-
-### Suspected Files (Content provided - Pre-commit state) ###
-{{suspectedFiles}}
+### Current Working Set ###
+{{currentWorkingSet}}
 
 ---
 
