@@ -782,9 +782,15 @@ class LLMFlowController {
                 break;
                 
             case AgentState.READY_TO_FINISH:
-                // 完了準備状態: 最終確認送信
-                console.log('🏁 FSM: Ready to finish, sending final check');
-                this.state = State.SendFinalCheckToLLM;
+                // 完了準備状態: No_Changes_Neededタグで来た場合は即座に完了
+                if (parsed.has_no_changes_needed) {
+                    console.log('🏁 FSM: Ready to finish (no changes needed), completing directly');
+                    await this.agentStateService.transition(AgentState.FINISHED, 'no_changes_needed_completion');
+                    this.state = State.End;
+                } else {
+                    console.log('🏁 FSM: Ready to finish, sending final check');
+                    this.state = State.SendFinalCheckToLLM;
+                }
                 break;
                 
             case AgentState.ERROR:
