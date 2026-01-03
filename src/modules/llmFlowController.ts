@@ -1450,8 +1450,15 @@ class LLMFlowController {
             console.warn(`⚠️ No captured error context, using current state: ${previousState}`);
         }
         
+        // FSM: まずERROR状態に遷移（previousStateがERRORでない場合）
+        const currentState = this.agentStateService.getCurrentState();
+        if (currentState !== AgentState.ERROR) {
+            console.log(`🔄 FSM: Transitioning from ${previousState} to ERROR`);
+            await this.agentStateService.transition(AgentState.ERROR, 'error_detected');
+        }
+        
         // FSM: ERROR状態からANALYSIS状態に遷移
-        console.log(`🔄 FSM: Transitioning from ${previousState} to ANALYSIS for recovery`);
+        console.log(`🔄 FSM: Transitioning from ERROR to ANALYSIS for recovery`);
         await this.agentStateService.transition(AgentState.ANALYSIS, 'error_recovery_start');
         
         // Error Contextの構築（指定フォーマット）
@@ -1521,11 +1528,24 @@ Please respond again using only the allowed tags.`;
         // FSM System State（補助文付き）
         const systemState = formatSystemState(currentState, tagViolationNote);
         
+        // currentMessagesが空の場合はsendErrorToLLMにフォールバック
+        if (!this.currentMessages || this.currentMessages.length === 0) {
+            console.warn('⚠️ currentMessages is empty, falling back to sendErrorToLLM');
+            this.captureErrorContext('Tag violation with empty message history');
+            await this.agentStateService.transition(AgentState.ERROR, 'corrective_retry_failed');
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
         // 最後に送信したプロンプトと同じ内容を再構築
         // （currentMessagesの最後のuserメッセージを使用）
         const lastUserMessage = this.currentMessages[this.currentMessages.length - 1];
         if (!lastUserMessage || lastUserMessage.role !== 'user') {
             console.error('❌ Cannot perform corrective retry: no user message found');
+            console.warn('⚠️ Falling back to sendErrorToLLM');
+            this.captureErrorContext('Tag violation with invalid message history');
+            await this.agentStateService.transition(AgentState.ERROR, 'corrective_retry_no_user_message');
+            this.state = State.SendErrorToLLM;
             return;
         }
         
@@ -3554,11 +3574,23 @@ Please respond again using only the allowed tags.`;
         // FSM System State（フィードバック付き）
         const systemState = formatSystemState(currentState, feedbackMessage);
         
+        // currentMessagesが空の場合はsendErrorToLLMにフォールバック
+        if (!this.currentMessages || this.currentMessages.length === 0) {
+            console.warn('⚠️ currentMessages is empty, falling back to sendErrorToLLM');
+            this.captureErrorContext(error.message);
+            await this.agentStateService.transition(AgentState.ERROR, 'validation_retry_no_history');
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
         // 最後に送信したプロンプトを再構築
         const lastUserMessage = this.currentMessages[this.currentMessages.length - 1];
         if (!lastUserMessage || lastUserMessage.role !== 'user') {
             console.error('❌ Cannot perform validation retry: no user message found');
-            this.state = State.End;
+            console.warn('⚠️ Falling back to sendErrorToLLM');
+            this.captureErrorContext(error.message);
+            await this.agentStateService.transition(AgentState.ERROR, 'validation_retry_invalid_history');
+            this.state = State.SendErrorToLLM;
             return;
         }
         
