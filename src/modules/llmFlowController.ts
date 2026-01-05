@@ -803,8 +803,14 @@ class LLMFlowController {
                 
             case AgentState.ANALYSIS:
             default:
-                // 分析状態: デフォルトの処理
-                if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
+                // 分析状態: No_Changes_Neededタグがある場合は即座に完了
+                if (parsed.has_no_changes_needed) {
+                    console.log('✅ FSM: No changes needed detected in ANALYSIS, completing directly');
+                    await this.agentStateService.transition(AgentState.READY_TO_FINISH, 'no_changes_needed_detected');
+                    // READY_TO_FINISHからさらにFINISHEDへ
+                    await this.agentStateService.transition(AgentState.FINISHED, 'no_changes_needed_completion');
+                    this.state = State.End;
+                } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
                     console.log('📝 FSM: Continuing analysis with file requests');
                     this.state = State.SystemAnalyzeRequest;
                 } else if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {

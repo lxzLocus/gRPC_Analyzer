@@ -202,7 +202,8 @@ export class TagParser {
    */
   static detectTags(text: string): string[] {
     // タグのパターンを定義（%_XXX_%または%%_XXX_%%）
-    const tagPattern = /%%?_([^_]+)_%%?/g;
+    // 注意: タグ名にアンダースコアを含む場合もあるため、非貪欲マッチで次の_%までを取得
+    const tagPattern = /%%?_(.+?)_%%?/g;
     const matches = text.matchAll(tagPattern);
     const tags: string[] = [];
 
