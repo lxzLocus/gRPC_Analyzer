@@ -47,7 +47,7 @@ import getPathTree from '../modules/generateDirPathLists.js';
 import {mergeStructures, findAllAndMergeProjectRoots} from '../modules/editFilePathStructure.js';
 
 /*config*/
-const datasetDir = '/app/dataset/tmp';
+const datasetDir = '/app/dataset/filtered_fewChanged';
 
 /* __MAIN__ */
 // main処理をasync関数でラップ
@@ -236,16 +236,16 @@ async function main() {
                         if (fs.existsSync(protoFileChangesPath)) {
                             fs.unlinkSync(protoFileChangesPath);
                         }
-                        // 新しいファイルを作成
+                        // 空配列を書き込む（変更がないことを明示）
                         
                         try {
-                            fs.appendFileSync(protoFileChangesPath, '', 'utf8'); // 空の文字列を渡す
+                            fs.writeFileSync(protoFileChangesPath, '[]', 'utf8');
                         } catch (error) {
-                            console.error(`Error appending to file: ${protoFileChangesPath}`, error);
+                            console.error(`Error writing to file: ${protoFileChangesPath}`, error);
                         }
                         
 
-                        console.log('No proto file changes detected, no file created.');
+                        console.log('No proto file changes detected, empty array written.');
                     }
                 } catch (error: any) {
                     console.error(`Error processing proto file changes: ${error.message}`);
@@ -526,8 +526,8 @@ async function main() {
                         if (fs.existsSync(premergeFilePath)) {
                             try {
                                 const content = fs.readFileSync(premergeFilePath, 'utf8');
-                                // unix diff ライクなヘッダー
-                                outputLines.push(`--- /${file.filePath}`);
+                                // unix diff ライクなヘッダー（相対パスのみ、先頭スラッシュなし）
+                                outputLines.push(`--- ${file.filePath}`);
                                 outputLines.push(content);
                             } catch (e: any) {
                                 console.error(`Error reading file content for ${premergeFilePath}:`, e.message);

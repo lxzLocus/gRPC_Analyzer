@@ -37,7 +37,7 @@ async function getFilesDiff(premergePath, mergePath, extension) {
             throw new Error('premerge または merge ディレクトリが見つかりません');
         }
 
-        // 2つのディレクトリから対象ファイルリストを取得（.gitディレクトリを除外）
+        // 2つのディレクトリから対象ファイルリストを取得（特定のディレクトリを除外）
         const premergeFiles = getFilesRecursive(premergePath, extension);
 
         const diffResults = [];
@@ -49,7 +49,7 @@ async function getFilesDiff(premergePath, mergePath, extension) {
 
             if (fs.existsSync(file2)) {
                 try {
-                    const diffResult = await diffFiles(file1, file2);
+                    const diffResult = await diffFiles(file1, file2, premergePath, mergePath);
                     if (diffResult) {
                         diffResults.push(diffResult);
                     }
@@ -84,9 +84,9 @@ function getFilesRecursive(dir, extension) {
         const filePath = path.join(dir, file);
         const stat = fs.statSync(filePath);
 
-        // 指定された拡張子のファイルのみ取得し、.gitディレクトリは除外
+        // 指定された拡張子のファイルのみ取得し、特定のディレクトリは除外
         if (stat.isDirectory()) {
-            if (file !== '.git') {
+            if (file !== '.git' && file !== 'vendor' && file !== 'node_modules') {
                 results = results.concat(getFilesRecursive(filePath, extension));
             }
         } else if (!extension || file.endsWith(extension)) {
@@ -99,15 +99,36 @@ function getFilesRecursive(dir, extension) {
 }
 
 // premerge と merge ディレクトリ内で同名の .proto ファイルを diff
-function diffFiles(file1, file2) {
+function diffFiles(file1, file2, premergePath, mergePath) {
     return new Promise((resolve, reject) => {
-        console.log(`Running diff between: ${file1} and ${file2}`); // デバッグ用
         exec(`diff -u "${file1}" "${file2}"`, (err, stdout, stderr) => {
             if (err && err.code === 1) {
                 // 差分が見つかる場合
+                // 絶対パスを相対パスに置換（開発環境のパスを隠蔽）
+                let sanitizedDiff = stdout;
+                
+                // premerge/merge/commit_snapshotディレクトリからの相対パスを取得
+                const relPath1 = premergePath ? path.relative(premergePath, file1) : path.basename(file1);
+                const relPath2 = mergePath ? path.relative(mergePath, file2) : path.basename(file2);
+                
+                // diff出力を行ごとに分割して処理
+                const lines = sanitizedDiff.split('\n');
+                const processedLines = lines.map(line => {
+                    // --- で始まる行を処理
+                    if (line.startsWith('--- ')) {
+                        return `--- ${relPath1}`;
+                    }
+                    // +++ で始まる行を処理
+                    if (line.startsWith('+++ ')) {
+                        return `+++ ${relPath2}`;
+                    }
+                    return line;
+                });
+                sanitizedDiff = processedLines.join('\n');
+                
                 resolve({
-                    relativePath: path.relative(path.dirname(file1), file1),
-                    diff: stdout
+                    relativePath: relPath1,
+                    diff: sanitizedDiff
                 });
             } else if (err) {
                 // 予期しないエラー
@@ -141,7 +162,7 @@ async function getDiffsForSpecificFiles(fileList, premergePath, mergePath) {
 
         if (fs.existsSync(file1) && fs.existsSync(file2)) {
             try {
-                const diffResult = await diffFiles(file1, file2);
+                const diffResult = await diffFiles(file1, file2, premergePath, mergePath);
                 if (diffResult) {
                     // diffFilesは相対パスを返すので、入力の相対パスで上書きして一貫性を保つ
                     diffResults.push({ relativePath: relativePath, diff: diffResult.diff });

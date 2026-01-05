@@ -14,7 +14,7 @@ import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { DiscordWebhook } from '../src/utils/DiscordWebhook.js';
 import Config from '../dist/js/modules/config.js';
-import { consoleLogger } from '../dist/js/modules/consoleLogger.js';
+import { consoleLogger } from '../dist/js/modules/ConsoleLogger.js';
 
 // ES module環境での __dirname の取得
 const __filename = fileURLToPath(import.meta.url);
