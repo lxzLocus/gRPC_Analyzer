@@ -235,15 +235,17 @@ export class ProgressTracker {
             }
         }
 
-        // TTYの場合のみTUI更新
+        // Blessed TUI使用時はコンソール出力を完全に抑制
+        if (this.useBlessedView && this.progressView) {
+            // Blessedが全て管理するので何も出力しない
+            return;
+        }
+        
+        // TTYの場合は従来のTUI更新
         if (this.isTTY) {
-            if (this.useBlessedView && this.progressView) {
-                this.updateBlessedView();
-            } else {
-                this.render();
-            }
+            this.render();
         } else {
-            // 非TTYの場合でも詳細な進捗情報を表示
+            // 非TTYの場合は詳細な進捗情報をコンソール出力
             const percentage = this.stats.total > 0 
                 ? ((this.stats.completed / this.stats.total) * 100).toFixed(1)
                 : '0.0';
@@ -283,7 +285,11 @@ export class ProgressTracker {
      * ログメッセージを追加（カテゴリ別に振り分け）
      */
     public log(message: string): void {
-        const timestamp = new Date().toLocaleTimeString('ja-JP');
+        // JSTタイムスタンプを生成
+        const timestamp = new Date().toLocaleTimeString('ja-JP', { 
+            timeZone: 'Asia/Tokyo',
+            hour12: false 
+        });
         const logLine = `[${timestamp}] ${message}`;
         
         // カテゴリ別に振り分け
@@ -295,11 +301,14 @@ export class ProgressTracker {
             this.logBuffer.shift();
         }
 
-        // Blessed View使用時はログバッファに追加するだけ（updateで表示）
-        // TTYの場合のみTUI更新（Blessed使用時は除く）
+        // Blessed View使用時はログバッファに追加するだけ（コンソール出力なし）
         if (this.useBlessedView && this.progressView) {
-            // update()経由で表示されるので何もしない
-        } else if (this.isTTY) {
+            // Blessedが自動的に表示するので何もしない（コンソール出力禁止）
+            return;
+        }
+        
+        // 従来のTUI（Blessed不使用）
+        if (this.isTTY) {
             this.render();
         } else {
             // 非TTYの場合は直接コンソール出力
@@ -330,63 +339,86 @@ export class ProgressTracker {
      */
     private categorizeLog(logLine: string): void {
         const message = logLine;
+        let categorized = false;
         
-        // 現在の処理タスク（最優先）
-        if (message.includes('🔄 Processing:') || 
+        // 現在の処理タスク（最優先）- より広範なパターンマッチング
+        if (!categorized && (
+            message.includes('🔄 Processing') || 
             message.includes('Processing repository:') ||
-            message.includes('📁 Category')) {
+            message.includes('Processing (') ||
+            message.includes('📁 Category') ||
+            message.includes('Phase 1') ||
+            message.includes('Phase 2') ||
+            message.includes('Attempt') ||
+            message.includes('Processing:') ||
+            message.includes('attempt') ||
+            message.includes('FSM:') ||  // FSM状態遷移
+            message.includes('Initial phase') ||  // 初期フェーズ
+            message.includes('Correction phase') ||  // 修正フェーズ
+            message.includes('Quality') ||  // 品質チェック
+            message.includes('Starting') ||  // 処理開始
+            message.includes('Analyzing'))) {  // 分析中
             // タイムスタンプとカラーコードを除去
             const clean = message
                 .replace(/\[\d{1,2}:\d{2}:\d{2}\]\s*/, '')
                 .replace(/\x1b\[[0-9;]*m/g, '');
             this.currentTask = clean;
+            categorized = true;
         }
         // LLM通信ログ
-        else if (message.includes('🚀 LLM') || 
-                 message.includes('🚀 OpenAI') || 
-                 message.includes('OpenAI request') ||
-                 message.includes('attempt') ||
-                 message.includes('OpenAI API')) {
+        if (!categorized && (
+            message.includes('🚀 LLM') || 
+            message.includes('🚀 OpenAI') || 
+            message.includes('OpenAI request') ||
+            message.includes('LLM Request') ||
+            message.includes('OpenAI API'))) {
             this.llmLogs.push(message);
-            if (this.llmLogs.length > 10) { // バッファサイズを増やす
+            if (this.llmLogs.length > 10) {
                 this.llmLogs.shift();
             }
+            categorized = true;
         }
         // エラーログ
-        else if (message.includes('\x1b[31m') || 
-                 message.includes('❌') || 
-                 message.includes('Error') || 
-                 message.includes('Failed') ||
-                 message.includes('[ERROR')) {
+        if (!categorized && (
+            message.includes('\x1b[31m') || 
+            message.includes('❌') || 
+            message.includes('Error') || 
+            message.includes('Failed') ||
+            message.includes('[ERROR'))) {
             this.errorLogs.push(message);
             if (this.errorLogs.length > 10) {
                 this.errorLogs.shift();
             }
+            categorized = true;
         }
         // 警告ログ
-        else if (message.includes('\x1b[33m') || 
-                 message.includes('⚠️') || 
-                 message.includes('Warning') || 
-                 message.includes('Deprecation') ||
-                 message.includes('[WARN')) {
+        if (!categorized && (
+            message.includes('\x1b[33m') || 
+            message.includes('⚠️') || 
+            message.includes('Warning') || 
+            message.includes('Deprecation') ||
+            message.includes('[WARN'))) {
             this.warningLogs.push(message);
             if (this.warningLogs.length > 10) {
                 this.warningLogs.shift();
             }
+            categorized = true;
         }
         // INFOログは一般ログへ
-        else if (message.includes('[INFO') || 
-                 message.includes('🛑') ||
-                 message.includes('🔴') ||
-                 message.includes('Completion Tag') ||
-                 message.includes('File Requests')) {
+        if (!categorized && (
+            message.includes('[INFO') || 
+            message.includes('🛑') ||
+            message.includes('🔴') ||
+            message.includes('Completion Tag') ||
+            message.includes('File Requests'))) {
             this.generalLogs.push(message);
             if (this.generalLogs.length > 50) {
                 this.generalLogs.shift();
             }
+            categorized = true;
         }
         // その他の一般ログ
-        else {
+        if (!categorized) {
             this.generalLogs.push(message);
             if (this.generalLogs.length > 50) {
                 this.generalLogs.shift();

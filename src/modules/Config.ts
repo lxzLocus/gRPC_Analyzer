@@ -164,6 +164,12 @@ class Config {
                     
                     // プロバイダー専用設定をベースにして、ベース設定で上書き（ベース設定が優先）
                     const mergedConfig = this.deepMerge(providerConfig, baseConfig);
+                    
+                    // デバッグ: summaryThresholdの値を確認
+                    console.log(`🔍 DEBUG: summaryThreshold after merge = ${mergedConfig.llm?.summaryThreshold}`);
+                    console.log(`🔍 DEBUG: provider summaryThreshold = ${providerConfig.llm?.summaryThreshold}`);
+                    console.log(`🔍 DEBUG: base summaryThreshold = ${baseConfig.llm?.summaryThreshold}`);
+                    
                     return mergedConfig;
                 } else {
                     console.log(`⚠️  Provider-specific config not found: config_${provider}.json, using base config`);
@@ -192,14 +198,17 @@ class Config {
     
     /**
      * オブジェクトをディープマージ
+     * targetをベースにして、sourceで上書き
      */
     private deepMerge(target: any, source: any): any {
-        const result = { ...target };
+        const result = { ...target };  // targetの全プロパティをコピー
         
         for (const key in source) {
             if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+                // ネストされたオブジェクトの場合、再帰的にマージ
                 result[key] = this.deepMerge(result[key] || {}, source[key]);
             } else {
+                // プリミティブ値の場合、sourceで上書き
                 result[key] = source[key];
             }
         }

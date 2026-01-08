@@ -100,13 +100,13 @@ export class ProgressView {
             style: { border: { fg: 'red' } }
         });
 
-        // 警告ログ（左下）
+        // 警告ログ（左下） - statsBoxの高さ増加に伴い調整
         this.warningLog = blessed.log({
             parent: this.screen,
             top: '50%+3',
             left: 0,
             width: '50%',
-            height: '50%-10',
+            height: '50%-13',
             label: ' Warnings ',
             tags: true,
             border: { type: 'line' },
@@ -116,13 +116,13 @@ export class ProgressView {
             style: { border: { fg: 'yellow' } }
         });
 
-        // 一般ログ（右下）
+        // 一般ログ（右下） - statsBoxの高さ増加に伴い調整
         this.generalLog = blessed.log({
             parent: this.screen,
             top: '50%+3',
             left: '50%',
             width: '50%',
-            height: '50%-10',
+            height: '50%-13',
             label: ' General ',
             tags: true,
             border: { type: 'line' },
@@ -132,13 +132,13 @@ export class ProgressView {
             style: { border: { fg: 'white' } }
         });
 
-        // 統計情報（ショートカットの上）
+        // 統計情報（ショートカットの上） - 高さを増やして詳細情報を表示
         this.statsBox = blessed.box({
             parent: this.screen,
             bottom: 3,
             left: 0,
             width: '100%',
-            height: 4,
+            height: 7,
             label: ' Statistics ',
             content: '',
             tags: true,
@@ -189,8 +189,13 @@ export class ProgressView {
             const elapsed = this.formatElapsed(Date.now() - data.stats.startTime);
             const eta = this.calculateETA(data.stats);
 
+            // currentTaskが未定義の場合のフォールバック
+            const taskDisplay = data.currentTask && data.currentTask.trim() !== '' 
+                ? data.currentTask 
+                : '待機中...';
+
             this.statusBox.setContent(
-                `{cyan-fg}Task:{/cyan-fg} {bold}${data.currentTask}{/bold}\n` +
+                `{cyan-fg}Task:{/cyan-fg} {bold}${taskDisplay}{/bold}\n` +
                 `{cyan-fg}Progress:{/cyan-fg} ${data.stats.completed}/${data.stats.total} ({green-fg}${percentage}%{/green-fg}) | ` +
                 `{cyan-fg}Elapsed:{/cyan-fg} ${elapsed} | {cyan-fg}ETA:{/cyan-fg} ${eta}`
             );
@@ -232,18 +237,58 @@ export class ProgressView {
     private formatTokenStats(stats: ProgressStats, tokenStats?: TokenStats, estimatedRemaining?: number): string {
         const parts: string[] = [];
 
+        // 処理統計 - 1行目
         parts.push(
             `{green-fg}Success:{/green-fg} ${stats.success}  ` +
             `{red-fg}Failed:{/red-fg} ${stats.failed}  ` +
             `{yellow-fg}Skipped:{/yellow-fg} ${stats.skipped}`
         );
 
+        // 進捗とETA - 2行目
+        const percentage = stats.total > 0 
+            ? ((stats.completed / stats.total) * 100).toFixed(1)
+            : '0.0';
+        const elapsed = this.formatElapsed(Date.now() - stats.startTime);
+        const eta = this.calculateETA(stats);
+        
+        // 処理速度を計算
+        let rateText = '';
+        const elapsedSec = (Date.now() - stats.startTime) / 1000;
+        if (elapsedSec > 0) {
+            const rate = stats.completed > 0 
+                ? (stats.completed / elapsedSec * 60).toFixed(2)
+                : '0.00';
+            rateText = `  {cyan-fg}Rate:{/cyan-fg} ${rate} PR/min`;
+        }
+        
+        parts.push(
+            `{cyan-fg}Progress:{/cyan-fg} ${stats.completed}/${stats.total} (${percentage}%)  ` +
+            `{cyan-fg}Elapsed:{/cyan-fg} ${elapsed}  ` +
+            `{cyan-fg}ETA:{/cyan-fg} ${eta}` +
+            rateText
+        );
+
+        // トークン統計 - 3行目
         if (stats.totalTokens > 0) {
+            const avgTokens = stats.completed > 0 ? Math.floor(stats.totalTokens / stats.completed) : 0;
             parts.push(
-                `{cyan-fg}Tokens:{/cyan-fg} ${this.formatTokens(stats.totalTokens)} total  ` +
+                `{cyan-fg}Tokens:{/cyan-fg} ${this.formatTokens(stats.totalTokens)}  ` +
+                `{cyan-fg}Avg:{/cyan-fg} ${this.formatTokens(avgTokens)}/PR  ` +
                 `{cyan-fg}Prompt:{/cyan-fg} ${this.formatTokens(stats.promptTokens)}  ` +
                 `{cyan-fg}Completion:{/cyan-fg} ${this.formatTokens(stats.completionTokens)}`
             );
+        }
+
+        // トークン統計詳細（tokenStatsが利用可能な場合） - 4行目
+        if (tokenStats && tokenStats.count > 0) {
+            let tokenLine = `{cyan-fg}Range:{/cyan-fg} ${this.formatTokens(tokenStats.min)} - ${this.formatTokens(tokenStats.max)}`;
+            
+            // 推定残トークン数
+            if (estimatedRemaining && estimatedRemaining > 0) {
+                tokenLine += `  {yellow-fg}Est. Remaining:{/yellow-fg} ${this.formatTokens(estimatedRemaining)}`;
+            }
+            
+            parts.push(tokenLine);
         }
 
         return parts.join('\n');
@@ -260,7 +305,7 @@ export class ProgressView {
         const minutes = Math.floor(seconds / 60);
         const hours = Math.floor(minutes / 60);
 
-        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+        if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
         if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
         return `${seconds}s`;
     }

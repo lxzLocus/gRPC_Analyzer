@@ -79,8 +79,8 @@ export class BatchProcessController {
                     this.options.useBlessedView || false
                 );
                 
-                // quietMode時はProgressTrackerをloggerに登録
-                if (this.options.quietMode && this.progressTracker) {
+                // quietModeまたはBlessedView使用時はProgressTrackerをloggerに登録
+                if ((this.options.quietMode || this.options.useBlessedView) && this.progressTracker) {
                     const { setProgressTracker } = await import('../utils/logger.js');
                     setProgressTracker(this.progressTracker);
                 }

@@ -125,6 +125,26 @@ class MessageHandler {
 
         // タグベースの処理（既存のロジック）
         const lines = messages.split('\n');
+        
+        // 【事前チェック】レスポンス全体から完了系タグを優先検索
+        // 理由: LLMが%_Plan_%と%_No_Changes_Needed_%を同時に返すケースで、
+        // %_Plan_%が先に検出されてしまうのを防ぐ
+        const fullText = messages;
+        
+        // 最優先: %%_Fin_%%タグ
+        if (fullText.includes('%%_Fin_%%')) {
+            sections.has_fin_tag = true;
+            console.log('🏁 Found %%_Fin_%% tag (priority detection)');
+            return sections;
+        }
+        
+        // 次優先: %_No_Changes_Needed_%タグ
+        if (fullText.includes('%_No_Changes_Needed_%')) {
+            sections.has_no_changes_needed = true;
+            console.log('✅ Found %_No_Changes_Needed_% tag (priority detection)');
+            return sections;
+        }
+        
         let currentTag: string | null = null;
         const buffers: { [key: string]: string[] } = {
             thought: [],
@@ -138,14 +158,14 @@ class MessageHandler {
         for (const line of lines) {
             const trimmed = line.trim();
             
-            // 【優先1】終了タグを最優先でチェック（正規表現マッチの前に判定）
+            // 【優先1】終了タグを最優先でチェック（冗長だが互換性のため残す）
             if (trimmed === '%%_Fin_%%' || trimmed.includes('%%_Fin_%%')) {
                 sections.has_fin_tag = true;
                 console.log('🏁 Found %%_Fin_%% tag');
                 break;
             }
             
-            // 【優先2】修正不要タグ
+            // 【優先2】修正不要タグ（冗長だが互換性のため残す）
             if (trimmed === '%_No_Changes_Needed_%' || trimmed.includes('%_No_Changes_Needed_%')) {
                 sections.has_no_changes_needed = true;
                 console.log('✅ Found %_No_Changes_Needed_% tag');

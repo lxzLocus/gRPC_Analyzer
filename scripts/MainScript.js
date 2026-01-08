@@ -40,7 +40,7 @@ const AVAILABLE_DATASETS = [
  * デフォルト設定
  */
 const DEFAULT_CONFIG = {
-    selectedDatasetIndex: 4,    // filtered_bugs をデフォルト選択（実データあり）
+    selectedDatasetIndex: 0,    // filtered_fewChanged をデフォルト選択（少数変更ファイル）
     outputDir: "/app/output",
     processingOptions: {
         baseOutputDir: "/app/output",
@@ -72,6 +72,7 @@ async function main() {
     let datasetIndex = config.selectedDatasetIndex;
     let outputDir = config.outputDir;
     let enablePreVerification = config.processingOptions.enablePreVerification;
+    let resumeFrom = null;
 
     // コンソール出力の制御フラグ
     const hasNoConsoleLogArg = args.includes('--no-console-log');
@@ -86,8 +87,27 @@ async function main() {
     // デバッグ: 環境変数の確認（quietModeに関わらず必ず出力）
     consoleLogger.forceLog(`🔍 Debug: USE_BLESSED_VIEW=${process.env.USE_BLESSED_VIEW}, useBlessedView=${useBlessedView}, forceTUI=${forceTUI}, quietMode=${quietMode}`);
 
-    // quietMode有効化（他のモジュールのログも抑制）
-    if (quietMode) {
+    // Blessed TUI使用時は全てのコンソール出力を抑制
+    if (useBlessedView) {
+        // 動的インポートでloggerモジュールを読み込み
+        const loggerModule = await import('../dist/js/utils/logger.js');
+        
+        // Blessed TUI初期化前の最小限の情報表示
+        consoleLogger.forceLog('\n╔════════════════════════════════════════════════════════════╗');
+        consoleLogger.forceLog('║         🔬 gRPC Analyzer - Blessed TUI Mode                ║');
+        consoleLogger.forceLog('╚════════════════════════════════════════════════════════════╝');
+        consoleLogger.forceLog('🎨 Initializing Blessed TUI...\n');
+        
+        // logger.jsのquietModeを有効化（console.logを完全に抑制）
+        loggerModule.enableQuietMode();
+        
+        // ConsoleLoggerも完全に無効化（Blessed TUI以外の出力を防ぐ）
+        consoleLogger.setEnabled(false);
+        
+        enablePreVerification = false;
+    } 
+    // quietMode有効化（Blessed以外のTUIモード）
+    else if (quietMode) {
         // 動的インポートでloggerモジュールを読み込み
         const loggerModule = await import('../dist/js/utils/logger.js');
         
@@ -96,11 +116,7 @@ async function main() {
         consoleLogger.forceLog('║         🔬 gRPC Analyzer - Enhanced Display Mode           ║');
         consoleLogger.forceLog('╚════════════════════════════════════════════════════════════╝');
         consoleLogger.forceLog('');
-        if (useBlessedView) {
-            consoleLogger.forceLog('🎨 UI Mode: Blessed TUI (Interactive)');
-        } else {
-            consoleLogger.forceLog('🎨 UI Mode: ANSI TUI (Standard)');
-        }
+        consoleLogger.forceLog('🎨 UI Mode: ANSI TUI (Standard)');
         consoleLogger.forceLog('📊 Dataset: filtered_bugs (実データあり)');
         consoleLogger.forceLog('🤖 LLM: Configuration will be loaded from config');
         consoleLogger.forceLog('🔇 Detailed logs suppressed - Progress will be shown below');
@@ -128,6 +144,23 @@ async function main() {
             enablePreVerification = true;
         } else if (arg === '--no-pre-verification') {
             enablePreVerification = false;
+        } else if (arg === '--resume') {
+            // 次の3つの引数を取得: repository/category/pullRequestTitle
+            const resumeRepo = args[++i];
+            const resumeCat = args[++i];
+            const resumePR = args[++i];
+            
+            if (!resumeRepo || !resumeCat || !resumePR) {
+                consoleLogger.error('❌ --resume requires 3 arguments: repository category pullRequestTitle');
+                consoleLogger.error('   Example: --resume boulder pullrequest "Switch_VA_RPCs_to_proto3"');
+                process.exit(1);
+            }
+            
+            resumeFrom = {
+                repositoryName: resumeRepo,
+                category: resumeCat,
+                pullRequestTitle: resumePR
+            };
         } else if (!isNaN(parseInt(arg)) && datasetIndex === DEFAULT_CONFIG.selectedDatasetIndex) {
             // 最初の数値引数をdatasetIndexとして使用
             datasetIndex = parseInt(arg);
@@ -169,6 +202,15 @@ async function main() {
     log(`   Max Tokens: ${getLLMMaxTokens()}`);
     log(`   API Key Length: ${getLLMApiKeyLength()}`);
     log(`   Summary Threshold: ${configInstance.get('llm.summaryThreshold', 30000)} tokens`);
+    
+    // 再開オプションの表示
+    if (resumeFrom) {
+        log('\n🔄 Resume Mode:');
+        log(`   Repository: ${resumeFrom.repositoryName}`);
+        log(`   Category: ${resumeFrom.category}`);
+        log(`   Starting from PR: ${resumeFrom.pullRequestTitle}`);
+    }
+    
     // 処理オプションの表示
     const options = {
         ...DEFAULT_CONFIG.processingOptions,
@@ -176,7 +218,8 @@ async function main() {
         enablePreVerification: enablePreVerification,
         forceTUI: forceTUI,  // 引数なしの場合はTUIを強制有効化
         quietMode: quietMode,  // 引数なしの場合は詳細ログを抑制
-        useBlessedView: useBlessedView  // 環境変数 USE_BLESSED_VIEW=true で有効化
+        useBlessedView: useBlessedView,  // 環境変数 USE_BLESSED_VIEW=true で有効化
+        resumeFrom: resumeFrom  // 再開オプション
     };
     
     log('\n⚙️ Processing Options:');
@@ -209,16 +252,21 @@ async function main() {
         try {
             webhookClient = new DiscordWebhook(DISCORD_WEBHOOK_URL);
             log('✅ Discord Webhook client initialized');
+            // Blessed TUIモード時も通知初期化を確実に記録
+            if (useBlessedView) {
+                consoleLogger.forceLog('📢 Discord Webhook: Initialized');
+            }
         } catch (error) {
             consoleLogger.warn('⚠️  Discord Webhook initialization failed:', error.message);
             webhookClient = null;
         }
+    } else if (useBlessedView) {
+        consoleLogger.forceLog('📢 Discord Webhook: Disabled (DISCORD_WEBHOOK_URL not set)');
     }
 
     try {
         // 動的インポートでコントローラーを読み込み
-        const controllerModule = await import('../src/Controller/Controller.js');
-        const { datasetLoop } = controllerModule;
+        const { BatchProcessController } = await import('../dist/js/controllers/BatchProcessController.js');
         
         if (quietMode) {
             const loggerModule = await import('../dist/js/utils/logger.js');
@@ -227,54 +275,87 @@ async function main() {
             log('🎮 Starting batch processing...');
         }
         
+        // コントローラーの初期化
+        controller = new BatchProcessController(options);
+        
         // 2時間ごとに進捗を送信する定期処理を開始
         if (webhookClient) {
             progressInterval = setInterval(async () => {
                 try {
-                    log('\n⏰ Sending periodic progress update to Discord...');
-                    // ProgressTrackerから統計を取得する必要があるため、
-                    // ここでは仮の統計を送信（実際の統計は後で追加）
-                    const currentStats = {
-                        total: 0,
-                        processed: 0,
-                        successful: 0,
-                        failed: 0,
-                        skipped: 0,
-                        startTime: Date.now()
-                    };
+                    const notifyMsg = '⏰ Sending periodic progress update to Discord...';
+                    log('\n' + notifyMsg);
+                    // Blessed TUIモード時も通知状態を記録
+                    if (useBlessedView && controller && controller.progressTracker) {
+                        controller.progressTracker.log(notifyMsg);
+                    }
                     
-                    // TODO: 実際のProgressTrackerの統計を取得
-                    // await webhookClient.sendProgress(currentStats, selectedDataset);
-                    log('⏰ Progress update scheduled (implementation pending)');
+                    // ProgressTrackerから実際の統計を取得
+                    const currentStats = controller && controller.progressTracker 
+                        ? controller.progressTracker.getStats() 
+                        : {
+                            total: 0,
+                            processed: 0,
+                            successful: 0,
+                            failed: 0,
+                            skipped: 0,
+                            startTime: Date.now()
+                        };
+                    
+                    // 進捗を送信
+                    if (currentStats.total > 0) {
+                        await webhookClient.sendProgress(currentStats, selectedDataset);
+                        const successMsg = '✅ Progress update sent to Discord';
+                        log(successMsg);
+                        if (useBlessedView && controller && controller.progressTracker) {
+                            controller.progressTracker.log(successMsg);
+                        }
+                    }
                 } catch (webhookError) {
-                    consoleLogger.warn('⚠️  Failed to send progress update:', webhookError.message);
+                    const errorMsg = `⚠️  Failed to send progress update: ${webhookError.message}`;
+                    consoleLogger.warn(errorMsg);
+                    if (useBlessedView && controller && controller.progressTracker) {
+                        controller.progressTracker.log(errorMsg);
+                    }
                 }
             }, DISCORD_PROGRESS_INTERVAL);
             
-            log(`⏰ Progress update timer started (every ${DISCORD_PROGRESS_INTERVAL / 1000 / 60} minutes)\n`);
+            const timerMsg = `⏰ Progress update timer started (every ${DISCORD_PROGRESS_INTERVAL / 1000 / 60} minutes)`;
+            log(timerMsg + '\n');
+            if (useBlessedView) {
+                consoleLogger.forceLog(timerMsg);
+            }
         }
         
-        // 処理の実行（patchEvaluationパターンを踏襲）
-        const stats = await datasetLoop(selectedDataset, outputDir, {
-            generateReport: true,
-            generateErrorReport: true,
-            processingOptions: options
-        });
+        // 処理の実行
+        await controller.runBatchProcessing(selectedDataset);
+        
+        // 統計情報の取得
+        const stats = controller.progressTracker ? controller.progressTracker.getStats() : {
+            total: 0,
+            completed: 0,
+            successful: 0,
+            failed: 0,
+            skipped: 0
+        };
 
         // 結果の表示
         log('\n🎉 MVC batch processing completed successfully!');
         log('========================================');
-        log(`✅ Success: ${stats.successfulPullRequests}/${stats.totalPullRequests}`);
+        log(`✅ Success: ${stats.successful || stats.completed}/${stats.total}`);
         
-        if (stats.totalPullRequests > 0) {
-            log(`📊 Success Rate: ${((stats.successfulPullRequests / stats.totalPullRequests) * 100).toFixed(1)}%`);
+        if (stats.total > 0) {
+            const successRate = ((stats.successful || stats.completed) / stats.total) * 100;
+            log(`📊 Success Rate: ${successRate.toFixed(1)}%`);
         }
         
-        log(`❌ Failed: ${stats.failedPullRequests}`);
-        log(`⏭️ Skipped: ${stats.skippedPullRequests}`);
+        log(`❌ Failed: ${stats.failed || 0}`);
+        log(`⏭️ Skipped: ${stats.skipped || 0}`);
         
         if (stats.totalDuration) {
             log(`⏱️ Total Duration: ${formatDuration(stats.totalDuration)}`);
+        } else if (stats.startTime) {
+            const duration = Date.now() - stats.startTime;
+            log(`⏱️ Total Duration: ${formatDuration(duration)}`);
         }
         
         log('========================================');
@@ -282,19 +363,34 @@ async function main() {
         // Discord通知: 正常終了
         if (webhookClient) {
             try {
-                log('\n📤 Sending final results to Discord...');
+                const notifyMsg = '📤 Sending final results to Discord...';
+                log('\n' + notifyMsg);
+                // Blessed TUIモード時も通知状態を記録
+                if (useBlessedView && controller && controller.progressTracker) {
+                    controller.progressTracker.log(notifyMsg);
+                }
                 const finalStats = {
-                    total: stats.totalPullRequests,
-                    processed: stats.successfulPullRequests + stats.failedPullRequests + stats.skippedPullRequests,
-                    successful: stats.successfulPullRequests,
-                    failed: stats.failedPullRequests,
-                    skipped: stats.skippedPullRequests,
-                    startTime: Date.now() - (stats.totalDuration || 0)
+                    total: stats.total,
+                    processed: stats.completed || (stats.successful + stats.failed + stats.skipped),
+                    successful: stats.successful || stats.completed,
+                    failed: stats.failed || 0,
+                    skipped: stats.skipped || 0,
+                    startTime: stats.startTime || (Date.now() - (stats.totalDuration || 0))
                 };
                 await webhookClient.sendFinalResult(finalStats, selectedDataset, true);
-                log('✅ Final results sent to Discord');
+                const successMsg = '✅ Final results sent to Discord';
+                log(successMsg);
+                // Blessed TUIモード時も成功を記録
+                if (useBlessedView && controller && controller.progressTracker) {
+                    controller.progressTracker.log(successMsg);
+                }
             } catch (webhookError) {
-                consoleLogger.warn('⚠️  Failed to send final results to Discord:', webhookError.message);
+                const errorMsg = `⚠️  Failed to send final results to Discord: ${webhookError.message}`;
+                consoleLogger.warn(errorMsg);
+                // Blessed TUIモード時もエラーを記録
+                if (useBlessedView && controller && controller.progressTracker) {
+                    controller.progressTracker.log(errorMsg);
+                }
             }
         }
         
@@ -319,9 +415,19 @@ async function main() {
         // Discord通知: エラー発生
         if (webhookClient) {
             try {
-                log('\n📤 Sending error notification to Discord...');
+                const notifyMsg = '📤 Sending error notification to Discord...';
+                log('\n' + notifyMsg);
+                // Blessed TUIモード時も通知状態を記録
+                if (useBlessedView && controller && controller.progressTracker) {
+                    controller.progressTracker.log(notifyMsg);
+                }
                 await webhookClient.sendError(error, 'MVC Batch Processing');
-                log('✅ Error notification sent to Discord');
+                const successMsg = '✅ Error notification sent to Discord';
+                log(successMsg);
+                // Blessed TUIモード時も成功を記録
+                if (useBlessedView && controller && controller.progressTracker) {
+                    controller.progressTracker.log(successMsg);
+                }
             } catch (webhookError) {
                 consoleLogger.warn('⚠️  Failed to send error notification to Discord:', webhookError.message);
             }
@@ -450,6 +556,7 @@ function showUsage() {
     consoleLogger.forceLog('   --no-pre-verification       Disable pre-verification step (default for no args)');
     consoleLogger.forceLog('   --no-console-log            Suppress console.log output for TUI mode');
     consoleLogger.forceLog('   --force-console-log         Force console.log output even in TUI mode');
+    consoleLogger.forceLog('   --resume <repo> <cat> <pr>  Resume from specified Pull Request');
     consoleLogger.forceLog('   --help, -h                  Show this help message');
     consoleLogger.forceLog('\n⚠️  Dataset 4 (incorrect_few) uses large prompt files and has 15-minute timeout');
     consoleLogger.forceLog('\n🚀 Examples:');
@@ -458,6 +565,11 @@ function showUsage() {
     consoleLogger.forceLog('   node scripts/MainScript.js 0                            # Use filtered_fewChanged, no pre-verification');
     consoleLogger.forceLog('   node scripts/MainScript.js 0 --enable-pre-verification  # Use filtered_fewChanged with pre-verification');
     consoleLogger.forceLog('   node scripts/MainScript.js 4 /tmp/output                # Use test dataset with custom output');
+    consoleLogger.forceLog('\n🔄 Resume Examples:');
+    consoleLogger.forceLog('   # Resume from the next PR after "Switch_VA_RPCs_to_proto3"');
+    consoleLogger.forceLog('   node scripts/MainScript.js 0 --resume boulder pullrequest "Switch_VA_RPCs_to_proto3"');
+    consoleLogger.forceLog('\n   # Get resume info from last error report:');
+    consoleLogger.forceLog('   tail -20 /app/output/error_report_*.json | grep -A1 repositoryName | tail -4');
 }
 
 // ヘルプオプションの処理は main() 関数内で行うため、ここでは削除

@@ -30,6 +30,12 @@ export class BatchProcessingService {
     // カテゴリとPRの重複カウントを防ぐためのSet
     private countedCategories: Set<string> = new Set();
     private countedPullRequests: Set<string> = new Set();
+    
+    // スピナー関連
+    private spinnerInterval: NodeJS.Timeout | null = null;
+    private spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    private currentSpinnerFrame = 0;
+    private spinnerMessage = '';
 
     constructor(options: BatchProcessingOptions = {}) {
         this.options = {
@@ -202,6 +208,9 @@ export class BatchProcessingService {
         let premergeDir = '';
 
         try {
+            // スピナーを開始
+            this.startSpinner(`Processing ${repositoryName}/${category}/${pullRequestTitle}`);
+            
             // premergeディレクトリの検索
             pullRequestPath = await this.datasetRepository.getPullRequestPath(
                 datasetDir, repositoryName, category, pullRequestTitle
@@ -209,6 +218,7 @@ export class BatchProcessingService {
             
             const premergeResult = await this.datasetRepository.findPremergeDirectory(pullRequestPath);
             if (!premergeResult) {
+                this.stopSpinner();
                 const result = this.createFailureResult(
                     repositoryName, category, pullRequestTitle, pullRequestPath, '',
                     'No premerge directory found', 'MissingPremergeDirectory', startTime
@@ -219,15 +229,19 @@ export class BatchProcessingService {
             const premergeDir = premergeResult;
 
             // LLM処理の実行
+            this.updateSpinnerMessage(`LLM processing ${pullRequestTitle}`);
             const llmResult = await this.llmService.processWithRetry(
                 premergeDir, repositoryName, category, pullRequestTitle
             );
 
             // 結果の分析
+            this.updateSpinnerMessage(`Analyzing result ${pullRequestTitle}`);
             const isSuccess = await this.llmService.analyzeResult(
                 repositoryName, category, pullRequestTitle, llmResult
             );
 
+            this.stopSpinner();
+            
             const result: ProcessingResult = {
                 success: isSuccess,
                 repositoryName,
@@ -270,6 +284,8 @@ export class BatchProcessingService {
             return result;
 
         } catch (error) {
+            this.stopSpinner();
+            
             const result = this.createFailureResult(
                 repositoryName, category, pullRequestTitle, '', '',
                 error instanceof Error ? error.message : String(error),
@@ -393,8 +409,47 @@ export class BatchProcessingService {
      * クリーンアップ
      */
     async cleanup(): Promise<void> {
+        this.stopSpinner();
         await this.llmService.cleanup();
         await this.reportService.cleanup();
+    }
+
+    /**
+     * スピナーを開始（Blessed TUI使用時は無効）
+     */
+    startSpinner(message: string = 'Processing'): void {
+        // Blessed TUI使用時はスピナーを使用しない
+        if (this.options.useBlessedView) {
+            return;
+        }
+        
+        this.stopSpinner(); // 既存のスピナーを停止
+        this.spinnerMessage = message;
+        this.currentSpinnerFrame = 0;
+        
+        this.spinnerInterval = setInterval(() => {
+            const frame = this.spinnerFrames[this.currentSpinnerFrame];
+            process.stdout.write(`\r${frame} ${this.spinnerMessage}...`);
+            this.currentSpinnerFrame = (this.currentSpinnerFrame + 1) % this.spinnerFrames.length;
+        }, 80); // 80ms間隔で更新
+    }
+
+    /**
+     * スピナーを停止
+     */
+    stopSpinner(): void {
+        if (this.spinnerInterval) {
+            clearInterval(this.spinnerInterval);
+            this.spinnerInterval = null;
+            process.stdout.write('\r\x1b[K'); // 行をクリア
+        }
+    }
+
+    /**
+     * スピナーメッセージを更新
+     */
+    updateSpinnerMessage(message: string): void {
+        this.spinnerMessage = message;
     }
 
     // プライベートヘルパーメソッド

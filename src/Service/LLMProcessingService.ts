@@ -25,6 +25,8 @@ export class LLMProcessingService {
 
     /**
      * リトライ機能付きLLM処理実行
+     * Phase 1 (3回): OpenAIライブラリ使用
+     * Phase 2 (3回): REST API直接呼び出し（フォールバック）
      */
     async processWithRetry(
         premergeDir: string,
@@ -32,16 +34,33 @@ export class LLMProcessingService {
         category: string,
         pullRequestTitle: string
     ): Promise<LLMControllerResult> {
-        const maxRetries = this.options.maxRetries || 3;
+        const maxRetriesPerPhase = this.options.maxRetries || 3;
+        const totalMaxRetries = maxRetriesPerPhase * 2; // Phase 1 + Phase 2
         let lastError: Error | null = null;
+        let useRestApiFallback = false;
 
-        for (let retry = 0; retry <= maxRetries; retry++) {
+        for (let retry = 0; retry < totalMaxRetries; retry++) {
             try {
-                console.log(`🔄 Processing (attempt ${retry + 1}/${maxRetries + 1}): ${repositoryName}/${category}/${pullRequestTitle}`);
+                // Phase切り替え: 最初の3回が失敗したらREST APIフォールバックに切り替え
+                if (retry >= maxRetriesPerPhase && !useRestApiFallback) {
+                    console.log('\n🔄 ════════════════════════════════════════════════');
+                    console.log('⚠️  OpenAI Library failed 3 times. Switching to REST API fallback...');
+                    console.log('🔄 ════════════════════════════════════════════════\n');
+                    useRestApiFallback = true;
+                }
+
+                const phase = useRestApiFallback ? 2 : 1;
+                const phaseRetry = retry % maxRetriesPerPhase;
+                const phaseAttempt = phaseRetry + 1;
                 
-                const result = await this.executeLLMController(premergeDir);
+                console.log(`🔄 Processing (Phase ${phase}, attempt ${phaseAttempt}/${maxRetriesPerPhase}): ${repositoryName}/${category}/${pullRequestTitle}`);
+                
+                const result = await this.executeLLMController(premergeDir, useRestApiFallback);
                 
                 if (result.success) {
+                    if (useRestApiFallback) {
+                        console.log('✅ Success using REST API fallback!');
+                    }
                     return result;
                 } else if (!this.isRetryableError(result.errorMessage || '')) {
                     // リトライ不可能なエラーの場合は即座に返す
@@ -53,25 +72,48 @@ export class LLMProcessingService {
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
                 
+                const phase = useRestApiFallback ? 2 : 1;
+                const phaseRetry = retry % maxRetriesPerPhase;
+                const phaseAttempt = phaseRetry + 1;
+                
                 // 詳細エラーログの記録
                 this.logger.logLLMParsingError(
                     lastError.message || 'Unknown error',
                     'processWithRetry',
                     'Expected successful LLM processing',
-                    `Failed at attempt ${retry + 1}/${maxRetries + 1}`,
+                    `Failed at Phase ${phase}, attempt ${phaseAttempt}/${maxRetriesPerPhase}`,
                     lastError
                 );
                 
-                console.error(`❌ Error in attempt ${retry + 1}/${maxRetries + 1} for ${pullRequestTitle}:`, lastError.message);
+                console.error(`❌ Error in Phase ${phase}, attempt ${phaseAttempt}/${maxRetriesPerPhase} for ${pullRequestTitle}:`, lastError.message);
                 
-                if (!this.isRetryableError(lastError.message) || retry === maxRetries) {
+                if (!this.isRetryableError(lastError.message)) {
+                    // リトライ不可能なエラーの場合
+                    // ただし、Phase 1でネットワークエラーの場合はPhase 2へ
+                    if (!useRestApiFallback && this.isNetworkError(lastError.message)) {
+                        console.log('🔄 Network error detected in Phase 1. Will try Phase 2 (REST API)...');
+                        retry = maxRetriesPerPhase - 1; // Phase 2に強制遷移
+                        continue;
+                    }
                     break;
                 }
                 
-                // 指数バックオフでリトライ待機
-                const waitTime = Math.pow(2, retry) * 1000;
-                console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+                // Phase内での最終リトライの場合、次のPhaseへ
+                if (phaseAttempt >= maxRetriesPerPhase && !useRestApiFallback) {
+                    console.log('⚠️  Phase 1 exhausted. Moving to Phase 2...');
+                    continue; // 次のループでPhase 2開始
+                }
+                
+                // リトライ待機（exponential backoff with jitter）
+                // ネットワークエラーの場合は待機時間を延長
+                const isNetworkErr = this.isNetworkError(lastError.message);
+                const baseWaitTime = Math.pow(2, phaseRetry) * (isNetworkErr ? 2000 : 1000);
+                // ジッターを追加して同時リトライの衝突を回避
+                const jitter = Math.random() * 1000;
+                const waitTime = baseWaitTime + jitter;
+                console.log(`⏳ Waiting ${Math.round(waitTime)}ms before retry (network error: ${isNetworkErr})...`);
                 await new Promise(resolve => setTimeout(resolve, waitTime));
+                
             } finally {
                 await this.cleanupController();
             }
@@ -80,17 +122,26 @@ export class LLMProcessingService {
         return {
             success: false,
             processingTime: 0,
-            errorMessage: lastError?.message || 'Unknown error after retries'
+            errorMessage: lastError?.message || 'Unknown error after all retry phases'
         };
     }
 
     /**
      * LLMFlowController の実行
+     * @param premergeDir プリマージディレクトリ
+     * @param useRestApiFallback REST APIフォールバックを使用するか
      */
-    private async executeLLMController(premergeDir: string): Promise<LLMControllerResult> {
+    private async executeLLMController(premergeDir: string, useRestApiFallback: boolean = false): Promise<LLMControllerResult> {
         const startTime = Date.now();
 
         try {
+            // REST APIフォールバック時は環境変数で通知
+            if (useRestApiFallback) {
+                process.env.USE_OPENAI_REST_FALLBACK = 'true';
+            } else {
+                delete process.env.USE_OPENAI_REST_FALLBACK;
+            }
+            
             this.currentController = new LLMFlowController(premergeDir, {
                 enablePreVerification: this.options.enablePreVerification ?? true
             });
@@ -128,6 +179,9 @@ export class LLMProcessingService {
                 errorMessage: error instanceof Error ? error.message : String(error),
                 usage: tokenUsage
             };
+        } finally {
+            // 環境変数をクリーンアップ
+            delete process.env.USE_OPENAI_REST_FALLBACK;
         }
     }
 
@@ -195,29 +249,93 @@ export class LLMProcessingService {
     }
 
     /**
+     * ネットワークエラーかどうかの判定
+     */
+    private isNetworkError(errorMessage: string): boolean {
+        const networkPatterns = [
+            /connection.*error/i,
+            /APIConnectionError/i,
+            /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/i,
+            /network/i,
+            /timeout/i
+        ];
+        
+        const lowerMessage = errorMessage.toLowerCase();
+        return networkPatterns.some(pattern => pattern.test(lowerMessage));
+    }
+
+    /**
+     *      console.log(`   Has errors: ${hasErrors ? 'YES' : 'NO'}`);
+            console.log(`   Final result: ${isSuccess ? 'SUCCESS' : 'FAILURE'}`);
+
+            return isSuccess;
+
+        } catch (error) {
+            console.error(`❌ Error analyzing processing result for ${pullRequestTitle}:`, error);
+            return false;
+        }
+    }
+
+    /**
      * エラーがリトライ可能かどうかの判定
      */
     private isRetryableError(errorMessage: string): boolean {
         const retryablePatterns = [
+            // ネットワーク・接続エラー（リトライ可能）
+            /connection.*error/i,
             /network|timeout|connection/i,
-            /rate.*limit/i,
+            /ECONNREFUSED|ENOTFOUND|ETIMEDOUT/i,
+            
+            // OpenAI API特有のリトライ可能エラー
+            /rate.*limit/i,           // RateLimitError (429)
+            /APITimeoutError/i,       // タイムアウト (408)
+            /InternalServerError/i,   // サーバーエラー (500)
+            /502|503|504/i,           // Bad Gateway, Service Unavailable, Gateway Timeout
+            
+            // 一時的なエラー
             /temporary|temp/i,
-            /502|503|504/i,
+            /try.*again/i,
+            
+            // JSONパースエラー（LLMレスポンスの問題）
             /JSON.*parse/i,
             /SyntaxError/i,
             /unexpected/i
         ];
 
         const nonRetryablePatterns = [
-            /401|403|404|413/i, // 認証・権限・見つからない・ペイロード過大
+            // OpenAI API特有のリトライ不可エラー
+            /UnauthorizedError/i,            // 認証エラー (401)
+            /BadRequestError/i,              // 不正なリクエスト (400) - 一部除く
+            /NotFoundError/i,                // モデル未発見 (404)
+            /UnprocessableEntityError/i,     // 処理不可 (422)
+            /ConflictError/i,                // 競合 (409)
+            
+            // HTTPステータスコード
+            /401|403|404|413|422/i,
+            
+            // 具体的なエラーメッセージ
+            /authentication.*failed/i,
+            /invalid.*api.*key/i,
+            /model.*not.*found/i,
             /invalid.*request/i,
             /malformed/i,
+            
+            // ファイルシステムエラー
             /file.*not.*found/i,
-            /directory.*not.*found/i
+            /directory.*not.*found/i,
+            /permission.*denied/i
         ];
 
-        // 非リトライ対象のエラーをチェック
         const lowerErrorMessage = errorMessage.toLowerCase();
+        
+        // 特別なケース: BadRequestErrorでもトークン超過の場合はリトライ可能
+        // （システムが自動的にサマライズして再試行する）
+        if (/token|context_length/i.test(lowerErrorMessage) && /400|BadRequest/i.test(lowerErrorMessage)) {
+            console.log(`🔄 Token limit error detected - System will summarize and retry: ${errorMessage}`);
+            return true;
+        }
+
+        // 非リトライ対象のエラーをチェック（優先）
         for (const pattern of nonRetryablePatterns) {
             if (pattern.test(lowerErrorMessage)) {
                 console.log(`🚫 Non-retryable error detected: ${errorMessage}`);
@@ -234,7 +352,7 @@ export class LLMProcessingService {
         }
 
         // デフォルトはリトライ対象外
-        console.log(`❓ Unknown error type, not retrying: ${errorMessage}`);
+        console.log(`❓ Unknown error type (not retrying): ${errorMessage}`);
         return false;
     }
 

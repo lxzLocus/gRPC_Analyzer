@@ -33,11 +33,10 @@ export function enableQuietMode(): void {
     console.log = (...args: any[]) => {
         const message = args.join(' ');
         
-        // ProgressTrackerが利用可能な場合はログバッファに追加
+        // ProgressTrackerが利用可能な場合はログバッファに追加（Blessed TUI用）
         if (progressTrackerInstance && progressTrackerInstance.log) {
             // ProgressTrackerのログメソッドを使用（TUIのログ領域に表示）
-            // カラーコード: 通常ログは白（デフォルト）
-            progressTrackerInstance.log(`\x1b[37m${message}\x1b[0m`);
+            progressTrackerInstance.log(message);
             return;
         }
         
@@ -76,9 +75,11 @@ export function enableQuietMode(): void {
         
         // ProgressTrackerが利用可能ならログバッファに追加
         if (progressTrackerInstance && progressTrackerInstance.log) {
-            // カラーコード: エラーは赤色
-            progressTrackerInstance.log(`\x1b[31m❌ ${firstLine}\x1b[0m`);
-        } else if (message.includes('Critical') || message.includes('Fatal')) {
+            progressTrackerInstance.log(`❌ ${firstLine}`);
+            return;
+        }
+        
+        if (message.includes('Critical') || message.includes('Fatal')) {
             // Criticalエラーは表示
             originalConsoleError(...args);
         } else {

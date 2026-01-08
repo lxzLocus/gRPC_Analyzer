@@ -28,7 +28,8 @@ class ConversationSummarizer {
     // 設定
     private readonly DEFAULT_SUMMARY_THRESHOLD = 30000; // デフォルトのトークン閾値
     private readonly TOKEN_ESTIMATION_RATIO = 4; // 1トークン ≈ 4文字の近似
-    private readonly MODEL_HARD_LIMIT = 100000; // モデルの絶対上限（緊急要約トリガー）
+    private readonly HARD_LIMIT_MULTIPLIER = 1.25; // summaryThresholdに対するhard limitの倍率
+    private MODEL_HARD_LIMIT: number; // モデルの絶対上限（緊急要約トリガー）※summaryThresholdの1.25倍
     private readonly MIN_TURN_INTERVAL = 3; // 最小要約間隔（動的調整可能）
     private readonly TOKEN_GROWTH_THRESHOLD = 1.4; // トークン成長率閾値
 
@@ -47,7 +48,11 @@ class ConversationSummarizer {
             summarizationHistory: []
         };
         
+        // hard limitをsummaryThresholdの1.25倍として動的に設定
+        this.MODEL_HARD_LIMIT = Math.floor(this.historyManager.summaryThreshold * this.HARD_LIMIT_MULTIPLIER);
+        
         console.log(`📝 ConversationSummarizer initialized with threshold: ${this.historyManager.summaryThreshold} tokens`);
+        console.log(`📝 MODEL_HARD_LIMIT set to: ${this.MODEL_HARD_LIMIT} tokens (${this.HARD_LIMIT_MULTIPLIER}x threshold)`);
     }
 
     /**
@@ -437,7 +442,9 @@ class ConversationSummarizer {
      */
     adjustThreshold(newThreshold: number): void {
         this.historyManager.summaryThreshold = newThreshold;
+        this.MODEL_HARD_LIMIT = Math.floor(newThreshold * this.HARD_LIMIT_MULTIPLIER);
         console.log(`📊 Summary threshold adjusted to: ${newThreshold} tokens`);
+        console.log(`📊 MODEL_HARD_LIMIT adjusted to: ${this.MODEL_HARD_LIMIT} tokens`);
     }
 }
 
