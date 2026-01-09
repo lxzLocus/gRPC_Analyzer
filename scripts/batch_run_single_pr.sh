@@ -17,12 +17,26 @@
 
 set -e  # エラーで停止
 
-# カラー出力
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# カラー出力（tputを使用してより互換性を高める）
+if command -v tput >/dev/null 2>&1 && [ -t 1 ]; then
+    RED=$(tput setaf 1)
+    GREEN=$(tput setaf 2)
+    YELLOW=$(tput setaf 3)
+    BLUE=$(tput setaf 4)
+    NC=$(tput sgr0)
+else
+    # tputが使えない、またはパイプの場合は色なし
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    NC=''
+fi
+
+# カラー出力用ヘルパー関数
+cecho() {
+    printf "%s\n" "$1"
+}
 
 # データセット選択関数（配列の代わり）
 get_dataset_path() {
@@ -57,13 +71,13 @@ if [ "$2" = "--resume" ]; then
     shift_count=5
     
     if [ -z "$RESUME_REPO" ] || [ -z "$RESUME_CATEGORY" ] || [ -z "$RESUME_PR" ]; then
-        echo "${RED}❌ --resume requires 3 arguments: repository category pr_title${NC}"
+        cecho "${RED}❌ --resume requires 3 arguments: repository category pr_title${NC}"
         echo "Usage: sh $0 [dataset_index] --resume <repository> <category> <pr_title>"
         exit 1
     fi
     
-    echo "${YELLOW}🔄 Resume mode enabled${NC}"
-    echo "${YELLOW}   Will skip until after: ${RESUME_REPO}/${RESUME_CATEGORY}/${RESUME_PR}${NC}"
+    cecho "${YELLOW}🔄 Resume mode enabled${NC}"
+    cecho "${YELLOW}   Will skip until after: ${RESUME_REPO}/${RESUME_CATEGORY}/${RESUME_PR}${NC}"
     echo ""
 fi
 
@@ -71,8 +85,8 @@ fi
 DATASET_DIR=$(get_dataset_path $DATASET_INDEX)
 
 if [ -z "$DATASET_DIR" ]; then
-    echo "${RED}❌ Invalid dataset index: ${DATASET_INDEX}${NC}"
-    echo "${BLUE}📂 Available datasets:${NC}"
+    cecho "${RED}❌ Invalid dataset index: ${DATASET_INDEX}${NC}"
+    cecho "${BLUE}📂 Available datasets:${NC}"
     echo "   0: /app/dataset/filtered_fewChanged"
     echo "   1: /app/dataset/filtered_confirmed"
     echo "   2: /app/dataset/filtered_commit"
@@ -95,14 +109,14 @@ FAILED_PRS=0
 SKIPPED_PRS=0
 START_TIME=$(date +%s)
 
-echo "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-echo "${GREEN}║         🔬 gRPC Analyzer - Batch PR Execution              ║${NC}"
-echo "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+cecho "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+cecho "${GREEN}║         🔬 gRPC Analyzer - Batch PR Execution              ║${NC}"
+cecho "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo "${BLUE}📂 Dataset: ${DATASET_DIR}${NC}"
-echo "${BLUE}📁 Output: ${OUTPUT_BASE}${NC}"
-echo "${BLUE}📝 Log: ${LOG_FILE}${NC}"
-echo "${BLUE}🐛 Process ID: $$${NC}"
+cecho "${BLUE}📂 Dataset: ${DATASET_DIR}${NC}"
+cecho "${BLUE}📁 Output: ${OUTPUT_BASE}${NC}"
+cecho "${BLUE}📝 Log: ${LOG_FILE}${NC}"
+cecho "${BLUE}🐛 Process ID: $$${NC}"
 echo ""
 
 # ログ初期化
@@ -120,7 +134,7 @@ echo ""
 find_and_execute_prs() {
     local dataset="$1"
     
-    echo "${YELLOW}🔍 Scanning dataset for PRs...${NC}"
+    cecho "${YELLOW}🔍 Scanning dataset for PRs...${NC}"
     
     # データセット構造: dataset/repository/category/pr_title/
     for repo_dir in "$dataset"/*; do
@@ -141,8 +155,8 @@ find_and_execute_prs() {
                 # Resume機能: 指定されたPRまでスキップ
                 if [ "$RESUME_MODE" = true ] && [ "$RESUME_FOUND" = false ]; then
                     if [ "$repo_name" = "$RESUME_REPO" ] && [ "$category_name" = "$RESUME_CATEGORY" ] && [ "$pr_title" = "$RESUME_PR" ]; then
-                        echo "${YELLOW}✓ Found resume point: ${repo_name}/${category_name}/${pr_title}${NC}" | tee -a "$LOG_FILE"
-                        echo "${YELLOW}  Starting from next PR...${NC}" | tee -a "$LOG_FILE"
+                        cecho "${YELLOW}✓ Found resume point: ${repo_name}/${category_name}/${pr_title}${NC}" | tee -a "$LOG_FILE"
+                        cecho "${YELLOW}  Starting from next PR...${NC}" | tee -a "$LOG_FILE"
                         RESUME_FOUND=true
                     fi
                     # まだresumeポイントに到達していないのでスキップ
@@ -152,7 +166,7 @@ find_and_execute_prs() {
                 # PRディレクトリ内に必要なファイルがあるか確認
                 # target.diff, modified.diff または 01_proto.txt などの番号付きファイル
                 if [ ! -f "$pr_dir/target.diff" ] && [ ! -f "$pr_dir/modified.diff" ] && [ ! -f "$pr_dir/01_proto.txt" ]; then
-                    echo "${YELLOW}⏭️  Skipping (no data files): $repo_name/$category_name/$pr_title${NC}" | tee -a "$LOG_FILE"
+                    cecho "${YELLOW}⏭️  Skipping (no data files): $repo_name/$category_name/$pr_title${NC}" | tee -a "$LOG_FILE"
                     SKIPPED_PRS=$((SKIPPED_PRS + 1))
                     continue
                 fi
@@ -160,12 +174,13 @@ find_and_execute_prs() {
                 TOTAL_PRS=$((TOTAL_PRS + 1))
                 
                 echo "" | tee -a "$LOG_FILE"
-                echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" | tee -a "$LOG_FILE"
-                echo "${GREEN}🚀 Processing PR #${TOTAL_PRS}${NC}" | tee -a "$LOG_FILE"
-                echo "${BLUE}   Repository: ${repo_name}${NC}" | tee -a "$LOG_FILE"
-                echo "${BLUE}   Category: ${category_name}${NC}" | tee -a "$LOG_FILE"
-                echo "${BLUE}   PR: ${pr_title}${NC}" | tee -a "$LOG_FILE"
-                echo "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" | tee -a "$LOG_FILE"
+                cecho "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" | tee -a "$LOG_FILE"
+                cecho "${GREEN}🚀 Processing PR #${TOTAL_PRS}${NC}" | tee -a "$LOG_FILE"
+                cecho "${BLUE}   Repository: ${repo_name}${NC}" | tee -a "$LOG_FILE"
+                cecho "${BLUE}   Category: ${category_name}${NC}" | tee -a "$LOG_FILE"
+                cecho "${BLUE}   PR: ${pr_title}${NC}" | tee -a "$LOG_FILE"
+                cecho "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" | tee -a "$LOG_FILE"
+                cecho "${YELLOW}⏳ Status: Initializing worker...${NC}"
                 
                 # 一時的なワーカースクリプトを作成
                 WORKER_SCRIPT="${OUTPUT_BASE}/worker_${repo_name}_${category_name}_${pr_title}.js"
@@ -264,14 +279,55 @@ EOF
                 # 実行時刻を記録
                 PR_START_TIME=$(date +%s)
                 echo "   ⏱️  Started at: $(date)" | tee -a "$LOG_FILE"
+                cecho "${YELLOW}⏳ Status: Starting Node.js process...${NC}"
                 
-                # node プロセスを実行（独立したプロセス）
-                if node "$WORKER_SCRIPT" > "$PR_LOG" 2>&1; then
+                # node プロセスを実行（バックグラウンドで独立したプロセス）
+                node "$WORKER_SCRIPT" > "$PR_LOG" 2>&1 &
+                NODE_PID=$!
+                
+                cecho "${YELLOW}⏳ Status: Node process started (PID: ${NODE_PID})${NC}"
+                cecho "${YELLOW}🔄 Processing... (monitoring log for updates)${NC}"
+                
+                # プロセス監視ループ
+                LAST_LOG_SIZE=0
+                DOTS=""
+                while kill -0 "$NODE_PID" 2>/dev/null; do
+                    # ログファイルに新しい内容があるか確認
+                    if [ -f "$PR_LOG" ]; then
+                        CURRENT_LOG_SIZE=$(wc -c < "$PR_LOG" 2>/dev/null || echo 0)
+                        if [ "$CURRENT_LOG_SIZE" -gt "$LAST_LOG_SIZE" ]; then
+                            # 新しいログ内容を表示
+                            NEW_CONTENT=$(tail -c +$((LAST_LOG_SIZE + 1)) "$PR_LOG" | head -n 5 | sed 's/^/     /')
+                            if [ -n "$NEW_CONTENT" ]; then
+                                cecho "${BLUE}📝 [LOG]:${NC}"
+                                echo "$NEW_CONTENT"
+                            fi
+                            LAST_LOG_SIZE=$CURRENT_LOG_SIZE
+                            DOTS=""
+                        else
+                            # ログに変化がない場合はドットを表示
+                            DOTS="${DOTS}."
+                            printf "\r${YELLOW}⏳ Waiting for response${DOTS}${NC}"
+                            if [ ${#DOTS} -gt 10 ]; then
+                                DOTS=""
+                            fi
+                        fi
+                    fi
+                    sleep 2
+                done
+                printf "\r\033[K"  # 行をクリア
+                
+                # プロセスの終了ステータスを取得
+                wait "$NODE_PID"
+                NODE_EXIT_CODE=$?
+                
+                if [ $NODE_EXIT_CODE -eq 0 ]; then
                     PR_END_TIME=$(date +%s)
                     PR_DURATION=$((PR_END_TIME - PR_START_TIME))
                     
                     SUCCESSFUL_PRS=$((SUCCESSFUL_PRS + 1))
-                    echo "${GREEN}   ✅ Success (${PR_DURATION}s)${NC}" | tee -a "$LOG_FILE"
+                    cecho "${GREEN}✅ Status: Completed successfully${NC}"
+                    cecho "${GREEN}   ✅ Success (${PR_DURATION}s)${NC}" | tee -a "$LOG_FILE"
                     
                     # サマリーに追記
                     {
@@ -282,8 +338,12 @@ EOF
                     PR_DURATION=$((PR_END_TIME - PR_START_TIME))
                     
                     FAILED_PRS=$((FAILED_PRS + 1))
-                    echo "${RED}   ❌ Failed (${PR_DURATION}s)${NC}" | tee -a "$LOG_FILE"
+                    cecho "${RED}❌ Status: Failed (Exit code: ${NODE_EXIT_CODE})${NC}"
+                    cecho "${RED}   ❌ Failed (${PR_DURATION}s)${NC}" | tee -a "$LOG_FILE"
                     echo "   📋 See log: $PR_LOG" | tee -a "$LOG_FILE"
+                    # エラーログの最後の数行を表示
+                    cecho "${RED}📋 Last error lines:${NC}"
+                    tail -n 10 "$PR_LOG" | sed 's/^/     /'
                     
                     # サマリーに追記
                     {
@@ -295,7 +355,7 @@ EOF
                 rm -f "$WORKER_SCRIPT"
                 
                 # 現在の統計を表示
-                echo "${YELLOW}   📊 Progress: ${SUCCESSFUL_PRS} success, ${FAILED_PRS} failed, ${SKIPPED_PRS} skipped / ${TOTAL_PRS} total${NC}"
+                cecho "${YELLOW}   📊 Progress: ${SUCCESSFUL_PRS} success, ${FAILED_PRS} failed, ${SKIPPED_PRS} skipped / ${TOTAL_PRS} total${NC}"
                 
                 # 短い待機（API負荷軽減）
                 sleep 2
@@ -315,37 +375,37 @@ END_TIME=$(date +%s)
 TOTAL_DURATION=$((END_TIME - START_TIME))
 
 echo "" | tee -a "$LOG_FILE"
-echo "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}" | tee -a "$LOG_FILE"
-echo "${GREEN}║         🎉 Batch Execution Completed                       ║${NC}" | tee -a "$LOG_FILE"
-echo "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}" | tee -a "$LOG_FILE"
+cecho "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}" | tee -a "$LOG_FILE"
+cecho "${GREEN}║         🎉 Batch Execution Completed                       ║${NC}" | tee -a "$LOG_FILE"
+cecho "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
-echo "${BLUE}📊 Final Statistics:${NC}" | tee -a "$LOG_FILE"
-echo "${GREEN}   ✅ Successful: ${SUCCESSFUL_PRS}${NC}" | tee -a "$LOG_FILE"
-echo "${RED}   ❌ Failed: ${FAILED_PRS}${NC}" | tee -a "$LOG_FILE"
-echo "${YELLOW}   ⏭️  Skipped: ${SKIPPED_PRS}${NC}" | tee -a "$LOG_FILE"
-echo "${BLUE}   📝 Total PRs: ${TOTAL_PRS}${NC}" | tee -a "$LOG_FILE"
+cecho "${BLUE}📊 Final Statistics:${NC}" | tee -a "$LOG_FILE"
+cecho "${GREEN}   ✅ Successful: ${SUCCESSFUL_PRS}${NC}" | tee -a "$LOG_FILE"
+cecho "${RED}   ❌ Failed: ${FAILED_PRS}${NC}" | tee -a "$LOG_FILE"
+cecho "${YELLOW}   ⏭️  Skipped: ${SKIPPED_PRS}${NC}" | tee -a "$LOG_FILE"
+cecho "${BLUE}   📝 Total PRs: ${TOTAL_PRS}${NC}" | tee -a "$LOG_FILE"
 
 if [ $TOTAL_PRS -gt 0 ]; then
     SUCCESS_RATE=$((SUCCESSFUL_PRS * 100 / TOTAL_PRS))
-    echo "${BLUE}   📈 Success Rate: ${SUCCESS_RATE}%${NC}" | tee -a "$LOG_FILE"
+    cecho "${BLUE}   📈 Success Rate: ${SUCCESS_RATE}%${NC}" | tee -a "$LOG_FILE"
 fi
 
 HOURS=$((TOTAL_DURATION / 3600))
 MINUTES=$(((TOTAL_DURATION % 3600) / 60))
 SECONDS=$((TOTAL_DURATION % 60))
 
-echo "${BLUE}   ⏱️  Total Duration: ${HOURS}h ${MINUTES}m ${SECONDS}s${NC}" | tee -a "$LOG_FILE"
+cecho "${BLUE}   ⏱️  Total Duration: ${HOURS}h ${MINUTES}m ${SECONDS}s${NC}" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
-echo "${BLUE}📁 Results saved to:${NC}" | tee -a "$LOG_FILE"
-echo "${BLUE}   - Summary CSV: ${OUTPUT_BASE}/results.csv${NC}" | tee -a "$LOG_FILE"
-echo "${BLUE}   - Log: ${LOG_FILE}${NC}" | tee -a "$LOG_FILE"
-echo "${BLUE}   - Output: ${OUTPUT_BASE}/${NC}" | tee -a "$LOG_FILE"
+cecho "${BLUE}📁 Results saved to:${NC}" | tee -a "$LOG_FILE"
+cecho "${BLUE}   - Summary CSV: ${OUTPUT_BASE}/results.csv${NC}" | tee -a "$LOG_FILE"
+cecho "${BLUE}   - Log: ${LOG_FILE}${NC}" | tee -a "$LOG_FILE"
+cecho "${BLUE}   - Output: ${OUTPUT_BASE}/${NC}" | tee -a "$LOG_FILE"
 
 # 最後に処理したPRを記録（再開用）
 if [ -n "$repo_name" ] && [ -n "$category_name" ] && [ -n "$pr_title" ]; then
     echo "" | tee -a "$LOG_FILE"
-    echo "${YELLOW}🔄 To resume from next PR (if interrupted):${NC}" | tee -a "$LOG_FILE"
-    echo "${YELLOW}   sh $0 $DATASET_INDEX --resume \"$repo_name\" \"$category_name\" \"$pr_title\"${NC}" | tee -a "$LOG_FILE"
+    cecho "${YELLOW}🔄 To resume from next PR (if interrupted):${NC}" | tee -a "$LOG_FILE"
+    cecho "${YELLOW}   sh $0 $DATASET_INDEX --resume \"$repo_name\" \"$category_name\" \"$pr_title\"${NC}" | tee -a "$LOG_FILE"
 fi
 
 # JSON サマリー生成
@@ -368,7 +428,7 @@ cat > "$SUMMARY_FILE" << EOF
 EOF
 
 echo ""
-echo "${GREEN}✨ Batch execution summary saved to: ${SUMMARY_FILE}${NC}"
+cecho "${GREEN}✨ Batch execution summary saved to: ${SUMMARY_FILE}${NC}"
 
 # 結果に応じて終了コード
 if [ $FAILED_PRS -gt 0 ]; then
