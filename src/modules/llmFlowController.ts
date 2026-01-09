@@ -846,6 +846,34 @@ class LLMFlowController {
             this.state = State.SendFinalCheckToLLM;
             return;
         }
+
+        // ✅ フォールバック処理（必須）: タグなし応答はFSM的に不正入力
+        const currentFSMState = this.agentStateService.getCurrentState();
+        console.warn(`⚠️ FSM: No valid action detected from LLM in llmNextStep`);
+        console.warn(`⚠️ FSM: Current state = ${currentFSMState}`);
+        console.warn(`⚠️ FSM: Response had no actionable tags (ready_for_final_check, etc.)`);
+        
+        // エラーコンテキスト保存
+        this.captureErrorContext(`No actionable tags detected in llmNextStep from state ${currentFSMState}`);
+        
+        // ERROR状態に遷移
+        if (currentFSMState !== AgentState.ERROR) {
+            await this.agentStateService.transitionToError({
+                message: 'No actionable tags detected in llmNextStep',
+                code: 'NO_ACTION_FROM_LLM',
+                details: {
+                    currentState: currentFSMState,
+                    parsedFlags: {
+                        ready_for_final_check: this.context.llmParsed.ready_for_final_check,
+                        has_fin_tag: this.context.llmParsed.has_fin_tag,
+                        has_no_changes_needed: this.context.llmParsed.has_no_changes_needed
+                    }
+                }
+            });
+        }
+        
+        // エラープロンプトを送信してANALYSISに戻す
+        this.state = State.SendErrorToLLM;
     }
 
     private async sendFinalCheckToLLM() {        // 最終確認プロンプトを送信
