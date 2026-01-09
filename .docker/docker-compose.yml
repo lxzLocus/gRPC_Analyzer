@@ -60,6 +60,8 @@ services:
     container_name: patch-evaluation
     tty: true
     working_dir: /app
+    ports:
+      - "8000:3000" 
     volumes:
       # 評価システムコード（patchEvaluation → コンテナの/app）
       - type: bind
@@ -81,33 +83,3 @@ services:
       #   target: /app/apr-output
       #   read_only: true
 
-  # ===========================================
-  # 評価ビューアAPIサーバー
-  # ===========================================
-  html-viewer-api:
-    build:
-      context: ../patchEvaluation
-      dockerfile: Dockerfile
-    container_name: html-viewer-api
-    tty: true
-    working_dir: /app
-    volumes:
-      # 評価システムコード（patchEvaluation → コンテナの/app）
-      - type: bind
-        source: F:/Workspace/gRPC_Analyzer/patchEvaluation
-        target: /app
-      # データセット（読み取り専用）
-      - type: bind
-        source: E:/Workspace/gRPC_Analyzer/dataset
-        target: /app/dataset
-        read_only: true
-      # APRログ（読み取り専用）
-      - type: bind
-        source: F:/Workspace/gRPC_Analyzer/log
-        target: /app/apr-logs
-        read_only: true
-      # APR結果（読み取り専用）
-      # - type: bind
-      #   source: F:/Workspace/gRPC_Analyzer/output
-      #   target: /app/apr-output
-      #   read_only: true
