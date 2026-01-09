@@ -19,13 +19,13 @@ You have completed your solution review and indicated that all goals are achieve
 
 As a senior developer, perform one final quality review:
 
-1. **Solution Completeness**: Are you confident that every correction goal has been properly addressed?
+1. **Solution Completeness**: Verify that every correction goal has been properly addressed with concrete evidence from your code changes.
 
-2. **Code Quality**: Looking at all the changes you've made, is the overall solution robust, maintainable, and well-integrated?
+2. **Code Quality**: Review all changes to ensure the solution is robust, maintainable, and well-integrated with existing patterns.
 
-3. **Edge Case Coverage**: Are there any edge cases or unusual scenarios that your solution handles appropriately?
+3. **Edge Case Coverage**: Identify and verify that edge cases and unusual scenarios are handled appropriately.
 
-4. **Future-Proofing**: Will your changes work well with future development and not create technical debt?
+4. **Future-Proofing**: Assess whether your changes align with the codebase architecture and avoid creating technical debt.
 
 ### QUALITY VALIDATION EXAMPLES ###
 
@@ -59,17 +59,17 @@ As a senior developer, perform one final quality review:
 +	result, err := auth.SetupRank(config, hostname)  // Enhanced for better functionality
 ```
 
-🔍 **Example 2 - Solution is Complete and Excellent**:
+🔍 **Example 2 - All Goals Verified Complete**:
 ```
 %%_Fin_%%
 ```
 
 ---
 
-If you are completely confident that:
-- All correction goals are successfully achieved
-- The solution demonstrates high quality and robustness  
-- No enhancement opportunities remain
+If you have verified that:
+- All correction goals are demonstrably achieved (with specific evidence)
+- The solution meets quality standards and handles edge cases properly
+- No outstanding issues or gaps remain
 - The code is ready for production
 
 Then respond with ONLY:

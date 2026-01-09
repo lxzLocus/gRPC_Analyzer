@@ -107,7 +107,7 @@ Act as a helpful senior code reviewer. Your goal is to improve the patch you jus
 **3. Next Action (Choose ONE)**:
    - If you found areas for improvement, output a refined patch with `%_Modified_%`
    - If you need more information to complete your review, use `%_Reply Required_%`
-   - If you're confident your patch is complete and robust, signal `%_Ready_For_Final_Check_%`
+   - If you have verified all correction goals are met and identified no remaining issues, signal `%_Ready_For_Final_Check_%`
 
 **Remember**: The goal is continuous improvement, not finding faults. Focus on making your solution even better.
 
