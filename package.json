@@ -13,7 +13,12 @@
     "batch:mvc:large": "node scripts/MainScript.js 2 /app/output",
     "batch:mvc:help": "node scripts/MainScript.js --help",
     "batch:single-pr": "node scripts/SinglePRScript.js",
-    "filter:dataset": "npm run build && node --loader ts-node/esm dist/js/utils/filterDatasetMain.js"
+    "filter:dataset": "npm run build && node --loader ts-node/esm dist/js/utils/filterDatasetMain.js",
+    "rebuild-dataset": "npm run build && node --loader ts-node/esm dist/js/utils/rebuildDatasetFromRawCloned.js",
+    "rebuild-dataset:dry-run": "npm run build && node --loader ts-node/esm dist/js/utils/rebuildDatasetFromRawCloned.js --dry-run",
+    "rebuild-dataset:test": "npm run build && node --loader ts-node/esm dist/js/utils/rebuildDatasetFromRawCloned.js --test",
+    "rebuild-dataset:quick": "npm run build && node --loader ts-node/esm dist/js/utils/rebuildDatasetFromRawCloned.js --quick --dry-run",
+    "rebuild-dataset:skip-existing": "npm run build && node --loader ts-node/esm dist/js/utils/rebuildDatasetFromRawCloned.js --skip-existing"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
@@ -32,6 +37,7 @@
     "llamaindex": "^0.9.11",
     "lodash": "^4.17.21",
     "openai": "^4.104.0",
+    "p-limit": "^4.0.0",
     "protobufjs": "^7.4.0",
     "simple-git": "^3.27.0",
     "tar": "^7.4.3",

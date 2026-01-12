@@ -54,10 +54,11 @@ export default async function getChangedFiles(premergePath, mergePath, extension
     try {
         // 2つのディレクトリから対象ファイルリストを取得（無視リストを考慮）
         const premergeFiles = getFilesRecursive(premergePath, extension, ignore);
+        const mergeFiles = getFilesRecursive(mergePath, extension, ignore);
 
         const diffResults = [];
 
-        // premerge と merge ディレクトリ内で同名のファイルを diff
+        // premerge と merge ディレクトリ内で同名のファイルを diff（変更されたファイル）
         for (const file1 of premergeFiles) {
             const relativePath = path.relative(premergePath, file1);
             const file2 = path.join(mergePath, relativePath);
@@ -78,6 +79,18 @@ export default async function getChangedFiles(premergePath, mergePath, extension
                 }
             } else {
                 console.log(`No corresponding file for ${file1} in merge directory`);
+            }
+        }
+
+        // merge にのみ存在するファイル（新規追加されたファイル）を検出
+        for (const file2 of mergeFiles) {
+            const relativePath = path.relative(mergePath, file2);
+            const file1 = path.join(premergePath, relativePath);
+
+            if (!fs.existsSync(file1)) {
+                // premerge に存在しない = 新規追加ファイル
+                console.log(`New file added: ${relativePath}`);
+                diffResults.push(relativePath);
             }
         }
 

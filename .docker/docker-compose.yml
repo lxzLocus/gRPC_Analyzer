@@ -48,6 +48,9 @@ services:
       - type: bind
         source: E:/Workspace/gRPC_Analyzer/dataset/filtered_bugs
         target: /app/dataset/filtered_bugs
+      - type: bind
+        source: E:/Workspace/gRPC_Analyzer/dataset/old_filtered_fewChanged
+        target: /app/dataset/old_filtered_fewChanged
 
 
   # ===========================================
