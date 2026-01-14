@@ -23,6 +23,46 @@ export class LLMEvaluationService {
     }
 
     /**
+     * 4軸評価用ヘルパーメソッド：accuracyスコアからsemantic_equivalence_levelへのマッピング
+     * @param {number} accuracyScore - Accuracy score (0.0-1.0)
+     * @returns {string} Semantic equivalence level
+     */
+    _mapAccuracyToLevel(accuracyScore) {
+        if (accuracyScore >= 0.95) return 'IDENTICAL';
+        if (accuracyScore >= 0.7) return 'SEMANTICALLY_EQUIVALENT';
+        if (accuracyScore >= 0.3) return 'PLAUSIBLE_BUT_DIFFERENT';
+        return 'INCORRECT';
+    }
+
+    /**
+     * 4軸評価から統合評価を導出
+     * @param {Object} evaluation - 4軸評価結果
+     * @returns {string} Overall assessment
+     */
+    _deriveOverallAssessment(evaluation) {
+        const accuracy = evaluation.accuracy?.score || 0;
+        const decisionSoundness = evaluation.decision_soundness?.score || 0;
+        const directionalConsistency = evaluation.directional_consistency?.score || 0;
+        const validity = evaluation.validity?.score || 0;
+        
+        // 全て合格なら最高評価
+        if (accuracy >= 0.95 && decisionSoundness === 1.0 && directionalConsistency === 1.0 && validity === 1.0) {
+            return 'IDENTICAL';
+        }
+        
+        // Accuracyベースの評価
+        if (accuracy >= 0.7 && validity === 1.0) {
+            return 'SEMANTICALLY_EQUIVALENT';
+        }
+        
+        if (accuracy >= 0.3 && validity === 1.0) {
+            return 'PLAUSIBLE_BUT_DIFFERENT';
+        }
+        
+        return 'INCORRECT';
+    }
+
+    /**
      * テンプレートの初期化
      * @param {string} templatePath - テンプレートファイルのパス
      */
@@ -69,7 +109,29 @@ export class LLMEvaluationService {
             if (responseContent.trim().startsWith('{')) {
                 const parsed = JSON.parse(responseContent);
                 
-                // 新しいテンプレート形式（plausibility_evaluation/correctness_evaluation）から変換
+                // 4軸評価形式（新形式）
+                if (parsed.accuracy !== undefined) {
+                    return {
+                        // 4軸評価スコア
+                        accuracy: parsed.accuracy,
+                        decision_soundness: parsed.decision_soundness,
+                        directional_consistency: parsed.directional_consistency,
+                        validity: parsed.validity,
+                        
+                        // 分析ラベル
+                        analysis_labels: parsed.analysis_labels,
+                        
+                        // 統合評価
+                        overall_assessment: parsed.overall_assessment || this._deriveOverallAssessment(parsed),
+                        
+                        // 後方互換性のための変換
+                        is_correct: (parsed.accuracy?.score || 0) >= 0.7,
+                        is_plausible: (parsed.validity?.score || 0) === 1.0,
+                        semantic_equivalence_level: this._mapAccuracyToLevel(parsed.accuracy?.score || 0)
+                    };
+                }
+                
+                // 2軸評価形式（旧形式・後方互換性）
                 if (parsed.plausibility_evaluation && parsed.correctness_evaluation) {
                     return {
                         overall_assessment: parsed.correctness_evaluation.semantic_equivalence_level || "UNKNOWN",
@@ -82,7 +144,7 @@ export class LLMEvaluationService {
                     };
                 }
                 
-                // 旧形式の場合はそのまま返す
+                // その他の形式はそのまま返す
                 return parsed;
             }
             
@@ -259,6 +321,159 @@ export class LLMEvaluationService {
             return {
                 success: false,
                 error: result.error
+            };
+        }
+    }
+
+    /**
+     * Intent Fulfillment評価（LLM_C）
+     * コミットメッセージに記載された意図をエージェントが満たしているかを評価
+     * @param {Object} context - 評価コンテキスト
+     * @param {Object} context.commitMessage - コミットメッセージ情報
+     * @param {string} context.agentGeneratedDiff - エージェント生成diff
+     * @param {string} context.agentThoughtProcess - エージェントの思考過程
+     * @param {boolean} context.agentMadeChanges - エージェントが変更を行ったか
+     * @returns {Promise<Object>} Intent Fulfillment評価結果
+     */
+    async evaluateIntentFulfillment(context) {
+        const {
+            commitMessage,
+            agentGeneratedDiff,
+            agentThoughtProcess,
+            agentMadeChanges = true
+        } = context;
+
+        if (!commitMessage) {
+            return {
+                success: false,
+                error: "コミットメッセージが提供されていません",
+                result: { skipped: "no_commit_message" }
+            };
+        }
+
+        try {
+            // Intent Fulfillmentテンプレートの初期化
+            const intentTemplateRenderer = new TemplateRenderer();
+            const projectRoot = '/app';
+            const intentTemplatePath = path.join(projectRoot, "prompt", "01_intentFulfillmentPrompt.txt");
+            const templateString = await fs.readFile(intentTemplatePath, 'utf-8');
+            intentTemplateRenderer.setTemplate(templateString);
+
+            // LLMクライアントの初期化確認
+            if (!this.llmClient) {
+                const config = new Config();
+                await this.initializeLLMClient(config);
+            }
+
+            // テンプレートコンテキストの準備
+            const templateContext = {
+                commit_subject: commitMessage.subject || '',
+                commit_body: commitMessage.body || '',
+                agent_made_changes: agentMadeChanges,
+                agent_generated_diff: agentGeneratedDiff || '',
+                agent_reasoning: agentMadeChanges ? '' : 'No changes were made by the agent',
+                agent_thought_process: agentThoughtProcess || ''
+            };
+
+            // テンプレートレンダリング
+            const renderedPrompt = intentTemplateRenderer.render(templateContext);
+
+            // LLMリクエストを作成
+            const config = new Config();
+            const llmRequest = createLLMRequest([
+                { role: 'user', content: renderedPrompt }
+            ], {
+                temperature: config.getConfigValue('llm.temperature', 0.1),
+                maxTokens: config.getConfigValue('llm.maxTokens', 2000)
+            });
+
+            // LLMクライアントでの評価実行
+            const llmResponse = await this.llmClient.generateContent(llmRequest);
+
+            if (llmResponse && llmResponse.content) {
+                // レスポンスのパース
+                const intentEvaluation = this.parseIntentFulfillmentResponse(llmResponse.content);
+
+                return {
+                    success: true,
+                    error: null,
+                    result: {
+                        ...intentEvaluation,
+                        templateUsed: true,
+                        promptLength: renderedPrompt.length,
+                        llmMetadata: {
+                            provider: this.llmClient.getProviderName(),
+                            model: llmResponse.model || 'unknown',
+                            usage: llmResponse.usage || null,
+                            timestamp: new Date().toISOString()
+                        }
+                    }
+                };
+            } else {
+                return {
+                    success: false,
+                    error: "LLM response failed",
+                    result: { error: "LLM response failed" }
+                };
+            }
+
+        } catch (error) {
+            const errorAnalysis = this.errorHandler.analyzeLLMError(error);
+            this.errorHandler.logErrorDetails(errorAnalysis);
+
+            return {
+                success: false,
+                error: errorAnalysis.message,
+                result: {
+                    error: errorAnalysis.message,
+                    templateUsed: false,
+                    errorAnalysis: errorAnalysis
+                }
+            };
+        }
+    }
+
+    /**
+     * Intent Fulfillmentレスポンスのパース
+     * @param {string} responseContent - LLMからのレスポンス内容
+     * @returns {Object} パースされた評価結果
+     */
+    parseIntentFulfillmentResponse(responseContent) {
+        try {
+            // JSON形式の場合
+            if (responseContent.trim().startsWith('{')) {
+                const parsed = JSON.parse(responseContent);
+
+                // intent_fulfillmentネストがある場合は展開
+                if (parsed.intent_fulfillment) {
+                    return {
+                        score: parsed.intent_fulfillment.score,
+                        reasoning: parsed.intent_fulfillment.reasoning,
+                        commit_intent_summary: parsed.intent_fulfillment.commit_intent_summary,
+                        agent_output_summary: parsed.intent_fulfillment.agent_output_summary,
+                        alignment_analysis: parsed.intent_fulfillment.alignment_analysis
+                    };
+                }
+
+                // 既にフラット構造の場合はそのまま返す
+                return {
+                    score: parsed.score,
+                    reasoning: parsed.reasoning,
+                    commit_intent_summary: parsed.commit_intent_summary,
+                    agent_output_summary: parsed.agent_output_summary,
+                    alignment_analysis: parsed.alignment_analysis
+                };
+            }
+
+            // テキスト形式の場合のエラー
+            return {
+                error: "Response parsing failed",
+                parse_error: "Expected JSON format"
+            };
+        } catch (error) {
+            return {
+                error: "Response parsing error",
+                parse_error: error.message
             };
         }
     }

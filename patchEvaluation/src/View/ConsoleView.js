@@ -189,8 +189,39 @@ export class ConsoleView {
     showLLMEvaluationSuccess(evaluationResult) {
         const assessment = evaluationResult?.overall_assessment || evaluationResult?.semantic_equivalence_level || '評価結果不明';
         console.log(`  ✅ TemplateCompiler LLM評価完了: ${assessment}`);
-        console.log(`    - 正確性: ${evaluationResult?.is_correct ? '正しい' : '不正確'}`);
-        console.log(`    - 妥当性: ${evaluationResult?.is_plausible ? '妥当' : '妥当でない'}`);
+        
+        // 4軸評価形式（新形式）
+        if (evaluationResult?.accuracy !== undefined) {
+            const accuracyScore = typeof evaluationResult.accuracy === 'object' 
+                ? evaluationResult.accuracy.score 
+                : evaluationResult.accuracy;
+            const decisionScore = typeof evaluationResult.decision_soundness === 'object'
+                ? evaluationResult.decision_soundness.score
+                : (evaluationResult.decision_soundness || 0);
+            const directionalScore = typeof evaluationResult.directional_consistency === 'object'
+                ? evaluationResult.directional_consistency.score
+                : (evaluationResult.directional_consistency || 0);
+            const validityScore = typeof evaluationResult.validity === 'object'
+                ? evaluationResult.validity.score
+                : (evaluationResult.validity || 0);
+            
+            console.log(`    📊 4軸評価結果:`);
+            console.log(`      - Accuracy: ${(accuracyScore * 100).toFixed(1)}%`);
+            console.log(`      - Decision Soundness: ${decisionScore === 1.0 ? '✅ Pass' : '❌ Fail'}`);
+            console.log(`      - Directional Consistency: ${directionalScore === 1.0 ? '✅ Pass' : '❌ Fail'}`);
+            console.log(`      - Validity: ${validityScore === 1.0 ? '✅ Pass' : '❌ Fail'}`);
+            
+            // Repair Types表示
+            if (evaluationResult.analysis_labels?.repair_types) {
+                const repairTypes = evaluationResult.analysis_labels.repair_types;
+                console.log(`    🏷️  Repair Types: ${repairTypes.join(', ')}`);
+            }
+        }
+        // 2軸評価形式（旧形式・後方互換性）
+        else {
+            console.log(`    - 正確性: ${evaluationResult?.is_correct ? '正しい' : '不正確'}`);
+            console.log(`    - 妥当性: ${evaluationResult?.is_plausible ? '妥当' : '妥当でない'}`);
+        }
     }
 
     /**
@@ -240,6 +271,37 @@ export class ConsoleView {
             if (errorAnalysis.suggestion) {
                 console.error(`    - 推奨対応: ${errorAnalysis.suggestion}`);
             }
+        }
+    }
+
+    /**
+     * Intent Fulfillment評価結果の表示
+     * @param {Object} intentResult - Intent Fulfillment評価結果
+     */
+    showIntentFulfillmentResult(intentResult) {
+        if (!intentResult || intentResult.skipped || intentResult.error) {
+            if (intentResult?.skipped) {
+                const reason = intentResult.reason || 'unknown';
+                console.log(`  ⏭️  Intent Fulfillment評価スキップ (${reason})`);
+            } else if (intentResult?.error) {
+                console.log(`  ❌ Intent Fulfillment評価エラー: ${intentResult.error}`);
+            }
+            return;
+        }
+
+        const score = intentResult.score || 0;
+        const scorePercent = (score * 100).toFixed(1);
+        
+        // スコアに応じた絵文字
+        let emoji = '❌';
+        if (score >= 0.9) emoji = '🎯';
+        else if (score >= 0.7) emoji = '✅';
+        else if (score >= 0.4) emoji = '⚠️';
+        
+        console.log(`  ${emoji} Intent Fulfillment スコア: ${score.toFixed(2)} (${scorePercent}%)`);
+        
+        if (intentResult.reasoning) {
+            console.log(`     理由: ${intentResult.reasoning}`);
         }
     }
 

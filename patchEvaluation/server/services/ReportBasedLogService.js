@@ -78,8 +78,8 @@ class ReportBasedLogService {
             
             const prs = [];
             
-            // 全ての正確性レベルからPRを収集
-            const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect'];
+            // 全ての正確性レベルからPRを収集（skippedも含む）
+            const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect', 'skipped'];
             
             for (const level of levels) {
                 const entries = data.correctnessLevels?.[level] || [];
@@ -95,7 +95,9 @@ class ReportBasedLogService {
                         modifiedLines: entry.modifiedLines,
                         semanticSimilarityScore: entry.semanticSimilarityScore,
                         aprProvider: entry.aprProvider,
-                        aprModel: entry.aprModel
+                        aprModel: entry.aprModel,
+                        // Intent Fulfillment評価情報も含める
+                        intentFulfillmentEvaluation: entry.intentFulfillmentEvaluation
                     });
                 });
             }
@@ -117,8 +119,8 @@ class ReportBasedLogService {
             const content = await fs.readFile(filePath, 'utf-8');
             const data = JSON.parse(content);
             
-            // 全ての正確性レベルからPRを検索
-            const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect'];
+            // 全ての正確性レベルからPRを検索（skippedも含む）
+            const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect', 'skipped'];
             
             for (const level of levels) {
                 const entries = data.correctnessLevels?.[level] || [];
@@ -190,7 +192,8 @@ class ReportBasedLogService {
                     identical: data.correctnessLevels?.identical?.length || 0,
                     semanticallyEquivalent: data.correctnessLevels?.semanticallyEquivalent?.length || 0,
                     plausibleButDifferent: data.correctnessLevels?.plausibleButDifferent?.length || 0,
-                    incorrect: data.correctnessLevels?.incorrect?.length || 0
+                    incorrect: data.correctnessLevels?.incorrect?.length || 0,
+                    skipped: data.correctnessLevels?.skipped?.length || 0
                 },
                 totalPRs: 0,
                 successRate: 0,
@@ -213,11 +216,22 @@ class ReportBasedLogService {
                     evaluated: 0,
                     error: 0,
                     other: 0
+                },
+                intentFulfillmentEvaluation: {
+                    totalEvaluated: 0,
+                    totalSkipped: 0,
+                    totalError: 0,
+                    scores: [],
+                    averageScore: 0,
+                    highScore: 0,  // >= 0.9
+                    mediumScore: 0,  // 0.7-0.89
+                    lowScore: 0,  // 0.4-0.69
+                    veryLowScore: 0  // < 0.4
                 }
             };
             
-            // 全PRを収集して統計を計算
-            const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect'];
+            // 全PRを収集して統計を計算（skippedも含む）
+            const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect', 'skipped'];
             const allPRs = [];
             
             for (const level of levels) {
@@ -270,7 +284,33 @@ class ReportBasedLogService {
                 } else {
                     stats.evaluationStatus.other++;
                 }
+                
+                // Intent Fulfillment評価の統計
+                if (pr.intentFulfillmentEvaluation) {
+                    const intentEval = pr.intentFulfillmentEvaluation;
+                    
+                    if (intentEval.status === 'evaluated' && typeof intentEval.score === 'number') {
+                        stats.intentFulfillmentEvaluation.totalEvaluated++;
+                        stats.intentFulfillmentEvaluation.scores.push(intentEval.score);
+                        
+                        // スコア分布
+                        if (intentEval.score >= 0.9) stats.intentFulfillmentEvaluation.highScore++;
+                        else if (intentEval.score >= 0.7) stats.intentFulfillmentEvaluation.mediumScore++;
+                        else if (intentEval.score >= 0.4) stats.intentFulfillmentEvaluation.lowScore++;
+                        else stats.intentFulfillmentEvaluation.veryLowScore++;
+                    } else if (intentEval.status === 'skipped') {
+                        stats.intentFulfillmentEvaluation.totalSkipped++;
+                    } else if (intentEval.status === 'error') {
+                        stats.intentFulfillmentEvaluation.totalError++;
+                    }
+                }
             });
+            
+            // Intent Fulfillment評価の平均スコア計算
+            if (stats.intentFulfillmentEvaluation.scores.length > 0) {
+                const sum = stats.intentFulfillmentEvaluation.scores.reduce((a, b) => a + b, 0);
+                stats.intentFulfillmentEvaluation.averageScore = (sum / stats.intentFulfillmentEvaluation.scores.length).toFixed(3);
+            }
             
             // 意味的類似度の統計計算
             if (stats.semanticSimilarity.scores.length > 0) {

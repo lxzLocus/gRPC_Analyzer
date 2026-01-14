@@ -1,5 +1,6 @@
 import express from 'express';
 import reportService from '../services/ReportBasedLogService.js';
+import prStatisticsService from '../../src/Service/PRStatisticsService.js';
 
 const router = express.Router();
 
@@ -264,6 +265,51 @@ router.get('/statistics/summary', async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/reports/:sessionId/pr-statistics
+ * 特定レポートのPRごとの統計を取得
+ */
+router.get('/:sessionId/pr-statistics', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const enhancedReport = await prStatisticsService.generateEnhancedReport(sessionId);
+        
+        res.json({
+            success: true,
+            sessionId,
+            prStatistics: enhancedReport.prStatistics
+        });
+    } catch (error) {
+        res.status(404).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/reports/:sessionId/project-statistics
+ * 特定レポートのプロジェクトごとの統計を取得
+ */
+router.get('/:sessionId/project-statistics', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const enhancedReport = await prStatisticsService.generateEnhancedReport(sessionId);
+        
+        res.json({
+            success: true,
+            sessionId,
+            projectStatistics: enhancedReport.projectStatistics,
+            enhancedSummary: enhancedReport.enhancedSummary
+        });
+    } catch (error) {
+        res.status(404).json({
             success: false,
             error: error.message
         });

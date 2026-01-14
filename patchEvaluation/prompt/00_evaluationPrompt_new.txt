@@ -93,70 +93,6 @@ You MUST evaluate the agent's output along the following four dimensions. These 
 ```
 
 ---
-## Additional Analysis: Repair Type Classification ##
-
-In addition to the four evaluation dimensions, you MUST classify the agent's output by selecting applicable repair types from the predefined list below. This classification is for post-analysis and does NOT affect the evaluation scores.
-
-### Instructions for Repair Type Classification:
-- You MUST choose ONLY from the provided repair type values listed below
-- Multiple selections are allowed (select all that apply)
-- If no code changes were made, you MUST include `NO_OP_DEFERRED`
-- Do NOT invent new categories or use similar terms
-- Base your selection on the semantic meaning of the changes, not just keywords
-
-### Classification Guidelines for Ambiguous Cases:
-
-**Comment or Documentation Changes Only:**
-- Pure comment/documentation updates with NO runtime behavior change → `NO_OP_DEFERRED`
-- Copyright/license header updates → `IMPORT_DEPENDENCY_CHANGE` (project metadata)
-
-**Refactoring (Behavior-Preserving Changes):**
-- Method/function renaming → `FUNCTION_SIGNATURE_CHANGE`
-- Internal implementation rewrite (same behavior) → `LOGIC_FIX`
-- Variable renaming → `VARIABLE_REMOVAL` + `VARIABLE_ADDITION`
-
-**Formatting & Style Changes:**
-- Output format changes (JSON, protobuf wire format) → `SERIALIZATION_UPDATE`
-- Code style changes (indentation, whitespace) → Include with primary change type
-
-**Edge Cases:**
-- Changes affecting only test mocks → `TEST_ADAPTATION`
-- Removing unused imports → `IMPORT_DEPENDENCY_CHANGE`
-- Adding TODO comments with no code change → `NO_OP_DEFERRED`
-
-### Available Repair Types:
-
-**Syntax & Local Modifications:**
-- `CONDITIONAL_CHANGE`: Modification to conditional statements (if, else, switch, case)
-- `LOOP_CHANGE`: Modification to loop structures (for, while, foreach)
-- `FUNCTION_SIGNATURE_CHANGE`: Changes to function/method signatures or parameters
-- `VARIABLE_ADDITION`: Addition of new variables or fields
-- `VARIABLE_REMOVAL`: Removal of existing variables or fields
-
-**API & Schema:**
-- `SCHEMA_EVOLUTION`: Changes to data schema (proto, database schema)
-- `SERIALIZATION_UPDATE`: Updates to serialization/deserialization logic (e.g., pb.go, marshalling)
-- `INTERFACE_ADAPTATION`: Adaptation to API or interface boundary changes
-
-**Behavior:**
-- `LOGIC_FIX`: Fixes to core business logic or algorithms
-- `ERROR_HANDLING_CHANGE`: Changes to error handling or exception management
-- `VALIDATION_ADDITION`: Addition of input validation or preconditions
-
-**Structure & Dependencies:**
-- `IMPORT_DEPENDENCY_CHANGE`: Changes to imports, dependencies, or packages
-- `CONFIGURATION_CHANGE`: Modifications to configuration or settings
-
-**Testing:**
-- `TEST_ADDITION`: Addition of new test cases
-- `TEST_ADAPTATION`: Adaptation of existing tests to code changes
-
-**APR-Specific:**
-- `NO_OP_DEFERRED`: No changes made (deferred or intentionally avoided)
-- `PARTIAL_REPAIR`: Incomplete or partial fix addressing only part of the issue
-- `MULTI_STAGE_REPAIR`: Multi-stage repair requiring coordination across multiple commits
-
----
 ## Your Task: Provide Evaluation in JSON Format ##
 Based on all the provided information and the strict criteria above, provide your evaluation. Your entire response MUST be a single, valid JSON object.
 
@@ -177,13 +113,8 @@ Based on all the provided information and the strict criteria above, provide you
   "validity": {
     "score": 1,
     "reasoning": "The output does not introduce syntax or dependency errors."
-  },
-  "analysis_labels": {
-    "repair_types": ["NO_OP_DEFERRED", "MULTI_STAGE_REPAIR"],
-    "semantic_rules_applied": []
   }
 }
-```
 
 ### JSON Field Definitions
 
@@ -192,52 +123,3 @@ Based on all the provided information and the strict criteria above, provide you
   - **directional_consistency.score**: Binary score (1.0 or 0.0) indicating whether the agent's output is consistent with the direction of the Ground Truth Patch.
   - **validity.score**: Binary score (1.0 or 0.0) indicating whether the agent's output is syntactically and semantically valid.
   - **reasoning**: A brief explanation justifying the assigned score for each dimension.
-  - **analysis_labels.repair_types**: Array of repair type enum values (for post-analysis, does NOT affect scores).
-  - **analysis_labels.semantic_rules_applied**: Array of R-rules that apply (e.g., ["R4", "R9"]) when accuracy is high.
-
-### TypeScript Interface Definition
-
-```typescript
-interface EvaluationResult {
-  accuracy: {
-    score: number; // 0.0 to 1.0
-    reasoning: string;
-  };
-  decision_soundness: {
-    score: number; // 0.0 or 1.0
-    reasoning: string;
-  };
-  directional_consistency: {
-    score: number; // 0.0 or 1.0
-    reasoning: string;
-  };
-  validity: {
-    score: number; // 0.0 or 1.0
-    reasoning: string;
-  };
-  analysis_labels: {
-    repair_types: RepairType[]; // Array of enum values
-    semantic_rules_applied: string[]; // e.g., ["R0", "R4", "R9"]
-  };
-}
-
-type RepairType = 
-  | "CONDITIONAL_CHANGE"
-  | "LOOP_CHANGE"
-  | "FUNCTION_SIGNATURE_CHANGE"
-  | "VARIABLE_ADDITION"
-  | "VARIABLE_REMOVAL"
-  | "SCHEMA_EVOLUTION"
-  | "SERIALIZATION_UPDATE"
-  | "INTERFACE_ADAPTATION"
-  | "LOGIC_FIX"
-  | "ERROR_HANDLING_CHANGE"
-  | "VALIDATION_ADDITION"
-  | "IMPORT_DEPENDENCY_CHANGE"
-  | "CONFIGURATION_CHANGE"
-  | "TEST_ADDITION"
-  | "TEST_ADAPTATION"
-  | "NO_OP_DEFERRED"
-  | "PARTIAL_REPAIR"
-  | "MULTI_STAGE_REPAIR";
-```

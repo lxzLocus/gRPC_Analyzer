@@ -173,13 +173,15 @@ function renderReportStatistics(stats) {
             <div class="stat-card">
                 <h3>📊 総PR/Issue数</h3>
                 <div class="big-value">${total}</div>
-                <div class="sub-value">評価完了: ${stats.evaluationStatus.evaluated}</div>
+                <div class="sub-value">LLM評価完了: ${stats.evaluationStatus.evaluated}</div>
+                <div class="sub-value">スキップ: ${stats.correctnessDistribution.skipped || 0}</div>
             </div>
             
             <div class="stat-card">
-                <h3>✅ 成功率</h3>
+                <h3>✅ 修正あり成功率</h3>
                 <div class="big-value">${stats.successRate}%</div>
                 <div class="sub-value">完全一致 + 意味的等価</div>
+                <div class="sub-value" style="font-size: 0.8em; color: #6c757d;">※修正ありケースのみ</div>
             </div>
             
             <div class="stat-card">
@@ -240,6 +242,18 @@ function renderReportStatistics(stats) {
                     <div class="chart-bar-fill bar-incorrect" style="width: ${correctness.incorrect/total*100}%"></div>
                 </div>
             </div>
+            
+            ${correctness.skipped > 0 ? `
+            <div class="chart-bar">
+                <div class="chart-bar-label">
+                    <span>⏭️ スキップ/エラー</span>
+                    <span><strong>${correctness.skipped}</strong> (${(correctness.skipped/total*100).toFixed(1)}%)</span>
+                </div>
+                <div class="chart-bar-bg">
+                    <div class="chart-bar-fill" style="width: ${correctness.skipped/total*100}%; background: #6c757d;"></div>
+                </div>
+            </div>
+            ` : ''}
         </div>
 
         ${stats.semanticSimilarity.scores.length > 0 ? `
@@ -293,22 +307,85 @@ function renderReportStatistics(stats) {
         </div>
 
         <div class="stat-card">
-            <h3>📋 評価ステータス</h3>
+            <h3>📋 LLM評価ステータス（正確性評価） <span style="cursor: help; color: #667eea;" title="LLM評価は修正ありケースのみ実行されます。修正なしケースはIntent評価で補完されます。">ℹ️</span></h3>
+            <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">
+                ※修正なし（No-op）ケースはLLM評価がスキップされます。Intent評価は別途実行されます。
+            </p>
             <div class="distribution-grid">
                 <div class="distribution-item">
                     <div class="distribution-value">${stats.evaluationStatus.evaluated}</div>
-                    <div class="distribution-label">✅ 評価完了</div>
+                    <div class="distribution-label">✅ LLM評価完了</div>
+                </div>
+                <div class="distribution-item">
+                    <div class="distribution-value">${stats.correctnessDistribution.skipped || 0}</div>
+                    <div class="distribution-label" title="エージェントが修正を行わなかったケース（調査のみ、生成ファイルのみ、No Changes Needed等）">⏭️ スキップ（修正なし）</div>
                 </div>
                 <div class="distribution-item">
                     <div class="distribution-value">${stats.evaluationStatus.error}</div>
                     <div class="distribution-label">❌ エラー</div>
                 </div>
+            </div>
+        </div>
+        
+        ${stats.intentFulfillmentEvaluation && stats.intentFulfillmentEvaluation.totalEvaluated > 0 ? `
+        <div class="stat-card">
+            <h3>🎯 Intent Fulfillment評価 (LLM_C)</h3>
+            <div class="distribution-grid">
                 <div class="distribution-item">
-                    <div class="distribution-value">${stats.evaluationStatus.other}</div>
-                    <div class="distribution-label">❓ その他</div>
+                    <div class="distribution-value">${stats.intentFulfillmentEvaluation.totalEvaluated}</div>
+                    <div class="distribution-label">✅ 評価完了</div>
+                </div>
+                <div class="distribution-item">
+                    <div class="distribution-value">${stats.intentFulfillmentEvaluation.totalSkipped}</div>
+                    <div class="distribution-label">⏭️ スキップ</div>
+                </div>
+                <div class="distribution-item">
+                    <div class="distribution-value">${stats.intentFulfillmentEvaluation.averageScore}</div>
+                    <div class="distribution-label">📊 平均スコア</div>
+                </div>
+            </div>
+            
+            <div class="chart-bar" style="margin-top: 15px;">
+                <div class="chart-bar-label">
+                    <span>🎯 高スコア (≥0.9)</span>
+                    <span><strong>${stats.intentFulfillmentEvaluation.highScore}</strong> (${((stats.intentFulfillmentEvaluation.highScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
+                </div>
+                <div class="chart-bar-bg">
+                    <div class="chart-bar-fill bar-identical" style="width: ${(stats.intentFulfillmentEvaluation.highScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
+                </div>
+            </div>
+            
+            <div class="chart-bar">
+                <div class="chart-bar-label">
+                    <span>✅ 中スコア (0.7-0.89)</span>
+                    <span><strong>${stats.intentFulfillmentEvaluation.mediumScore}</strong> (${((stats.intentFulfillmentEvaluation.mediumScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
+                </div>
+                <div class="chart-bar-bg">
+                    <div class="chart-bar-fill bar-equivalent" style="width: ${(stats.intentFulfillmentEvaluation.mediumScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
+                </div>
+            </div>
+            
+            <div class="chart-bar">
+                <div class="chart-bar-label">
+                    <span>⚠️ 低スコア (0.4-0.69)</span>
+                    <span><strong>${stats.intentFulfillmentEvaluation.lowScore}</strong> (${((stats.intentFulfillmentEvaluation.lowScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
+                </div>
+                <div class="chart-bar-bg">
+                    <div class="chart-bar-fill bar-plausible" style="width: ${(stats.intentFulfillmentEvaluation.lowScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
+                </div>
+            </div>
+            
+            <div class="chart-bar">
+                <div class="chart-bar-label">
+                    <span>❌ 極低スコア (<0.4)</span>
+                    <span><strong>${stats.intentFulfillmentEvaluation.veryLowScore}</strong> (${((stats.intentFulfillmentEvaluation.veryLowScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
+                </div>
+                <div class="chart-bar-bg">
+                    <div class="chart-bar-fill bar-incorrect" style="width: ${(stats.intentFulfillmentEvaluation.veryLowScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
                 </div>
             </div>
         </div>
+        ` : ''}
     `;
 }
 
@@ -359,6 +436,23 @@ function renderPRs(prs) {
             ${prs.map(pr => {
                 const badgeClass = getCorrectnessClass(pr.correctnessLevel);
                 const badgeText = getCorrectnessText(pr.correctnessLevel);
+                
+                // Intent Fulfillmentスコアのバッジ
+                let intentBadge = '';
+                if (pr.intentFulfillmentEvaluation) {
+                    const intent = pr.intentFulfillmentEvaluation;
+                    if (intent.status === 'evaluated') {
+                        const scoreClass = intent.score >= 0.9 ? 'badge-identical' : 
+                                          intent.score >= 0.7 ? 'badge-equivalent' :
+                                          intent.score >= 0.4 ? 'badge-plausible' : 'badge-incorrect';
+                        intentBadge = `<div class="pr-info"><span class="correctness-badge ${scoreClass}" style="font-size: 0.8em;">🎯 ${(intent.score * 100).toFixed(0)}%</span></div>`;
+                    } else if (intent.status === 'skipped') {
+                        intentBadge = '<div class="pr-info" style="color: #6c757d;">🎯 スキップ</div>';
+                    } else if (intent.status === 'error') {
+                        intentBadge = '<div class="pr-info" style="color: #dc3545;">🎯 エラー</div>';
+                    }
+                }
+                
                 return `
                     <div class="pr-card" onclick="selectPR('${encodeURIComponent(pr.datasetEntry)}')">
                         <h3>🐛 ${pr.prName}</h3>
@@ -366,6 +460,7 @@ function renderPRs(prs) {
                         <div class="pr-info">📝 ${pr.modifiedLines} 行変更</div>
                         <div class="pr-info">🤖 ${pr.aprProvider} / ${pr.aprModel}</div>
                         ${pr.semanticSimilarityScore != null ? `<div class="pr-info">📊 類似度: ${pr.semanticSimilarityScore}</div>` : ''}
+                        ${intentBadge}
                         <span class="correctness-badge ${badgeClass}">${badgeText}</span>
                     </div>
                 `;
@@ -457,12 +552,14 @@ async function renderPRDetail(detail, sessionId, datasetEntry) {
             
             ${detail.evaluationReasoning ? `
             <div class="detail-section">
-                <h3>評価理由</h3>
+                <h3>評価理由 (LLM評価)</h3>
                 <div class="detail-content">
                     <p>${detail.evaluationReasoning}</p>
                 </div>
             </div>
             ` : ''}
+            
+            ${detail.intentFulfillmentEvaluation ? renderIntentFulfillmentSection(detail.intentFulfillmentEvaluation) : ''}
             
             ${detail.similarityReasoning ? `
             <div class="detail-section">
@@ -519,23 +616,6 @@ function updateBreadcrumb(items) {
             ? html + '<span class="breadcrumb-separator">/</span>'
             : html;
     }).join('');
-}
-
-// ビューのリセット
-function resetView() {
-    state.currentReport = null;
-    state.currentPR = null;
-    
-    document.querySelectorAll('.report-item').forEach(item => {
-        item.classList.remove('selected');
-    });
-    
-    updateBreadcrumb([{ label: 'ホーム', action: null }]);
-    
-    const contentTitle = document.getElementById('contentTitle');
-    const contentBody = document.getElementById('contentBody');
-    contentTitle.textContent = 'PR/Issue を選択してください';
-    contentBody.innerHTML = '<p class="loading">左側のレポートを選択してください</p>';
 }
 
 // Diff表示のレンダリング
@@ -1095,9 +1175,59 @@ function getCorrectnessText(level) {
         'IDENTICAL': '✅ 完全一致',
         'SEMANTICALLY_EQUIVALENT': '✅ 意味的等価',
         'PLAUSIBLE_BUT_DIFFERENT': '⚠️ 妥当だが異なる',
-        'INCORRECT': '❌ 不正解'
+        'INCORRECT': '❌ 不正解',
+        'SKIPPED': '⏭️ スキップ',
+        'ERROR': '❌ エラー'
     };
     return map[level] || level;
+}
+
+// Intent Fulfillment評価セクションの描画
+function renderIntentFulfillmentSection(intentEval) {
+    if (!intentEval) return '';
+    
+    if (intentEval.status === 'evaluated') {
+        // スコアに基づいたバッジクラス
+        const scoreClass = intentEval.score >= 0.9 ? 'badge-identical' : 
+                          intentEval.score >= 0.7 ? 'badge-equivalent' :
+                          intentEval.score >= 0.4 ? 'badge-plausible' : 'badge-incorrect';
+        const scoreEmoji = intentEval.score >= 0.9 ? '🎯' : 
+                          intentEval.score >= 0.7 ? '✅' :
+                          intentEval.score >= 0.4 ? '⚠️' : '❌';
+        
+        return `
+            <div class="detail-section">
+                <h3>🎯 Intent Fulfillment評価 (LLM_C)</h3>
+                <div class="detail-content">
+                    <p><strong>スコア:</strong> <span class="correctness-badge ${scoreClass}">${scoreEmoji} ${(intentEval.score * 100).toFixed(0)}%</span></p>
+                    <p><strong>コミット意図の要約:</strong><br>${intentEval.commit_intent_summary || 'N/A'}</p>
+                    <p><strong>エージェント出力の要約:</strong><br>${intentEval.agent_output_summary || 'N/A'}</p>
+                    ${intentEval.alignment_analysis ? `<p><strong>整合性分析:</strong><br>${intentEval.alignment_analysis}</p>` : ''}
+                    <p><strong>評価理由:</strong><br>${intentEval.reasoning || 'N/A'}</p>
+                </div>
+            </div>
+        `;
+    } else if (intentEval.status === 'skipped') {
+        return `
+            <div class="detail-section">
+                <h3>🎯 Intent Fulfillment評価 (LLM_C)</h3>
+                <div class="detail-content" style="background: #fff3cd; padding: 15px; border-radius: 5px;">
+                    <p><strong>⏭️ スキップ:</strong> ${intentEval.reason === 'no_commit_messages' ? 'コミットメッセージが存在しないためスキップ' : intentEval.reason}</p>
+                </div>
+            </div>
+        `;
+    } else if (intentEval.status === 'error') {
+        return `
+            <div class="detail-section">
+                <h3>🎯 Intent Fulfillment評価 (LLM_C)</h3>
+                <div class="detail-content" style="background: #f8d7da; padding: 15px; border-radius: 5px;">
+                    <p><strong>❌ エラー:</strong> ${intentEval.error}</p>
+                </div>
+            </div>
+        `;
+    }
+    
+    return '';
 }
 
 function showError(message) {

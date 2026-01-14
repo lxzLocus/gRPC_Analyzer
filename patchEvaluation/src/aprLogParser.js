@@ -9,6 +9,7 @@ import path from 'path';
 import MessageHandler from './messageHandler.js';
 import LLMClientController from './Controller/LLMClientController.js';
 import Config from './Config/config.js';
+import { isValidRepairType } from './types/RepairTypes.js';
 
 class APRLogParser {
     constructor() {
@@ -144,7 +145,9 @@ class APRLogParser {
             requestedFiles: new Set(),
             allThoughts: [],
             allPlans: [],
-            llmMetadata: llmMetadata  // 新しい形式のLLMメタデータを格納
+            llmMetadata: llmMetadata,  // 新しい形式のLLMメタデータを格納
+            interaction_log: logData.interaction_log,  // 元のinteraction_logも保持
+            experiment_metadata: logData.experiment_metadata  // experiment_metadataも保持
         };
 
         // 対話履歴の処理
@@ -953,9 +956,13 @@ class APRLogParser {
             this.validateEvaluationResult(evaluation);
 
             console.log('✅ 評価結果の解析が成功しました');
-            console.log(`📋 妥当性: ${evaluation.plausibility_evaluation?.is_plausible ? '✓' : '✗'}`);
-            console.log(`📋 正確性: ${evaluation.correctness_evaluation?.is_correct ? '✓' : '✗'}`);
-            console.log(`📋 等価レベル: ${evaluation.correctness_evaluation?.semantic_equivalence_level || 'N/A'}`);
+            console.log(`📋 正確性スコア: ${evaluation.accuracy?.score || 'N/A'}`);
+            console.log(`📋 判断妥当性スコア: ${evaluation.decision_soundness?.score || 'N/A'}`);
+            console.log(`📋 方向整合性スコア: ${evaluation.directional_consistency?.score || 'N/A'}`);
+            console.log(`📋 妥当性スコア: ${evaluation.validity?.score || 'N/A'}`);
+            if (evaluation.analysis_labels?.repair_types) {
+                console.log(`📋 修正タイプ: [${evaluation.analysis_labels.repair_types.join(', ')}]`);
+            }
 
             return evaluation;
 
@@ -965,15 +972,25 @@ class APRLogParser {
             
             // フォールバック: 基本的な評価結果を返す
             return {
-                plausibility_evaluation: {
-                    is_plausible: false,
+                accuracy: {
+                    score: 0.0,
                     reasoning: `レスポンス解析エラー: ${error.message}`
                 },
-                correctness_evaluation: {
-                    is_correct: false,
-                    semantic_equivalence_level: "INCORRECT",
-                    reasoning: "LLMレスポンスの解析に失敗しました",
-                    semantic_similarity_rules_applied: []
+                decision_soundness: {
+                    score: 0.0,
+                    reasoning: "LLMレスポンスの解析に失敗しました"
+                },
+                directional_consistency: {
+                    score: 0.0,
+                    reasoning: "LLMレスポンスの解析に失敗しました"
+                },
+                validity: {
+                    score: 0.0,
+                    reasoning: "LLMレスポンスの解析に失敗しました"
+                },
+                analysis_labels: {
+                    repair_types: [],
+                    semantic_rules_applied: []
                 },
                 parse_error: {
                     error: error.message,
@@ -989,8 +1006,10 @@ class APRLogParser {
      */
     validateEvaluationResult(evaluation) {
         const requiredFields = [
-            'plausibility_evaluation',
-            'correctness_evaluation'
+            'accuracy',
+            'decision_soundness',
+            'directional_consistency',
+            'validity'
         ];
 
         for (const field of requiredFields) {
@@ -999,21 +1018,48 @@ class APRLogParser {
             }
         }
 
-        // plausibility_evaluationの妥当性チェック
-        const plausibility = evaluation.plausibility_evaluation;
-        if (typeof plausibility.is_plausible !== 'boolean') {
-            throw new Error('plausibility_evaluation.is_plausible は boolean型である必要があります');
+        // accuracyの妥当性チェック
+        const accuracy = evaluation.accuracy;
+        if (typeof accuracy.score !== 'number' || accuracy.score < 0.0 || accuracy.score > 1.0) {
+            throw new Error('accuracy.score は 0.0 から 1.0 の数値である必要があります');
         }
 
-        // correctness_evaluationの妥当性チェック
-        const correctness = evaluation.correctness_evaluation;
-        if (typeof correctness.is_correct !== 'boolean') {
-            throw new Error('correctness_evaluation.is_correct は boolean型である必要があります');
+        // decision_soundnessの妥当性チェック
+        const decisionSoundness = evaluation.decision_soundness;
+        if (typeof decisionSoundness.score !== 'number' || (decisionSoundness.score !== 0.0 && decisionSoundness.score !== 1.0)) {
+            throw new Error('decision_soundness.score は 0.0 または 1.0 である必要があります');
         }
 
-        const validLevels = ['IDENTICAL', 'SEMANTICALLY_EQUIVALENT', 'PLAUSIBLE_BUT_DIFFERENT', 'INCORRECT'];
-        if (!validLevels.includes(correctness.semantic_equivalence_level)) {
-            throw new Error(`無効な semantic_equivalence_level: ${correctness.semantic_equivalence_level}`);
+        // directional_consistencyの妥当性チェック
+        const directionalConsistency = evaluation.directional_consistency;
+        if (typeof directionalConsistency.score !== 'number' || (directionalConsistency.score !== 0.0 && directionalConsistency.score !== 1.0)) {
+            throw new Error('directional_consistency.score は 0.0 または 1.0 である必要があります');
+        }
+
+        // validityの妥当性チェック
+        const validity = evaluation.validity;
+        if (typeof validity.score !== 'number' || (validity.score !== 0.0 && validity.score !== 1.0)) {
+            throw new Error('validity.score は 0.0 または 1.0 である必要があります');
+        }
+
+        // analysis_labelsの妥当性チェック（オプショナル）
+        if (evaluation.analysis_labels) {
+            if (evaluation.analysis_labels.repair_types) {
+                if (!Array.isArray(evaluation.analysis_labels.repair_types)) {
+                    throw new Error('analysis_labels.repair_types は配列である必要があります');
+                }
+                // 各repair_typeが有効なenumかチェック
+                for (const type of evaluation.analysis_labels.repair_types) {
+                    if (!isValidRepairType(type)) {
+                        console.warn(`⚠️ 無効な repair_type: ${type} (スキップします)`);
+                    }
+                }
+            }
+            if (evaluation.analysis_labels.semantic_rules_applied) {
+                if (!Array.isArray(evaluation.analysis_labels.semantic_rules_applied)) {
+                    throw new Error('analysis_labels.semantic_rules_applied は配列である必要があります');
+                }
+            }
         }
     }
 
@@ -1032,28 +1078,60 @@ class APRLogParser {
         }
 
         const eval_data = evaluationResult.evaluation;
-        const isPlausible = eval_data.plausibility_evaluation?.is_plausible || false;
-        const isCorrect = eval_data.correctness_evaluation?.is_correct || false;
-        const equivalenceLevel = eval_data.correctness_evaluation?.semantic_equivalence_level || 'UNKNOWN';
-        const rulesApplied = eval_data.correctness_evaluation?.semantic_similarity_rules_applied || [];
+        const accuracyScore = eval_data.accuracy?.score || 0.0;
+        const decisionSoundnessScore = eval_data.decision_soundness?.score || 0.0;
+        const directionalConsistencyScore = eval_data.directional_consistency?.score || 0.0;
+        const validityScore = eval_data.validity?.score || 0.0;
 
         return {
             success: true,
             summary: {
-                overall_assessment: isCorrect ? 'CORRECT' : (isPlausible ? 'PLAUSIBLE_BUT_INCORRECT' : 'INCORRECT'),
-                is_plausible: isPlausible,
-                is_correct: isCorrect,
-                semantic_equivalence_level: equivalenceLevel,
-                rules_applied: rulesApplied,
-                rules_count: rulesApplied.length,
+                overall_assessment: this.calculateOverallAssessment(eval_data),
+                accuracy_score: accuracyScore,
+                decision_soundness_score: decisionSoundnessScore,
+                directional_consistency_score: directionalConsistencyScore,
+                validity_score: validityScore,
+                average_score: (accuracyScore + decisionSoundnessScore + directionalConsistencyScore + validityScore) / 4,
+                repair_types: eval_data.analysis_labels?.repair_types || [],
+                semantic_rules_applied: eval_data.analysis_labels?.semantic_rules_applied || [],
                 confidence_indicators: {
-                    has_detailed_reasoning: !!(eval_data.plausibility_evaluation?.reasoning && eval_data.correctness_evaluation?.reasoning),
-                    rules_properly_applied: rulesApplied.length > 0 && isCorrect,
-                    evaluation_consistent: isCorrect ? isPlausible : true // 正確なパッチは妥当である必要がある
+                    has_detailed_reasoning: !!(eval_data.accuracy?.reasoning && eval_data.decision_soundness?.reasoning && eval_data.directional_consistency?.reasoning && eval_data.validity?.reasoning),
+                    all_dimensions_present: !!(eval_data.accuracy && eval_data.decision_soundness && eval_data.directional_consistency && eval_data.validity),
+                    evaluation_consistent: validityScore === 1.0 ? (accuracyScore >= 0.0 && decisionSoundnessScore >= 0.0 && directionalConsistencyScore >= 0.0) : true,
+                    has_repair_types: (eval_data.analysis_labels?.repair_types?.length || 0) > 0
                 }
             },
             metadata: evaluationResult.metadata
         };
+    }
+
+    /**
+     * 全体評価を計算
+     * @param {object} eval_data - 評価データ
+     * @returns {string} 全体評価
+     */
+    calculateOverallAssessment(eval_data) {
+        const accuracy = eval_data.accuracy?.score || 0.0;
+        const decisionSoundness = eval_data.decision_soundness?.score || 0.0;
+        const directionalConsistency = eval_data.directional_consistency?.score || 0.0;
+        const validity = eval_data.validity?.score || 0.0;
+
+        if (validity === 0.0) {
+            return 'INVALID';
+        }
+        if (accuracy === 1.0) {
+            return 'PERFECT_MATCH';
+        }
+        if (decisionSoundness === 1.0 && directionalConsistency === 1.0) {
+            return 'SOUND_DECISION';
+        }
+        if (accuracy >= 0.7) {
+            return 'HIGH_ACCURACY';
+        }
+        if (decisionSoundness === 1.0 || directionalConsistency === 1.0) {
+            return 'PARTIALLY_SOUND';
+        }
+        return 'NEEDS_IMPROVEMENT';
     }
 }
 

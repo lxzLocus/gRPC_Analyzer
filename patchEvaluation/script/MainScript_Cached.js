@@ -13,9 +13,8 @@ dotenvConfig({ path: '/app/.env' });
 if (import.meta.url === `file://${process.argv[1]}`) {
     // コマンドライン引数の解析
     function parseArgs() {
-
-        const args = process.argv.slice(2);
         const parsed = {};
+        const args = process.argv.slice(2);       
         const positional = [];
         
         console.log('🔧 Raw args:', args);
