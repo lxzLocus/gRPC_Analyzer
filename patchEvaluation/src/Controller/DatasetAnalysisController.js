@@ -181,6 +181,9 @@ export class DatasetAnalysisController {
             // パス情報の取得
             const paths = await this.datasetRepository.getPullRequestPaths(pullRequestPath);
             
+            // pullRequestPathをpathsオブジェクトに追加
+            paths.pullRequestPath = pullRequestPath;
+            
             if (!paths.hasValidPaths) {
                 this.consoleView.showPathErrors(Boolean(paths.premergePath), Boolean(paths.mergePath));
                 return;
@@ -727,6 +730,9 @@ export class DatasetAnalysisController {
     recordSuccessfulMatch(entryId, aprLogPath, aprLogInfo, paths, changedFiles, aprDiffFiles, groundTruthDiff, aprLogData, diffAnalysis, finalModInfo) {
         const latestLogFile = aprLogInfo.logFiles.sort().pop();
         
+        // APRログの終了ステータスを取得
+        const aprStatus = aprLogData.experiment_metadata?.status || null;
+        
         this.stats.addMatchedPair({
             datasetEntry: entryId,
             aprLogPath: aprLogPath,
@@ -744,6 +750,7 @@ export class DatasetAnalysisController {
                 affectedFiles: diffAnalysis.affectedFiles.length,
                 phases: diffAnalysis.progressionAnalysis.phases.length
             },
+            aprStatus: aprStatus,  // APRログの終了ステータスを追加
             finalModification: finalModInfo
         });
     }

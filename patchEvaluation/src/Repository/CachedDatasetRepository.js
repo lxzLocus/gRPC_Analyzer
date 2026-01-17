@@ -493,6 +493,37 @@ export class CachedDatasetRepository {
     }
 
     /**
+     * commit_messages.jsonの読み込み
+     * @param {string} pullRequestPath - プルリクエストディレクトリのパス
+     * @returns {Promise<Object|null>} コミットメッセージデータ、または存在しない場合null
+     */
+    async getCommitMessages(pullRequestPath) {
+        try {
+            const commitMessagesPath = path.join(pullRequestPath, 'commit_messages.json');
+            
+            // ファイルの存在確認
+            if (!(await this.pathExists(commitMessagesPath))) {
+                return null;
+            }
+            
+            // ファイル読み込み
+            const content = await fs.readFile(commitMessagesPath, 'utf-8');
+            const data = JSON.parse(content);
+            
+            // 基本的な構造チェック
+            if (!data.merge_commit && !data.proto_commit) {
+                console.warn(`⚠️ commit_messages.json has unexpected structure: ${commitMessagesPath}`);
+                return null;
+            }
+            
+            return data;
+        } catch (error) {
+            console.error(`❌ Error reading commit_messages.json: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
      * JSONファイルに書き込み
      * @param {string} jsonFilePath - JSONファイルのパス
      * @param {Object} data - 書き込むデータ

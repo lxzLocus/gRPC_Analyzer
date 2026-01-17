@@ -96,8 +96,12 @@ class ReportBasedLogService {
                         semanticSimilarityScore: entry.semanticSimilarityScore,
                         aprProvider: entry.aprProvider,
                         aprModel: entry.aprModel,
+                        // APRログの終了ステータス
+                        aprStatus: entry.aprStatus,
                         // Intent Fulfillment評価情報も含める
-                        intentFulfillmentEvaluation: entry.intentFulfillmentEvaluation
+                        intentFulfillmentEvaluation: entry.intentFulfillmentEvaluation,
+                        // 4軸評価情報も含める（LLM_B評価）
+                        fourAxisEvaluation: entry.fourAxisEvaluation
                     });
                 });
             }
@@ -147,6 +151,13 @@ class ReportBasedLogService {
             const stats = {
                 totalReports: reports.length,
                 totalPRs: 0,
+                fourAxisEvaluation: {
+                    totalEvaluated: 0,
+                    accuracy: { scores: [], average: 0 },
+                    decisionSoundness: { scores: [], average: 0 },
+                    directionalConsistency: { scores: [], average: 0 },
+                    validity: { scores: [], average: 0 }
+                },
                 correctnessBreakdown: {
                     identical: 0,
                     semanticallyEquivalent: 0,
@@ -217,6 +228,19 @@ class ReportBasedLogService {
                     error: 0,
                     other: 0
                 },
+                skipBreakdown: {
+                    aprSkip: 0,          // APR側でスキップ（修正なし）
+                    llmSkip: 0,          // LLM評価側でスキップ
+                    aprError: 0,         // APR側でエラー
+                    llmEvaluationError: 0 // LLM評価側でエラー
+                },
+                fourAxisEvaluation: {
+                    totalEvaluated: 0,
+                    accuracy: { scores: [], average: 0 },
+                    decisionSoundness: { scores: [], average: 0 },
+                    directionalConsistency: { scores: [], average: 0 },
+                    validity: { scores: [], average: 0 }
+                },
                 intentFulfillmentEvaluation: {
                     totalEvaluated: 0,
                     totalSkipped: 0,
@@ -227,7 +251,9 @@ class ReportBasedLogService {
                     mediumScore: 0,  // 0.7-0.89
                     lowScore: 0,  // 0.4-0.69
                     veryLowScore: 0  // < 0.4
-                }
+                },
+                repairTypes: {},  // 修正タイプの統計
+                aprStatusDistribution: {}  // APR終了ステータスの分布
             };
             
             // 全PRを収集して統計を計算（skippedも含む）
@@ -281,8 +307,24 @@ class ReportBasedLogService {
                     stats.evaluationStatus.evaluated++;
                 } else if (pr.status === 'ERROR') {
                     stats.evaluationStatus.error++;
+                } else if (pr.status === 'SKIPPED') {
+                    // スキップ元を区別
+                    if (pr.skipSource === 'APR') {
+                        stats.skipBreakdown.aprSkip++;
+                    } else if (pr.skipSource === 'LLM_EVALUATION') {
+                        stats.skipBreakdown.llmSkip++;
+                    } else {
+                        stats.evaluationStatus.other++;
+                    }
                 } else {
                     stats.evaluationStatus.other++;
+                }
+                
+                // エラー元を区別
+                if (pr.errorSource === 'APR') {
+                    stats.skipBreakdown.aprError++;
+                } else if (pr.errorSource === 'LLM_EVALUATION') {
+                    stats.skipBreakdown.llmEvaluationError++;
                 }
                 
                 // Intent Fulfillment評価の統計
@@ -304,6 +346,38 @@ class ReportBasedLogService {
                         stats.intentFulfillmentEvaluation.totalError++;
                     }
                 }
+                
+                // 4軸評価（LLM_B）の統計
+                if (pr.fourAxisEvaluation) {
+                    const fourAxis = pr.fourAxisEvaluation;
+                    stats.fourAxisEvaluation.totalEvaluated++;
+                    
+                    // 各軸のスコアを収集
+                    if (fourAxis.accuracy?.score != null) {
+                        stats.fourAxisEvaluation.accuracy.scores.push(fourAxis.accuracy.score);
+                    }
+                    if (fourAxis.decision_soundness?.score != null) {
+                        stats.fourAxisEvaluation.decisionSoundness.scores.push(fourAxis.decision_soundness.score);
+                    }
+                    if (fourAxis.directional_consistency?.score != null) {
+                        stats.fourAxisEvaluation.directionalConsistency.scores.push(fourAxis.directional_consistency.score);
+                    }
+                    if (fourAxis.validity?.score != null) {
+                        stats.fourAxisEvaluation.validity.scores.push(fourAxis.validity.score);
+                    }
+                }
+                
+                // 修正タイプの統計
+                if (pr.repairTypes && Array.isArray(pr.repairTypes)) {
+                    pr.repairTypes.forEach(repairType => {
+                        stats.repairTypes[repairType] = (stats.repairTypes[repairType] || 0) + 1;
+                    });
+                }
+                
+                // APRステータスの統計
+                if (pr.aprStatus) {
+                    stats.aprStatusDistribution[pr.aprStatus] = (stats.aprStatusDistribution[pr.aprStatus] || 0) + 1;
+                }
             });
             
             // Intent Fulfillment評価の平均スコア計算
@@ -311,6 +385,17 @@ class ReportBasedLogService {
                 const sum = stats.intentFulfillmentEvaluation.scores.reduce((a, b) => a + b, 0);
                 stats.intentFulfillmentEvaluation.averageScore = (sum / stats.intentFulfillmentEvaluation.scores.length).toFixed(3);
             }
+            
+            // 4軸評価の平均スコア計算
+            const calculateAverage = (scores) => {
+                if (scores.length === 0) return 0;
+                return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(3);
+            };
+            
+            stats.fourAxisEvaluation.accuracy.average = calculateAverage(stats.fourAxisEvaluation.accuracy.scores);
+            stats.fourAxisEvaluation.decisionSoundness.average = calculateAverage(stats.fourAxisEvaluation.decisionSoundness.scores);
+            stats.fourAxisEvaluation.directionalConsistency.average = calculateAverage(stats.fourAxisEvaluation.directionalConsistency.scores);
+            stats.fourAxisEvaluation.validity.average = calculateAverage(stats.fourAxisEvaluation.validity.scores);
             
             // 意味的類似度の統計計算
             if (stats.semanticSimilarity.scores.length > 0) {
@@ -328,6 +413,9 @@ class ReportBasedLogService {
             
             return stats;
         } catch (error) {
+            console.error(`❌ Error in getReportStatistics for ${sessionId}:`, error);
+            console.error(`Error details: ${error.message}`);
+            console.error(`Stack: ${error.stack}`);
             throw new Error(`Failed to get report statistics: ${error.message}`);
         }
     }

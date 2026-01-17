@@ -353,11 +353,12 @@ export class LLMEvaluationService {
 
         try {
             // Intent Fulfillmentテンプレートの初期化
-            const intentTemplateRenderer = new TemplateRenderer();
             const projectRoot = '/app';
             const intentTemplatePath = path.join(projectRoot, "prompt", "01_intentFulfillmentPrompt.txt");
             const templateString = await fs.readFile(intentTemplatePath, 'utf-8');
-            intentTemplateRenderer.setTemplate(templateString);
+            
+            // テンプレート文字列を直接渡してインスタンス化
+            const intentTemplateRenderer = new TemplateRenderer(templateString);
 
             // LLMクライアントの初期化確認
             if (!this.llmClient) {

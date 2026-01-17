@@ -6,40 +6,82 @@ const state = {
     currentReport: null,
     currentPR: null,
     statistics: null,
-    currentDiffData: null  // 現在表示中のdiffデータを保持
+    currentDiffData: null,  // 現在表示中のdiffデータを保持
+    sidebarCollapsed: false  // サイドバーの開閉状態
 };
+
+// サイドバーのトグル
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const toggleIcon = document.getElementById('toggleIcon');
+    const toggleText = document.getElementById('toggleText');
+    
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    
+    if (state.sidebarCollapsed) {
+        sidebar.classList.add('collapsed');
+        toggleIcon.textContent = '☰';
+        toggleText.textContent = 'メニューを開く';
+    } else {
+        sidebar.classList.remove('collapsed');
+        toggleIcon.textContent = '✕';
+        toggleText.textContent = 'メニューを閉じる';
+    }
+}
+
+// スクロール時のヘッダー表示/非表示制御
+function initScrollHeaderBehavior() {
+    const header = document.querySelector('header');
+    
+    if (!header) return;
+    
+    let lastScrollTop = 0;
+    let ticking = false;
+    
+    // ページ全体のスクロールを監視
+    window.addEventListener('scroll', () => {
+        if (!ticking) {
+            window.requestAnimationFrame(() => {
+                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                
+                // 下にスクロール（スクロール位置が50px以上）
+                if (scrollTop > lastScrollTop && scrollTop > 50) {
+                    header.classList.add('hidden');
+                }
+                // 上にスクロール
+                else if (scrollTop < lastScrollTop) {
+                    header.classList.remove('hidden');
+                }
+                
+                lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+                ticking = false;
+            });
+            
+            ticking = true;
+        }
+    }, { passive: true });
+}
 
 // 初期化
 document.addEventListener('DOMContentLoaded', () => {
     initializeApp();
+    
+    // モバイルデバイスではデフォルトでサイドバーを閉じる
+    if (window.innerWidth <= 768) {
+        toggleSidebar();
+    }
+    
+    // スクロール時にヘッダーを非表示にする
+    initScrollHeaderBehavior();
 });
 
 async function initializeApp() {
     try {
-        await loadStatistics();
         await loadReports();
     } catch (error) {
         console.error('❌ Initialization error:', error);
         showError('初期化エラーが発生しました: ' + error.message);
     }
-}
-
-// 統計情報の読み込み
-async function loadStatistics() {
-    try {
-        // 統計情報はレポート一覧から計算するため、ここではスキップ
-        // updateStatsBarはloadReportsで呼び出す
-    } catch (error) {
-        console.error('❌ Statistics loading error:', error);
-    }
-}
-
-// 統計バーの更新
-function updateStatsBar(stats) {
-    document.getElementById('statReports').textContent = stats.totalReports;
-    document.getElementById('statPRs').textContent = stats.totalPRs;
-    const correct = stats.correctnessBreakdown.identical + stats.correctnessBreakdown.semanticallyEquivalent;
-    document.getElementById('statCorrect').textContent = correct;
 }
 
 // レポート一覧の読み込み
@@ -50,39 +92,11 @@ async function loadReports() {
         
         if (data.success) {
             renderReports(data.reports);
-            // レポートデータから統計を計算
-            calculateAndUpdateStats(data.reports);
         }
     } catch (error) {
         console.error('❌ Reports loading error:', error);
         showError('レポートの読み込みに失敗しました');
     }
-}
-
-// レポートから統計を計算
-function calculateAndUpdateStats(reports) {
-    const stats = {
-        totalReports: reports.length,
-        totalPRs: 0,
-        correctnessBreakdown: {
-            identical: 0,
-            semanticallyEquivalent: 0,
-            plausibleButDifferent: 0,
-            incorrect: 0
-        }
-    };
-    
-    reports.forEach(report => {
-        stats.totalPRs += report.totalPRs || 0;
-        if (report.correctnessBreakdown) {
-            stats.correctnessBreakdown.identical += report.correctnessBreakdown.identical || 0;
-            stats.correctnessBreakdown.semanticallyEquivalent += report.correctnessBreakdown.semanticallyEquivalent || 0;
-            stats.correctnessBreakdown.plausibleButDifferent += report.correctnessBreakdown.plausibleButDifferent || 0;
-            stats.correctnessBreakdown.incorrect += report.correctnessBreakdown.incorrect || 0;
-        }
-    });
-    
-    updateStatsBar(stats);
 }
 
 // レポートリストの描画
@@ -114,6 +128,11 @@ function renderReports(reports) {
 async function selectReport(sessionId) {
     state.currentReport = sessionId;
     state.currentPR = null;
+    
+    // モバイルデバイスではレポート選択時にサイドバーを閉じる
+    if (window.innerWidth <= 768 && !state.sidebarCollapsed) {
+        toggleSidebar();
+    }
     
     // アクティブ状態の更新
     document.querySelectorAll('.report-item').forEach(item => {
@@ -162,6 +181,9 @@ function renderReportStatistics(stats) {
     const total = stats.totalPRs;
     const correctness = stats.correctnessDistribution;
     
+    // 処理フロー統計を生成（APR終了ステータス分布を含む）
+    const processingStatsHtml = renderProcessingFlowStats(stats);
+    
     contentBody.innerHTML = `
         <div style="margin-bottom: 20px;">
             <button class="btn" onclick="loadPRs('${state.currentReport}')">
@@ -169,19 +191,21 @@ function renderReportStatistics(stats) {
             </button>
         </div>
 
+        ${processingStatsHtml}
+
         <div class="stats-overview">
             <div class="stat-card">
                 <h3>📊 総PR/Issue数</h3>
                 <div class="big-value">${total}</div>
-                <div class="sub-value">LLM評価完了: ${stats.evaluationStatus.evaluated}</div>
-                <div class="sub-value">スキップ: ${stats.correctnessDistribution.skipped || 0}</div>
+                <div class="sub-value">修正あり（LLM_B評価）: ${stats.fourAxisEvaluation?.totalEvaluated || 0}</div>
+                <div class="sub-value">スキップ（LLM_C評価可能）: ${stats.intentFulfillmentEvaluation?.totalEvaluated || 0}</div>
             </div>
             
             <div class="stat-card">
                 <h3>✅ 修正あり成功率</h3>
                 <div class="big-value">${stats.successRate}%</div>
                 <div class="sub-value">完全一致 + 意味的等価</div>
-                <div class="sub-value" style="font-size: 0.8em; color: #6c757d;">※修正ありケースのみ</div>
+                <div class="sub-value" style="font-size: 0.8em; color: #6c757d;">※LLM_B: 4軸評価対象</div>
             </div>
             
             <div class="stat-card">
@@ -304,32 +328,66 @@ function renderReportStatistics(stats) {
                 </ul>
             </div>
             ` : ''}
+            
+            ${Object.keys(stats.repairTypes || {}).length > 0 ? `
+            <div class="stat-card">
+                <h3>🔧 修正タイプ <span style="cursor: help; color: #667eea; font-size: 0.8em;" title="LLM評価による修正パターンの分類">ℹ️</span></h3>
+                <ul class="model-list">
+                    ${Object.entries(stats.repairTypes).sort((a, b) => b[1] - a[1]).map(([type, count]) => `
+                        <li class="model-item">
+                            <span class="model-name" style="font-size: 0.85em;">${formatRepairType(type)}</span>
+                            <span class="model-count">${count}</span>
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+            ` : ''}
         </div>
 
         <div class="stat-card">
-            <h3>📋 LLM評価ステータス（正確性評価） <span style="cursor: help; color: #667eea;" title="LLM評価は修正ありケースのみ実行されます。修正なしケースはIntent評価で補完されます。">ℹ️</span></h3>
+            <h3>📋 LLM評価ステータス <span style="cursor: help; color: #667eea;" title="LLM_B: 修正ありケース、LLM_C: スキップケースの意図評価">ℹ️</span></h3>
             <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">
-                ※修正なし（No-op）ケースはLLM評価がスキップされます。Intent評価は別途実行されます。
+                🎯 <strong>LLM_B (4軸評価)</strong>: 修正ありケース対象（Accuracy, Decision Soundness, Directional Consistency, Validity）<br>
+                🎯 <strong>LLM_C (Intent Fulfillment)</strong>: スキップケース対象（コミット意図との整合性を評価）
             </p>
             <div class="distribution-grid">
                 <div class="distribution-item">
                     <div class="distribution-value">${stats.evaluationStatus.evaluated}</div>
-                    <div class="distribution-label">✅ LLM評価完了</div>
+                    <div class="distribution-label">✅ LLM_B評価完了</div>
                 </div>
                 <div class="distribution-item">
-                    <div class="distribution-value">${stats.correctnessDistribution.skipped || 0}</div>
-                    <div class="distribution-label" title="エージェントが修正を行わなかったケース（調査のみ、生成ファイルのみ、No Changes Needed等）">⏭️ スキップ（修正なし）</div>
+                    <div class="distribution-value">${stats.intentFulfillmentEvaluation?.totalEvaluated || 0}</div>
+                    <div class="distribution-label">✅ LLM_C評価完了</div>
                 </div>
                 <div class="distribution-item">
-                    <div class="distribution-value">${stats.evaluationStatus.error}</div>
-                    <div class="distribution-label">❌ エラー</div>
+                    <div class="distribution-value">${stats.skipBreakdown?.aprSkip || stats.correctnessDistribution.skipped || 0}</div>
+                    <div class="distribution-label" title="エージェントが修正を行わなかったケース（調査のみ、生成ファイルのみ、No Changes Needed等）">⏭️ APR側スキップ</div>
                 </div>
             </div>
+            ${(stats.skipBreakdown?.aprError > 0 || stats.skipBreakdown?.llmEvaluationError > 0 || stats.evaluationStatus.error > 0) ? `
+            <div class="distribution-grid" style="margin-top: 15px; border-top: 1px solid #e9ecef; padding-top: 15px;">
+                <div class="distribution-item">
+                    <div class="distribution-value" style="color: #dc3545;">${stats.skipBreakdown?.aprError || 0}</div>
+                    <div class="distribution-label" title="APR処理中のエラー">❌ APR側エラー</div>
+                </div>
+                <div class="distribution-item">
+                    <div class="distribution-value" style="color: #dc3545;">${stats.skipBreakdown?.llmEvaluationError || 0}</div>
+                    <div class="distribution-label" title="LLM評価実行時のエラー">❌ LLM評価エラー</div>
+                </div>
+                <div class="distribution-item">
+                    <div class="distribution-value" style="color: #6c757d;">${stats.evaluationStatus.error || 0}</div>
+                    <div class="distribution-label" title="分類不明なエラー">❓ その他エラー</div>
+                </div>
+            </div>
+            ` : ''}
         </div>
         
         ${stats.intentFulfillmentEvaluation && stats.intentFulfillmentEvaluation.totalEvaluated > 0 ? `
         <div class="stat-card">
-            <h3>🎯 Intent Fulfillment評価 (LLM_C)</h3>
+            <h3>🎯 Intent Fulfillment評価 (LLM_C) - スキップケース対象</h3>
+            <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">
+                評価対象: ${stats.intentFulfillmentEvaluation.totalEvaluated}件（APRが修正を行わなかったケース、または評価できたケース）
+            </p>
             <div class="distribution-grid">
                 <div class="distribution-item">
                     <div class="distribution-value">${stats.intentFulfillmentEvaluation.totalEvaluated}</div>
@@ -386,6 +444,85 @@ function renderReportStatistics(stats) {
             </div>
         </div>
         ` : ''}
+        
+        ${stats.fourAxisEvaluation && stats.fourAxisEvaluation.totalEvaluated > 0 ? `
+        <div class="stat-card">
+            <h3>📊 4軸評価 (LLM_B) - 修正ありケース対象</h3>
+            <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">
+                評価対象: ${stats.fourAxisEvaluation.totalEvaluated}件（APRが修正を生成したケースのみ）<br>
+                <span style="color: #495057;">※Accuracy, Decision Soundness, Directional Consistency, Validityの4軸で評価</span>
+            </p>
+            
+            <div class="distribution-grid" style="margin-bottom: 20px;">
+                <div class="distribution-item">
+                    <div class="distribution-value">${stats.fourAxisEvaluation.accuracy.average}</div>
+                    <div class="distribution-label">🎯 Accuracy (正確性)</div>
+                    <div style="font-size: 0.8em; color: #6c757d; margin-top: 5px;">Ground Truthとの一致度</div>
+                </div>
+                <div class="distribution-item">
+                    <div class="distribution-value">${stats.fourAxisEvaluation.decisionSoundness.average}</div>
+                    <div class="distribution-label">🧠 Decision Soundness</div>
+                    <div style="font-size: 0.8em; color: #6c757d; margin-top: 5px;">判断の妥当性</div>
+                </div>
+                <div class="distribution-item">
+                    <div class="distribution-value">${stats.fourAxisEvaluation.directionalConsistency.average}</div>
+                    <div class="distribution-label">🧭 Directional Consistency</div>
+                    <div style="font-size: 0.8em; color: #6c757d; margin-top: 5px;">方向性の一貫性</div>
+                </div>
+                <div class="distribution-item">
+                    <div class="distribution-value">${stats.fourAxisEvaluation.validity.average}</div>
+                    <div class="distribution-label">✅ Validity (有効性)</div>
+                    <div style="font-size: 0.8em; color: #6c757d; margin-top: 5px;">構文・ビルドの正当性</div>
+                </div>
+            </div>
+            
+            ${stats.fourAxisEvaluation.accuracy.scores.length > 0 ? `
+            <div style="margin-top: 15px;">
+                <h4 style="margin-bottom: 10px; color: #495057;">📈 スコア詳細</h4>
+                
+                <div class="chart-bar">
+                    <div class="chart-bar-label">
+                        <span>🎯 Accuracy</span>
+                        <span><strong>${stats.fourAxisEvaluation.accuracy.average}</strong> (評価件数: ${stats.fourAxisEvaluation.accuracy.scores.length})</span>
+                    </div>
+                    <div class="chart-bar-bg">
+                        <div class="chart-bar-fill bar-identical" style="width: ${stats.fourAxisEvaluation.accuracy.average * 100}%"></div>
+                    </div>
+                </div>
+                
+                <div class="chart-bar">
+                    <div class="chart-bar-label">
+                        <span>🧠 Decision Soundness</span>
+                        <span><strong>${stats.fourAxisEvaluation.decisionSoundness.average}</strong> (評価件数: ${stats.fourAxisEvaluation.decisionSoundness.scores.length})</span>
+                    </div>
+                    <div class="chart-bar-bg">
+                        <div class="chart-bar-fill bar-equivalent" style="width: ${stats.fourAxisEvaluation.decisionSoundness.average * 100}%"></div>
+                    </div>
+                </div>
+                
+                <div class="chart-bar">
+                    <div class="chart-bar-label">
+                        <span>🧭 Directional Consistency</span>
+                        <span><strong>${stats.fourAxisEvaluation.directionalConsistency.average}</strong> (評価件数: ${stats.fourAxisEvaluation.directionalConsistency.scores.length})</span>
+                    </div>
+                    <div class="chart-bar-bg">
+                        <div class="chart-bar-fill bar-plausible" style="width: ${stats.fourAxisEvaluation.directionalConsistency.average * 100}%"></div>
+                    </div>
+                </div>
+                
+                <div class="chart-bar">
+                    <div class="chart-bar-label">
+                        <span>✅ Validity</span>
+                        <span><strong>${stats.fourAxisEvaluation.validity.average}</strong> (評価件数: ${stats.fourAxisEvaluation.validity.scores.length})</span>
+                    </div>
+                    <div class="chart-bar-bg">
+                        <div class="chart-bar-fill" style="width: ${stats.fourAxisEvaluation.validity.average * 100}%; background: #28a745;"></div>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+        </div>
+        ` : ''}
     `;
 }
 
@@ -426,16 +563,115 @@ function renderPRs(prs) {
         return;
     }
     
+    // 状態保存用
+    if (!state.prFilters) {
+        state.prFilters = {
+            status: 'all',
+            aprStatus: 'all',
+            correctness: 'all',
+            sortBy: 'default'
+        };
+    }
+    
+    // フィルター適用
+    let filteredPRs = prs.filter(pr => {
+        if (state.prFilters.status !== 'all' && pr.status !== state.prFilters.status) return false;
+        if (state.prFilters.aprStatus !== 'all' && pr.aprStatus !== state.prFilters.aprStatus) return false;
+        if (state.prFilters.correctness !== 'all' && pr.correctnessLevel !== state.prFilters.correctness) return false;
+        return true;
+    });
+    
+    // ソート適用
+    if (state.prFilters.sortBy === 'lines-desc') {
+        filteredPRs.sort((a, b) => (b.modifiedLines || 0) - (a.modifiedLines || 0));
+    } else if (state.prFilters.sortBy === 'lines-asc') {
+        filteredPRs.sort((a, b) => (a.modifiedLines || 0) - (b.modifiedLines || 0));
+    } else if (state.prFilters.sortBy === 'name') {
+        filteredPRs.sort((a, b) => a.prName.localeCompare(b.prName));
+    } else if (state.prFilters.sortBy === 'project') {
+        filteredPRs.sort((a, b) => a.projectName.localeCompare(b.projectName));
+    }
+    
+    // ユニークなAPRステータスリストを取得
+    const uniqueAPRStatuses = [...new Set(prs.map(pr => pr.aprStatus).filter(Boolean))];
+    
     contentBody.innerHTML = `
         <div style="margin-bottom: 20px;">
             <button class="btn" onclick="loadReportStatistics('${state.currentReport}')">
                 ← 統計サマリーに戻る
             </button>
         </div>
+        
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <h4 style="margin: 0 0 15px 0;">🔍 フィルター & ソート</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">評価ステータス:</label>
+                    <select id="filter-status" class="filter-select" onchange="updatePRFilters()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ced4da;">
+                        <option value="all">すべて (${prs.length})</option>
+                        <option value="EVALUATED">✅ 評価完了 (${prs.filter(p => p.status === 'EVALUATED').length})</option>
+                        <option value="SKIPPED">⏭️ 評価スキップ (${prs.filter(p => p.status === 'SKIPPED').length})</option>
+                        <option value="ERROR">❌ エラー (${prs.filter(p => p.status === 'ERROR').length})</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">APR終了ステータス:</label>
+                    <select id="filter-apr-status" class="filter-select" onchange="updatePRFilters()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ced4da;">
+                        <option value="all">すべて</option>
+                        ${uniqueAPRStatuses.map(status => {
+                            const info = getAPRStatusInfo(status);
+                            return `<option value="${status}">${info.icon} ${info.text} (${prs.filter(p => p.aprStatus === status).length})</option>`;
+                        }).join('')}
+                    </select>
+                </div>
+                
+                <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">正確性レベル:</label>
+                    <select id="filter-correctness" class="filter-select" onchange="updatePRFilters()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ced4da;">
+                        <option value="all">すべて</option>
+                        <option value="IDENTICAL">✅ 完全一致 (${prs.filter(p => p.correctnessLevel === 'IDENTICAL').length})</option>
+                        <option value="SEMANTICALLY_EQUIVALENT">✅ 意味的等価 (${prs.filter(p => p.correctnessLevel === 'SEMANTICALLY_EQUIVALENT').length})</option>
+                        <option value="PLAUSIBLE_BUT_DIFFERENT">⚠️ 妥当だが異なる (${prs.filter(p => p.correctnessLevel === 'PLAUSIBLE_BUT_DIFFERENT').length})</option>
+                        <option value="INCORRECT">❌ 不正解 (${prs.filter(p => p.correctnessLevel === 'INCORRECT').length})</option>
+                        <option value="SKIPPED">⏭️ スキップ (${prs.filter(p => p.correctnessLevel === 'SKIPPED').length})</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">並び替え:</label>
+                    <select id="sort-by" class="filter-select" onchange="updatePRFilters()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ced4da;">
+                        <option value="default">デフォルト順</option>
+                        <option value="name">名前順</option>
+                        <option value="project">プロジェクト順</option>
+                        <option value="lines-desc">変更行数 (多→少)</option>
+                        <option value="lines-asc">変更行数 (少→多)</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-top: 10px; color: #6c757d; font-size: 0.9em;">
+                表示中: <strong>${filteredPRs.length}</strong> / ${prs.length} 件
+            </div>
+        </div>
+        
         <div class="pr-grid">
-            ${prs.map(pr => {
+            ${filteredPRs.map(pr => {
                 const badgeClass = getCorrectnessClass(pr.correctnessLevel);
                 const badgeText = getCorrectnessText(pr.correctnessLevel);
+                
+                // 評価ステータスバッジ
+                let statusBadge = '';
+                if (pr.status) {
+                    const statusInfo = getStatusInfo(pr.status);
+                    statusBadge = `<div class="pr-info"><span class="status-badge ${statusInfo.class}">${statusInfo.icon} ${statusInfo.text}</span></div>`;
+                }
+                
+                // APRステータスバッジ
+                let aprStatusBadge = '';
+                if (pr.aprStatus) {
+                    const aprInfo = getAPRStatusInfo(pr.aprStatus);
+                    aprStatusBadge = `<div class="pr-info"><span style="display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 0.85em; background: ${aprInfo.color}; color: white; font-weight: 500;">${aprInfo.icon} ${aprInfo.text}</span></div>`;
+                }
                 
                 // Intent Fulfillmentスコアのバッジ
                 let intentBadge = '';
@@ -457,6 +693,8 @@ function renderPRs(prs) {
                     <div class="pr-card" onclick="selectPR('${encodeURIComponent(pr.datasetEntry)}')">
                         <h3>🐛 ${pr.prName}</h3>
                         <div class="pr-info">📦 ${pr.projectName}</div>
+                        ${statusBadge}
+                        ${aprStatusBadge}
                         <div class="pr-info">📝 ${pr.modifiedLines} 行変更</div>
                         <div class="pr-info">🤖 ${pr.aprProvider} / ${pr.aprModel}</div>
                         ${pr.semanticSimilarityScore != null ? `<div class="pr-info">📊 類似度: ${pr.semanticSimilarityScore}</div>` : ''}
@@ -467,6 +705,28 @@ function renderPRs(prs) {
             }).join('')}
         </div>
     `;
+    
+    // フィルター状態を復元
+    document.getElementById('filter-status').value = state.prFilters.status;
+    document.getElementById('filter-apr-status').value = state.prFilters.aprStatus;
+    document.getElementById('filter-correctness').value = state.prFilters.correctness;
+    document.getElementById('sort-by').value = state.prFilters.sortBy;
+    
+    // 元のPRリストを保存
+    state.allPRs = prs;
+}
+
+// PRフィルターの更新
+function updatePRFilters() {
+    state.prFilters = {
+        status: document.getElementById('filter-status').value,
+        aprStatus: document.getElementById('filter-apr-status').value,
+        correctness: document.getElementById('filter-correctness').value,
+        sortBy: document.getElementById('sort-by').value
+    };
+    
+    // PR一覧を再描画
+    renderPRs(state.allPRs);
 }
 
 // PRの選択
@@ -550,6 +810,8 @@ async function renderPRDetail(detail, sessionId, datasetEntry) {
                 </div>
             </div>
             
+            ${detail.skipSource || detail.errorSource ? renderErrorSkipSourceSection(detail) : ''}
+            
             ${detail.evaluationReasoning ? `
             <div class="detail-section">
                 <h3>評価理由 (LLM評価)</h3>
@@ -560,6 +822,8 @@ async function renderPRDetail(detail, sessionId, datasetEntry) {
             ` : ''}
             
             ${detail.intentFulfillmentEvaluation ? renderIntentFulfillmentSection(detail.intentFulfillmentEvaluation) : ''}
+            
+            ${detail.fourAxisEvaluation ? renderFourAxisEvaluationSection(detail.fourAxisEvaluation) : ''}
             
             ${detail.similarityReasoning ? `
             <div class="detail-section">
@@ -1176,7 +1440,7 @@ function getCorrectnessText(level) {
         'SEMANTICALLY_EQUIVALENT': '✅ 意味的等価',
         'PLAUSIBLE_BUT_DIFFERENT': '⚠️ 妥当だが異なる',
         'INCORRECT': '❌ 不正解',
-        'SKIPPED': '⏭️ スキップ',
+        'SKIPPED': '⏭️ 評価スキップ',
         'ERROR': '❌ エラー'
     };
     return map[level] || level;
@@ -1228,6 +1492,376 @@ function renderIntentFulfillmentSection(intentEval) {
     }
     
     return '';
+}
+
+// 4軸評価セクションの描画
+function renderFourAxisEvaluationSection(fourAxis) {
+    if (!fourAxis) return '';
+    
+    // 各軸のスコアとラベル
+    const axes = [
+        { 
+            key: 'accuracy', 
+            label: 'Accuracy (正確性)', 
+            emoji: '🎯',
+            description: 'Ground Truthとの一致度'
+        },
+        { 
+            key: 'decision_soundness', 
+            label: 'Decision Soundness (判断の妥当性)', 
+            emoji: '🧠',
+            description: 'APRの意思決定の質'
+        },
+        { 
+            key: 'directional_consistency', 
+            label: 'Directional Consistency (方向性の一貫性)', 
+            emoji: '🧭',
+            description: 'パッチ意図との整合性'
+        },
+        { 
+            key: 'validity', 
+            label: 'Validity (有効性)', 
+            emoji: '✅',
+            description: '構文・ビルドの正当性'
+        }
+    ];
+    
+    // 各軸のスコアを表示
+    let axesHtml = axes.map(axis => {
+        const axisData = fourAxis[axis.key];
+        if (!axisData) return '';
+        
+        const score = axisData.score;
+        const percentage = (score * 100).toFixed(0);
+        
+        // スコアに基づいたバッジクラス
+        const badgeClass = score >= 0.9 ? 'badge-identical' : 
+                          score >= 0.7 ? 'badge-equivalent' :
+                          score >= 0.4 ? 'badge-plausible' : 'badge-incorrect';
+        
+        return `
+            <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff;">
+                <p style="margin: 0 0 8px 0;">
+                    <strong>${axis.emoji} ${axis.label}</strong>
+                    <span class="correctness-badge ${badgeClass}" style="margin-left: 10px;">${percentage}%</span>
+                </p>
+                <p style="margin: 0 0 8px 0; font-size: 0.9em; color: #6c757d;">
+                    ${axis.description}
+                </p>
+                <p style="margin: 0; padding: 10px; background: white; border-radius: 5px;">
+                    ${axisData.reasoning || 'N/A'}
+                </p>
+            </div>
+        `;
+    }).join('');
+    
+    // 全体評価
+    const overallAssessment = fourAxis.overall_assessment || 'N/A';
+    const assessmentBadgeClass = overallAssessment === 'IDENTICAL' ? 'badge-identical' :
+                                 overallAssessment === 'SEMANTICALLY_EQUIVALENT' ? 'badge-equivalent' :
+                                 overallAssessment === 'PLAUSIBLE' ? 'badge-plausible' : 'badge-incorrect';
+    
+    return `
+        <div class="detail-section">
+            <h3>📊 4軸評価 (LLM_B)</h3>
+            <div class="detail-content">
+                ${axesHtml}
+                
+                ${fourAxis.overall_assessment ? `
+                <div style="margin-top: 15px; padding: 15px; background: #e7f3ff; border-radius: 8px;">
+                    <p style="margin: 0;">
+                        <strong>📋 総合評価:</strong> 
+                        <span class="correctness-badge ${assessmentBadgeClass}" style="margin-left: 10px;">
+                            ${overallAssessment}
+                        </span>
+                    </p>
+                </div>
+                ` : ''}
+                
+                ${fourAxis.analysis_labels && fourAxis.analysis_labels.repair_types && fourAxis.analysis_labels.repair_types.length > 0 ? `
+                <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <p style="margin: 0;">
+                        <strong>🔧 修正タイプ:</strong> ${fourAxis.analysis_labels.repair_types.join(', ')}
+                    </p>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// エラー/スキップソースセクションの描画
+function renderErrorSkipSourceSection(detail) {
+    let html = '';
+    
+    // スキップソース
+    if (detail.skipSource) {
+        const isAPR = detail.skipSource === 'APR';
+        const icon = isAPR ? '⏭️' : '⏯️';
+        const title = isAPR ? 'APR側スキップ' : 'LLM評価側スキップ';
+        const bgColor = isAPR ? '#fff3cd' : '#e7f3ff';
+        
+        html += `
+            <div class="detail-section">
+                <h3>${icon} ${title}</h3>
+                <div class="detail-content" style="background: ${bgColor}; padding: 15px; border-radius: 5px;">
+                    ${isAPR && detail.aprSkipReason ? `
+                        <p><strong>スキップ理由:</strong> ${detail.aprSkipReason.reason || 'N/A'}</p>
+                        ${detail.aprSkipReason.details ? `<p><strong>詳細:</strong> ${detail.aprSkipReason.details}</p>` : ''}
+                        ${detail.aprSkipReason.metadata ? `<p style="font-size: 0.9em; color: #586069;"><strong>追加情報:</strong> ${JSON.stringify(detail.aprSkipReason.metadata)}</p>` : ''}
+                    ` : ''}
+                    ${!isAPR && detail.skipReason ? `<p><strong>スキップ理由:</strong> ${detail.skipReason}</p>` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
+    // エラーソース
+    if (detail.errorSource) {
+        const isAPR = detail.errorSource === 'APR';
+        const icon = '❌';
+        const title = isAPR ? 'APR処理エラー' : 'LLM評価エラー';
+        const bgColor = '#f8d7da';
+        
+        html += `
+            <div class="detail-section">
+                <h3>${icon} ${title}</h3>
+                <div class="detail-content" style="background: ${bgColor}; padding: 15px; border-radius: 5px;">
+                    ${detail.error ? `<p><strong>エラー内容:</strong> ${detail.error}</p>` : ''}
+                    ${isAPR ? '<p>APR側の処理中にエラーが発生しました。エージェントが修正を生成できませんでした。</p>' : 
+                              '<p>LLM評価の実行中にエラーが発生しました。</p>'}
+                </div>
+            </div>
+        `;
+    }
+    
+    return html;
+}
+
+// ステータス情報を取得するヘルパー関数
+function getStatusInfo(status) {
+    switch(status) {
+        case 'EVALUATED':
+            return { icon: '✅', text: '評価完了', class: 'status-evaluated' };
+        case 'SKIPPED':
+            return { icon: '⏭️', text: '評価スキップ', class: 'status-skipped' };
+        case 'ERROR':
+            return { icon: '❌', text: 'エラー', class: 'status-error' };
+        case 'APR_NO_MODIFICATION':
+            return { icon: '🚫', text: 'APR修正なし', class: 'status-no-mod' };
+        case 'PENDING':
+            return { icon: '⏳', text: '処理中', class: 'status-pending' };
+        default:
+            return { icon: '❓', text: status || 'N/A', class: 'status-unknown' };
+    }
+}
+
+// APRステータス情報を取得するヘルパー関数
+function getAPRStatusInfo(aprStatus) {
+    if (!aprStatus) return null;
+    
+    const statusMap = {
+        'FINISHED': { icon: '🏁', text: 'FINISHED', class: 'apr-status-finished', color: '#28a745' },
+        'NO_CHANGES_NEEDED': { icon: '✓', text: 'NO_CHANGES_NEEDED', class: 'apr-status-no-changes', color: '#17a2b8' },
+        'TIMEOUT': { icon: '⏱️', text: 'TIMEOUT', class: 'apr-status-timeout', color: '#ffc107' },
+        'ERROR': { icon: '❌', text: 'ERROR', class: 'apr-status-error', color: '#dc3545' },
+        'INVESTIGATION_PHASE': { icon: '🔍', text: 'INVESTIGATION_PHASE', class: 'apr-status-investigation', color: '#6f42c1' },
+        'INCOMPLETE': { icon: '⚠️', text: 'INCOMPLETE', class: 'apr-status-incomplete', color: '#fd7e14' }
+    };
+    
+    return statusMap[aprStatus] || { icon: '❓', text: aprStatus, class: 'apr-status-unknown', color: '#6c757d' };
+}
+
+// 修正タイプをフォーマットするヘルパー関数
+function formatRepairType(repairType) {
+    const typeMap = {
+        'INTERFACE_ADAPTATION': 'インターフェース適応',
+        'PARTIAL_REPAIR': '部分的修正',
+        'LOGIC_FIX': 'ロジック修正',
+        'CONDITIONAL_CHANGE': '条件分岐変更',
+        'SERIALIZATION_UPDATE': 'シリアル化更新',
+        'FUNCTION_SIGNATURE_CHANGE': '関数シグネチャ変更',
+        'ERROR_HANDLING_CHANGE': 'エラー処理変更',
+        'SCHEMA_EVOLUTION': 'スキーマ進化',
+        'TEST_ADAPTATION': 'テスト適応',
+        'VALIDATION_ADDITION': 'バリデーション追加',
+        'VARIABLE_REMOVAL': '変数削除',
+        'DATA_TYPE_CHANGE': 'データ型変更',
+        'CONTROL_FLOW_MODIFICATION': '制御フロー変更',
+        'RESOURCE_MANAGEMENT': 'リソース管理',
+        'CONCURRENCY_FIX': '並行性修正',
+        'SECURITY_FIX': 'セキュリティ修正',
+        'PERFORMANCE_OPTIMIZATION': 'パフォーマンス最適化',
+        'CODE_REFACTORING': 'コードリファクタリング',
+        'DEPENDENCY_UPDATE': '依存関係更新',
+        'CONFIGURATION_CHANGE': '設定変更'
+    };
+    
+    return typeMap[repairType] || repairType;
+}
+
+// 処理フロー統計の描画
+function renderProcessingFlowStats(stats) {
+    console.log('[renderProcessingFlowStats] Called with stats:', stats);
+    
+    const totalPRs = stats.totalPRs || 0;
+    const evaluatedCount = stats.evaluationStatus?.evaluated || 0;
+    const skippedCount = stats.correctnessDistribution?.skipped || 0;
+    const errorCount = stats.evaluationStatus?.error || 0;
+    
+    console.log('[renderProcessingFlowStats] Calculated values:', {
+        totalPRs,
+        evaluatedCount,
+        skippedCount,
+        errorCount
+    });
+    
+    // APR処理成功数 = 評価完了 + スキップ（APR側）
+    const aprSuccessCount = evaluatedCount + skippedCount;
+    
+    // 評価完了数（修正あり）
+    const llmEvaluatedCount = evaluatedCount;
+    
+    // Intent Fulfillment評価数（スキップケース対象）
+    const intentEvaluatedCount = stats.intentFulfillmentEvaluation?.totalEvaluated || 0;
+    
+    // 成功率計算
+    const aprSuccessRate = totalPRs > 0 ? ((aprSuccessCount / totalPRs) * 100).toFixed(1) : 0;
+    const llmEvaluationRate = aprSuccessCount > 0 ? ((llmEvaluatedCount / aprSuccessCount) * 100).toFixed(1) : 0;
+    const intentEvaluationRate = skippedCount > 0 ? ((intentEvaluatedCount / skippedCount) * 100).toFixed(1) : 0;
+    
+    return `
+        <div class="processing-flow-stats" style="margin-top: 20px;">
+            <h3 style="margin-bottom: 15px; color: #495057;">📊 データセット処理フロー統計</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                <!-- ステップ1: データセット総数 -->
+                <div class="flow-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">📦 データセット総数</div>
+                    <div style="font-size: 2.5em; font-weight: bold;">${totalPRs}</div>
+                    <div style="font-size: 0.85em; opacity: 0.8; margin-top: 5px;">件</div>
+                </div>
+                
+                <!-- ステップ2: APR処理成功 -->
+                <div class="flow-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">🤖 APR処理成功</div>
+                    <div style="font-size: 2.5em; font-weight: bold;">${aprSuccessCount}</div>
+                    <div style="font-size: 0.85em; opacity: 0.8; margin-top: 5px;">
+                        ${totalPRs}件中 (${aprSuccessRate}%)
+                    </div>
+                </div>
+                
+                <!-- ステップ3: LLM_B評価完了 -->
+                <div class="flow-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">✅ LLM_B評価完了</div>
+                    <div style="font-size: 2.5em; font-weight: bold;">${llmEvaluatedCount}</div>
+                    <div style="font-size: 0.85em; opacity: 0.8; margin-top: 5px;">
+                        ${aprSuccessCount}件中 (${llmEvaluationRate}%)
+                    </div>
+                    <div style="font-size: 0.75em; opacity: 0.7; margin-top: 3px;">修正ありケース</div>
+                </div>
+                
+                <!-- ステップ4: LLM_C評価完了 -->
+                <div class="flow-card" style="background: linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%); color: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">🎯 LLM_C評価完了</div>
+                    <div style="font-size: 2.5em; font-weight: bold;">${intentEvaluatedCount}</div>
+                    <div style="font-size: 0.85em; opacity: 0.8; margin-top: 5px;">
+                        ${skippedCount}件中 (${intentEvaluationRate}%)
+                    </div>
+                    <div style="font-size: 0.75em; opacity: 0.7; margin-top: 3px;">スキップケース</div>
+                </div>
+            </div>
+            
+            <!-- 処理フロー図 -->
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 4px solid #667eea;">
+                <h4 style="margin-bottom: 15px; color: #495057;">🔄 処理フローの推移</h4>
+                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <div class="flow-step">
+                        <div class="flow-label" style="font-size: 0.85em; color: #6c757d;">データセット</div>
+                        <div class="flow-value" style="font-size: 1.8em; font-weight: bold; color: #667eea;">${totalPRs}</div>
+                    </div>
+                    <div class="flow-arrow" style="font-size: 2em; color: #adb5bd;">→</div>
+                    <div class="flow-step">
+                        <div class="flow-label" style="font-size: 0.85em; color: #6c757d;">APR成功</div>
+                        <div class="flow-value" style="font-size: 1.8em; font-weight: bold; color: #43e97b;">${aprSuccessCount}</div>
+                        <div class="flow-sublabel" style="font-size: 0.75em; color: #6c757d;">-${totalPRs - aprSuccessCount} 失敗</div>
+                    </div>
+                    <div class="flow-arrow" style="font-size: 2em; color: #adb5bd;">→</div>
+                    <div class="flow-step">
+                        <div class="flow-label" style="font-size: 0.85em; color: #6c757d;">修正あり</div>
+                        <div class="flow-value" style="font-size: 1.8em; font-weight: bold; color: #fa709a;">${llmEvaluatedCount}</div>
+                        <div class="flow-sublabel" style="font-size: 0.75em; color: #6c757d;">LLM_B評価</div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                        <div class="flow-arrow" style="font-size: 1.5em; color: #adb5bd;">↓</div>
+                        <div style="font-size: 0.75em; color: #6c757d;">${skippedCount}件</div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-label" style="font-size: 0.85em; color: #6c757d;">スキップ</div>
+                        <div class="flow-value" style="font-size: 1.8em; font-weight: bold; color: #a6c1ee;">${intentEvaluatedCount}</div>
+                        <div class="flow-sublabel" style="font-size: 0.75em; color: #6c757d;">LLM_C評価</div>
+                    </div>
+                </div>
+                
+                ${errorCount > 0 ? `
+                <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 5px; border-left: 3px solid #ffc107;">
+                    <span style="font-size: 0.9em; color: #856404;">⚠️ エラー: ${errorCount}件</span>
+                </div>
+                ` : ''}
+                
+                <!-- APR終了ステータス分布を統合 -->
+                ${Object.keys(stats.aprStatusDistribution || {}).length > 0 ? `
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #dee2e6;">
+                    <h5 style="margin-bottom: 12px; color: #495057; font-size: 1em;">🤖 APR終了ステータス分布</h5>
+                    <p style="font-size: 0.85em; color: #6c757d; margin-bottom: 12px;">
+                        APRエージェントが各ケースでどのステータスで終了したかの分布
+                    </p>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
+                        ${Object.entries(stats.aprStatusDistribution).sort((a, b) => b[1] - a[1]).map(([status, count]) => {
+                            const percentage = ((count / totalPRs) * 100).toFixed(1);
+                            let emoji = '📊';
+                            let color = '#667eea';
+                            
+                            if (status === 'Completed (No Changes Needed)') {
+                                emoji = '⏭️';
+                                color = '#6c757d';
+                            } else if (status === 'Completed (Implicit)') {
+                                emoji = '✅';
+                                color = '#28a745';
+                            } else if (status === 'Incomplete') {
+                                emoji = '⚠️';
+                                color = '#ffc107';
+                            } else if (status === 'Fin') {
+                                emoji = '✅';
+                                color = '#28a745';
+                            } else if (status === 'No Changes Need') {
+                                emoji = '⏭️';
+                                color = '#6c757d';
+                            } else if (status === 'Generated Files Only') {
+                                emoji = '📄';
+                                color = '#17a2b8';
+                            } else if (status === 'Investigation Only') {
+                                emoji = '🔍';
+                                color = '#ffc107';
+                            } else if (status.includes('Error') || status.includes('error')) {
+                                emoji = '❌';
+                                color = '#dc3545';
+                            }
+                            
+                            return `
+                                <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border: 1px solid #e9ecef;">
+                                    <div style="font-size: 1.8em; font-weight: bold; color: ${color};">${count}</div>
+                                    <div style="font-size: 0.8em; color: #495057; margin-top: 4px;">${emoji} ${status}</div>
+                                    <div style="font-size: 0.75em; color: #6c757d; margin-top: 3px;">${percentage}%</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
 }
 
 function showError(message) {

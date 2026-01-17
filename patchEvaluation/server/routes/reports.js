@@ -25,34 +25,13 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /api/reports/:sessionId
- * 特定レポートの完全な内容を取得
- */
-router.get('/:sessionId', async (req, res) => {
-    try {
-        const { sessionId } = req.params;
-        const content = await reportService.getReportContent(sessionId);
-        
-        res.json({
-            success: true,
-            sessionId,
-            data: content
-        });
-    } catch (error) {
-        res.status(404).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-/**
  * GET /api/reports/:sessionId/statistics
  * 特定レポートの詳細統計を取得
  */
 router.get('/:sessionId/statistics', async (req, res) => {
     try {
         const { sessionId } = req.params;
+        console.log(`📊 Getting statistics for sessionId: ${sessionId}, Full URL: ${req.url}`);
         const stats = await reportService.getReportStatistics(sessionId);
         
         res.json({
@@ -61,6 +40,8 @@ router.get('/:sessionId/statistics', async (req, res) => {
             statistics: stats
         });
     } catch (error) {
+        console.error(`❌ Error getting statistics for ${req.params.sessionId}:`, error.message);
+        console.error(`Stack: ${error.stack}`);
         res.status(404).json({
             success: false,
             error: error.message
@@ -92,7 +73,7 @@ router.get('/:sessionId/prs', async (req, res) => {
 });
 
 /**
- * GET /api/reports/:sessionId/prs/:datasetEntry/diffs
+ * GET /api/reports/:sessionId/prs/:datasetEntry(*)/diffs
  * 特定PRのDiff情報を取得
  */
 router.get('/:sessionId/prs/:datasetEntry(*)/diffs', async (req, res) => {
@@ -307,6 +288,29 @@ router.get('/:sessionId/project-statistics', async (req, res) => {
             sessionId,
             projectStatistics: enhancedReport.projectStatistics,
             enhancedSummary: enhancedReport.enhancedSummary
+        });
+    } catch (error) {
+        res.status(404).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * GET /api/reports/:sessionId
+ * 特定レポートの完全な内容を取得
+ * 注意: このルートは最後に配置（他の具体的なルートが優先される）
+ */
+router.get('/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const content = await reportService.getReportContent(sessionId);
+        
+        res.json({
+            success: true,
+            sessionId,
+            data: content
         });
     } catch (error) {
         res.status(404).json({

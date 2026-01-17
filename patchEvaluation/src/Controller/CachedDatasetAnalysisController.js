@@ -275,6 +275,9 @@ export class CachedDatasetAnalysisController {
             // パスの構築と存在確認
             const paths = await this.datasetRepository.getPullRequestPaths(pullRequestPath);
             
+            // pullRequestPathをpathsオブジェクトに追加
+            paths.pullRequestPath = pullRequestPath;
+            
             if (!paths.hasValidPaths) {
                 this.consoleView.showPathErrors(Boolean(paths.premergePath), Boolean(paths.mergePath));
                 return;
@@ -393,6 +396,23 @@ export class CachedDatasetAnalysisController {
                     groundTruthDiff,
                     aprLogData
                 );
+
+                /*
+                Intent Fulfillment評価の実行（LLM_C）
+                
+                コミットメッセージに基づく意図充足度評価
+                4軸評価とは独立した補助軸として扱う
+                */
+                await this.executeIntentFulfillmentEvaluation(
+                    finalModInfo,
+                    paths.pullRequestPath,
+                    aprLogData
+                );
+
+                // Intent Fulfillment評価結果の表示
+                if (finalModInfo.intentFulfillmentEvaluation) {
+                    this.consoleView.showIntentFulfillmentResult(finalModInfo.intentFulfillmentEvaluation);
+                }
             } else {
                 // 評価できない理由の詳細分析
                 const skipReason = this.analyzeEvaluationSkipReason(finalModsResult, aprLogData);
@@ -412,11 +432,31 @@ export class CachedDatasetAnalysisController {
                     timestamp: null,
                     diffLines: 0,
                     affectedFiles: [],
-                    diff: null
+                    diff: null  // diffはnullだが、これは正常（修正なしケース）
                 };
+
+                /*
+                修正なしケースでもIntent Fulfillment評価を実行
+                
+                エージェントが「修正不要」と判断した場合、その判断が
+                コミットメッセージの意図と整合しているかを評価する
+                */
+                await this.executeIntentFulfillmentEvaluation(
+                    finalModInfo,
+                    paths.pullRequestPath,
+                    aprLogData
+                );
+
+                // Intent Fulfillment評価結果の表示
+                if (finalModInfo.intentFulfillmentEvaluation) {
+                    this.consoleView.showIntentFulfillmentResult(finalModInfo.intentFulfillmentEvaluation);
+                }
             }
 
             // 成功した処理の統計に追加
+            // APRログの終了ステータスを取得
+            const aprStatus = aprLogData.experiment_metadata?.status || null;
+            
             this.stats.addMatchedPair({
                 datasetEntry: pullRequestKey, // 追加: datasetEntryフィールド
                 project: projectName,
@@ -427,6 +467,7 @@ export class CachedDatasetAnalysisController {
                 groundTruthDiff: groundTruthDiff || '',
                 aprLogFile: latestLogFile,
                 aprLogData: aprLogData,  // APRログデータを追加
+                aprStatus: aprStatus,  // APRログの終了ステータスを追加
                 finalModification: finalModInfo  // 最終修正情報を追加
             });
 
@@ -645,6 +686,83 @@ export class CachedDatasetAnalysisController {
             
             // 評価パイプライン失敗
             this.stats.incrementEvaluationPipelineFailure();
+        }
+    }
+
+    /**
+     * Intent Fulfillment評価の実行（LLM_C）
+     * コミットメッセージに記載された意図をエージェントが満たしているかを評価
+     * @param {Object} finalModInfo - 最終修正情報
+     * @param {string} pullRequestPath - PRディレクトリパス
+     * @param {Object} aprLogData - APRログデータ
+     */
+    async executeIntentFulfillmentEvaluation(finalModInfo, pullRequestPath, aprLogData) {
+        // コミットメッセージの読み込み
+        const commitMessages = await this.datasetRepository.getCommitMessages(pullRequestPath);
+        
+        if (!commitMessages) {
+            // commit_messages.jsonが存在しない場合はスキップ
+            finalModInfo.intentFulfillmentEvaluation = { 
+                skipped: true,
+                reason: "no_commit_messages" 
+            };
+            return;
+        }
+
+        console.log('🎯 Intent Fulfillment評価開始（LLM_C）...');
+
+        try {
+            // マージコミットメッセージを取得
+            const commitMessage = {
+                subject: commitMessages.merge_commit?.subject || '',
+                body: commitMessages.merge_commit?.body || ''
+            };
+
+            // デバッグ情報の出力
+            console.log('📝 コミットメッセージ情報:');
+            console.log(`   Subject: "${commitMessage.subject}"`);
+            console.log(`   Body length: ${commitMessage.body.length} chars`);
+            console.log(`   Body preview: "${commitMessage.body.substring(0, 100)}..."`);
+
+            // エージェントの思考過程を抽出
+            // turns配列が空の場合もサポート（調査フェーズ/未完了ケース）
+            const agentThoughtProcess = (aprLogData.turns && aprLogData.turns.length > 0)
+                ? aprLogData.turns.map(turn => {
+                    let turnContent = `Turn ${turn.turnNumber}:`;
+                    if (turn.thought) {
+                        turnContent += `\nThought: ${turn.thought}`;
+                    }
+                    if (turn.plan) {
+                        turnContent += `\nPlan: ${turn.plan}`;
+                    }
+                    if (turn.commentText) {
+                        turnContent += `\nComment: ${turn.commentText}`;
+                    }
+                    return turnContent;
+                  }).join('\n\n')
+                : '[No agent interaction recorded]';
+
+            // Intent Fulfillment評価コンテキスト
+            const intentContext = {
+                commitMessage,
+                agentGeneratedDiff: finalModInfo.diff || '',
+                agentThoughtProcess,
+                agentMadeChanges: finalModInfo.diff && finalModInfo.diff.trim().length > 0
+            };
+
+            const intentResult = await this.llmEvaluationService.evaluateIntentFulfillment(intentContext);
+
+            if (intentResult.success) {
+                console.log(`  ✅ Intent Fulfillment評価成功: スコア=${intentResult.result.score}`);
+                finalModInfo.intentFulfillmentEvaluation = intentResult.result;
+            } else {
+                console.error('  ❌ Intent Fulfillment評価失敗:', intentResult.error);
+                finalModInfo.intentFulfillmentEvaluation = { error: intentResult.error };
+            }
+
+        } catch (error) {
+            console.error('  ❌ Intent Fulfillment評価例外:', error.message);
+            finalModInfo.intentFulfillmentEvaluation = { error: error.message };
         }
     }
 

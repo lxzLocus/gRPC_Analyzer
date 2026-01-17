@@ -98,10 +98,15 @@ export class DatasetRepository {
      * @returns {Promise<string[]>} 変更されたファイルパスの配列
      */
     async getChangedFiles(premergePath, mergePath, fileExtension = null) {
+        if (!premergePath || !mergePath) {
+            return [];
+        }
+
         try {
             return await getChangedFiles(premergePath, mergePath, fileExtension);
         } catch (error) {
-            throw new Error(`変更ファイル取得エラー: ${error.message}`);
+            console.error(`差分解析エラー: ${error.message}`);
+            return [];
         }
     }
 
@@ -136,17 +141,6 @@ export class DatasetRepository {
         } catch (error) {
             console.error(`❌ Error reading commit_messages.json: ${error.message}`);
             return null;
-        }
-    }
-        if (!premergePath || !mergePath) {
-            return [];
-        }
-
-        try {
-            return await getChangedFiles(premergePath, mergePath, fileExtension);
-        } catch (error) {
-            console.error(`差分解析エラー: ${error.message}`);
-            return [];
         }
     }
 

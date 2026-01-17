@@ -1364,14 +1364,27 @@ export class HTMLReportService {
             // APR情報
             aprProvider: 'Unknown',
             aprModel: 'Unknown',
+            aprStatus: pair.aprStatus || null,  // APRログの終了ステータスを追加
             
             // 評価情報
             evaluationReasoning: '',
             evaluationDetails: null,
             
+            // エラー/スキップ分類情報
+            errorSource: null,  // 'APR' or 'LLM_EVALUATION' or null
+            skipSource: null,   // 'APR' or 'LLM_EVALUATION' or null
+            
             // タイムスタンプ
             processedAt: new Date().toISOString()
         };
+
+        // APR側のスキップ理由を記録
+        if (pair.finalModification?.evaluationSkipped && pair.finalModification?.skipReason) {
+            details.skipSource = 'APR';
+            details.aprSkipReason = pair.finalModification.skipReason;
+            details.skipReasonSummary = pair.finalModification.skipReason.reason;
+            details.skipReasonDetails = pair.finalModification.skipReason.details;
+        }
 
         // APRログからの情報抽出（aprLogDataまたはaprLogをチェック）
         const aprLogData = pair.aprLogData || pair.aprLog;
@@ -1416,6 +1429,12 @@ export class HTMLReportService {
         // LLM評価情報の抽出
         if (pair.finalModification && pair.finalModification.llmEvaluation) {
             const evaluation = pair.finalModification.llmEvaluation;
+            
+            // LLM評価エラーの記録
+            if (evaluation.error) {
+                details.errorSource = 'LLM_EVALUATION';
+                details.llmEvaluationError = evaluation.error;
+            }
             
             // 4軸評価形式（新形式）
             if (evaluation.accuracy !== undefined) {
@@ -1476,13 +1495,20 @@ export class HTMLReportService {
             const intentEval = pair.finalModification.intentFulfillmentEvaluation;
             
             if (intentEval.error) {
-                // エラーケース
+                // Intent評価エラーケース
+                if (!details.errorSource) {
+                    details.errorSource = 'LLM_EVALUATION';
+                }
                 details.intentFulfillmentEvaluation = {
                     status: 'error',
                     error: intentEval.error
                 };
+                details.intentEvaluationError = intentEval.error;
             } else if (intentEval.skipped) {
-                // スキップケース
+                // Intent評価スキップケース
+                if (!details.skipSource) {
+                    details.skipSource = 'LLM_EVALUATION';
+                }
                 details.intentFulfillmentEvaluation = {
                     status: 'skipped',
                     reason: intentEval.reason || 'no_commit_messages'
