@@ -198,11 +198,11 @@ export class AgentStateService {
       return undefined;
     }
 
-    // %_No_Changes_Needed_%タグはANALYSIS状態からVERIFYINGへ
+    // %_No_Changes_Needed_%タグはANALYSIS状態から直接完了へ
     if (tags.includes('%_No_Changes_Needed_%')) {
       if (currentState === AgentState.ANALYSIS) {
-        console.log('✅ No changes needed, transitioning to VERIFYING for final check');
-        return AgentState.VERIFYING;
+        console.log('✅ No changes needed, transitioning directly to READY_TO_FINISH');
+        return AgentState.READY_TO_FINISH;
       }
       console.warn(`⚠️  No_Changes_Needed tag detected in invalid state: ${currentState}`);
       return undefined;
@@ -215,7 +215,13 @@ export class AgentStateService {
     }
 
     if (tags.includes('%_Modified_%')) {
-      return AgentState.VERIFYING;
+      // Modified DiffはMODIFYING状態からのみVERIFYINGへ遷移可能
+      if (currentState === AgentState.MODIFYING) {
+        console.log('✅ Modified diff detected in MODIFYING state, transitioning to VERIFYING');
+        return AgentState.VERIFYING;
+      }
+      console.warn(`⚠️  Modified tag detected in invalid state: ${currentState}`);
+      return undefined;
     }
 
     if (tags.includes('%_Verification_Report_%')) {
