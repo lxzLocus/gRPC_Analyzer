@@ -1836,7 +1836,6 @@ Please respond again using only the allowed tags.`;
                 console.log(`✅ Status: 'Completed (No Changes Needed)' via explicit tag (legacy path)`);
             }
         }
-        }
         
         // 後処理による完了判定ロジック（安全策・フォールバック）- FSMが正しく動作すればこのパスは通らない
         if (currentFSMState !== AgentState.FINISHED && status === 'Incomplete' && !this.context.llmParsed?.has_fin_tag) {

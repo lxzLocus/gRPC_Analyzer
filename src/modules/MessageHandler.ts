@@ -60,6 +60,7 @@ class MessageHandler {
             commentText: '',
             has_fin_tag: false,
             has_no_changes_needed: false,
+            has_verification_report: false, // 検証レポートフラグ
             ready_for_final_check: false // 最終確認フラグ
         };
 
@@ -169,6 +170,13 @@ class MessageHandler {
             if (trimmed === '%_No_Changes_Needed_%' || trimmed.includes('%_No_Changes_Needed_%')) {
                 sections.has_no_changes_needed = true;
                 console.log('✅ Found %_No_Changes_Needed_% tag');
+                break;
+            }
+            
+            // 【優先2.5】検証レポートタグ
+            if (trimmed === '%_Verification_Report_%' || trimmed.includes('%_Verification_Report_%')) {
+                sections.has_verification_report = true;
+                console.log('✅ Found %_Verification_Report_% tag');
                 break;
             }
             
