@@ -56,14 +56,15 @@ export const ALLOWED_TAGS_BY_STATE: Record<AgentState, string[]> = {
   ],
   [AgentState.VERIFYING]: [
     '%_Verification_Report_%',
-    '%_Thought_%'
+    '%_Thought_%',
+    '%_Modified_%'  // 追加修正が必要な場合
   ],
   [AgentState.READY_TO_FINISH]: [
-    '%_Ready_For_Final_Check_%',
-    '%%_Fin_%%'  // この状態でのみFinタグを許可
+    // 内部状態：LLMには見せない
+    // FSMが自動的にFINISHEDに遷移
   ],
   [AgentState.FINISHED]: [
-    // 終了状態 - タグ送信不要（既にFinを送信済み）
+    // 終了状態 - タグ送信不要
   ],
   [AgentState.ERROR]: [
     '%_Thought_%',

@@ -1,6 +1,6 @@
 ## Instructions ##
 
-You have completed your solution review and indicated that all goals are achieved with `%_Ready_For_Final_Check_%`.
+You have completed your modifications and are now in the final verification phase.
 
 ### Your Solution Summary ###
 {{verificationSummary}}
@@ -17,7 +17,7 @@ You have completed your solution review and indicated that all goals are achieve
 
 ## Final Quality Review ##
 
-As a senior developer, perform one final quality review:
+As a senior developer, perform one final quality review and create a comprehensive verification report:
 
 1. **Solution Completeness**: Verify that every correction goal has been properly addressed with concrete evidence from your code changes.
 
@@ -47,49 +47,81 @@ As a senior developer, perform one final quality review:
 
 ### Your Response Format ###
 
-**FINAL DECISION EXAMPLES:**
+**VERIFICATION DECISION:**
 
-🔍 **Example 1 - Found an Enhancement Opportunity**:
+🔍 **Option 1 - Found an Enhancement Opportunity (Additional Fix Needed)**:
 ```
+%_Thought_%
+Upon final review, I noticed that...
+
 %_Modified_%
 --- src/mgmt/system.go
 +++ src/mgmt/system.go
 @@ -45,1 +45,1 @@
--	result, err := auth.SetupRank(config)  // Could benefit from new parameter
-+	result, err := auth.SetupRank(config, hostname)  // Enhanced for better functionality
+-	result, err := auth.SetupRank(config)
++	result, err := auth.SetupRank(config, hostname)
 ```
 
-🔍 **Example 2 - All Goals Verified Complete**:
+🔍 **Option 2 - All Goals Verified Complete**:
 ```
-%%_Fin_%%
+%_Verification_Report_%
+✅ All correction goals have been achieved:
+- Goal 1: Implemented proper error handling in auth_sys.go (lines 98-105)
+- Goal 2: Enhanced hostname validation (lines 102-104)
+- Goal 3: Updated all caller sites to handle new error responses
+
+Code Quality Assessment:
+- ✓ Follows existing patterns and conventions
+- ✓ Edge cases properly handled (empty hostname, nil config)
+- ✓ No technical debt introduced
+- ✓ Future-proof design with clear error messages
+
+The solution is ready for production.
 ```
 
 ---
 
-If you have verified that:
-- All correction goals are demonstrably achieved (with specific evidence)
-- The solution meets quality standards and handles edge cases properly
-- No outstanding issues or gaps remain
-- The code is ready for production
+## Response Instructions ##
 
-Then respond with ONLY:
+**--- If all tasks are complete ---**
+Provide a detailed verification report:
 ```
-%%_Fin_%%
+%_Verification_Report_%
+✅ Summary of what was achieved
+✅ Evidence for each correction goal
+✅ Code quality assessment
+✅ Edge case coverage confirmation
 ```
 
-If you identify any final enhancement opportunities, respond with:
+**--- If you find a final issue that needs fixing ---**
+Provide your thoughts and the necessary modification:
 ```
+%_Thought_%
+[Explain what issue you found during verification]
+
 %_Modified_%
 [Your final improvements here]
 ```
 
-**OPPORTUNITY**: This is your final chance to make your solution even better. Focus on excellence, not just correctness.
+**IMPORTANT**: After providing the verification report, the system will automatically complete the task. Focus on creating a comprehensive verification report that documents what was achieved.
 
 ## Response Structure Example ##
 
 **--- If all tasks are complete ---**
 ```
-%%_Fin_%%
+%_Verification_Report_%
+✅ Verification Summary:
+All correction goals have been successfully achieved. The implementation is robust, follows best practices, and is ready for production use.
+
+Detailed Achievement Evidence:
+1. [Goal 1]: [Specific implementation details and evidence]
+2. [Goal 2]: [Specific implementation details and evidence]
+
+Quality Assurance:
+- Code follows project conventions
+- Edge cases are properly handled
+- No technical debt introduced
+- Documentation is clear and complete
 ```
 
 **--- If you find a final issue ---**

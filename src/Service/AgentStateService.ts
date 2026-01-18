@@ -192,28 +192,26 @@ export class AgentStateService {
 
     // タグの種類に基づいて次の状態を推測
     
-    // %%_Fin_%%タグはREADY_TO_FINISH状態からのみ許可
+    // %%_Fin_%%タグは廃止：LLMに終了判定させない
     if (tags.includes('%%_Fin_%%')) {
-      if (currentState === AgentState.READY_TO_FINISH) {
-        return AgentState.FINISHED;
-      }
-      // それ以外の状態でFinタグが検出された場合はエラー
-      console.warn(`⚠️  Fin tag detected in invalid state: ${currentState}`);
+      console.warn(`⚠️  Deprecated Fin tag detected - FSM should handle completion automatically`);
       return undefined;
     }
 
-    // %_No_Changes_Needed_%タグはANALYSIS状態から直接READY_TO_FINISHへ
+    // %_No_Changes_Needed_%タグはANALYSIS状態からVERIFYINGへ
     if (tags.includes('%_No_Changes_Needed_%')) {
       if (currentState === AgentState.ANALYSIS) {
-        console.log('✅ No changes needed, transitioning directly to READY_TO_FINISH');
-        return AgentState.READY_TO_FINISH;
+        console.log('✅ No changes needed, transitioning to VERIFYING for final check');
+        return AgentState.VERIFYING;
       }
       console.warn(`⚠️  No_Changes_Needed tag detected in invalid state: ${currentState}`);
       return undefined;
     }
 
+    // %_Ready_For_Final_Check_%タグは廃止：内部状態として扱う
     if (tags.includes('%_Ready_For_Final_Check_%')) {
-      return AgentState.READY_TO_FINISH;
+      console.warn(`⚠️  Deprecated Ready_For_Final_Check tag detected`);
+      return undefined;
     }
 
     if (tags.includes('%_Modified_%')) {
@@ -221,8 +219,9 @@ export class AgentStateService {
     }
 
     if (tags.includes('%_Verification_Report_%')) {
-      // 検証結果に応じて分岐（ここでは単純化）
-      return AgentState.READY_TO_FINISH;
+      // 検証完了：FSMが自動的にFINISHEDへ遷移
+      console.log('✅ Verification complete, FSM will transition to FINISHED');
+      return AgentState.READY_TO_FINISH; // 内部的にREADY_TO_FINISHを経由してFINISHEDへ
     }
 
     // %_Reply Required_%タグの検出

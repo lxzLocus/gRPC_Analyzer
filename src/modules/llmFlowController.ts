@@ -778,21 +778,26 @@ class LLMFlowController {
                 break;
                 
             case AgentState.VERIFYING:
-                // 検証中状態: 検証プロンプト送信
-                console.log('🔍 FSM: Moving to verification phase');
-                this.state = State.SendFinalCheckToLLM;
+                // 検証中状態: 検証レポートを受け取った後、自動的に完了へ遷移
+                if (parsed.has_verification_report) {
+                    console.log('✅ FSM: Verification report received, transitioning to completion');
+                    // VERIFYING → READY_TO_FINISH → FINISHED の自動遷移
+                    await this.agentStateService.transition(AgentState.READY_TO_FINISH, 'verification_completed');
+                    await this.agentStateService.transition(AgentState.FINISHED, 'auto_completion');
+                    this.state = State.End;
+                } else {
+                    // 検証レポートがまだない場合は検証プロンプト送信
+                    console.log('🔍 FSM: Sending verification prompt');
+                    this.state = State.SendFinalCheckToLLM;
+                }
                 break;
                 
             case AgentState.READY_TO_FINISH:
-                // 完了準備状態: No_Changes_Neededタグで来た場合は即座に完了
-                if (parsed.has_no_changes_needed) {
-                    console.log('🏁 FSM: Ready to finish (no changes needed), completing directly');
-                    await this.agentStateService.transition(AgentState.FINISHED, 'no_changes_needed_completion');
-                    this.state = State.End;
-                } else {
-                    console.log('🏁 FSM: Ready to finish, sending final check');
-                    this.state = State.SendFinalCheckToLLM;
-                }
+                // 完了準備状態（内部状態）: 自動的にFINISHEDへ遷移
+                console.log('🏁 FSM: Ready to finish (internal state), transitioning to FINISHED');
+                await this.agentStateService.transition(AgentState.FINISHED, 
+                    parsed.has_no_changes_needed ? 'no_changes_needed_completion' : 'verification_completion');
+                this.state = State.End;
                 break;
                 
             case AgentState.ERROR:
@@ -1801,16 +1806,39 @@ Please respond again using only the allowed tags.`;
         const endTime = new Date().toISOString();
         const experimentId = this.generateExperimentId();
         
-        // 基本的なステータス判定
-        let status = this.context.llmParsed?.has_fin_tag ? 'Completed (%%_Fin_%%)' : 'Incomplete';
+        // FSM状態に基づく完了判定（優先）
+        let status: string;
+        const currentFSMState = this.agentStateService.getCurrentState();
         
-        // 優先1: %_No_Changes_Needed_%タグによる完了
-        if (this.context.llmParsed?.has_no_changes_needed) {
-            status = 'Completed (No Changes Needed)';
-            console.log(`✅ Status: 'Completed (No Changes Needed)' via explicit tag`);
+        if (currentFSMState === AgentState.FINISHED) {
+            // FSMがFINISHED状態に到達した場合、理由を判定
+            if (this.context.llmParsed?.has_no_changes_needed) {
+                status = 'Completed (No Changes Needed)';
+                console.log(`✅ Status: 'Completed (No Changes Needed)' via FSM + explicit tag`);
+            } else if (this.context.llmParsed?.has_verification_report) {
+                status = 'Completed (Verified)';
+                console.log(`✅ Status: 'Completed (Verified)' via FSM verification flow`);
+            } else {
+                // フォールバック: FSMがFINISHEDだが理由不明
+                status = 'Completed (FSM)';
+                console.log(`✅ Status: 'Completed (FSM)' - reached FINISHED state`);
+            }
+        } else {
+            // FSMがFINISHEDでない場合の従来ロジック（後方互換性）
+            status = this.context.llmParsed?.has_fin_tag ? 'Completed (%%_Fin_%%)' : 'Incomplete';
+            
+            // 優先1: %_No_Changes_Needed_%タグによる完了
+            if (this.context.llmParsed?.has_no_changes_needed) {
+                status = 'Completed (No Changes Needed)';
+                console.log(`✅ Status: 'Completed (No Changes Needed)' via explicit tag (legacy path)`);
+            }
         }
-        // 後処理による完了判定ロジック（安全策・フォールバック）
-        else if (status === 'Incomplete' && !this.context.llmParsed?.has_fin_tag) {
+        }
+        
+        // 後処理による完了判定ロジック（安全策・フォールバック）- FSMが正しく動作すればこのパスは通らない
+        if (currentFSMState !== AgentState.FINISHED && status === 'Incomplete' && !this.context.llmParsed?.has_fin_tag) {
+            console.warn('⚠️ FSM did not reach FINISHED state, falling back to implicit completion logic');
+            
             // ログ内に一度でも%_Modified_%が存在した場合の暗黙的完了判定
             const hasModification = this.logger.getInteractionLog().some((turn: any) => 
                 turn.llm_response?.parsed_content?.modified_diff || 
@@ -1819,7 +1847,7 @@ Please respond again using only the allowed tags.`;
             
             if (hasModification) {
                 status = 'Completed (Implicit)'; // 暗黙的な完了としてステータスを更新
-                console.log(`✅ Status updated to 'Completed (Implicit)' based on post-processing logic.`);
+                console.log(`✅ Status updated to 'Completed (Implicit)' based on fallback post-processing logic.`);
                 console.log(`   Reason: Found %_Modified_% tag without explicit %%_Fin_%% tag`);
             }
             // 修正不要と判断したケース（暗黙的検出・フォールバック）
