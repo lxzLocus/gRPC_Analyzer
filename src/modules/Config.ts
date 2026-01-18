@@ -188,7 +188,7 @@ class Config {
             system: { version: '1.0.0', environment: 'development', debugMode: false, logLevel: 'info' },
             llm: { provider: 'openai', model: 'gpt-4o', maxTokens: 4000, temperature: 0.1, timeout: 30000, retryAttempts: 3 },
             gemini: { model: 'gemini-2.5-pro', maxTokens: 4000, temperature: 0.1, timeout: 30000 },
-            fileOperations: { maxFileSize: 52428800, timeout: 30000, encoding: 'utf-8', enableSizeCheck: true, enableTimeoutCheck: true, backupEnabled: true },
+            fileOperations: { maxFileSize: 52428800, timeout: 60000, encoding: 'utf-8', enableSizeCheck: true, enableTimeoutCheck: true, backupEnabled: true },
             performance: { enableMonitoring: true, enableDetailedLogs: true, performanceLogPath: '/app/logs/performance', reportGenerationEnabled: true },
             paths: { promptDir: '/app/src/prompts', outputDir: '/app/output', logsDir: '/app/logs', backupDir: '/app/backups' },
             testing: { mockMode: false, integrationTestEnabled: true, testReportPath: '/app/output', testTimeout: 60000 },

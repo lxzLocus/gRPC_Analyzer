@@ -26,7 +26,7 @@
     "enableSizeCheck": true,
     "maxFileSize": 52428800,
     "enableTimeoutCheck": true,
-    "fileTimeout": 30000,
+    "fileTimeout": 60000,
     "backupEnabled": true
   },
   "performance": {

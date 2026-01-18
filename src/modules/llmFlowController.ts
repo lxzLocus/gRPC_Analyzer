@@ -658,6 +658,9 @@ class LLMFlowController {
         console.log(`🤖 FSM (Decision): Detected tags = [${validationResult.detectedTags.join(', ')}]`);
         console.log(`🤖 FSM (Decision): Valid = ${validationResult.valid}`);
         
+        // イテレーションカウントを更新
+        this.internalProgress.iterationCount = this.currentTurn;
+        
         // ターン数上限チェック（無限ループ防止）
         if (this.currentTurn >= 15) {
             console.warn('⚠️ Reached maximum turns (15), forcing termination');

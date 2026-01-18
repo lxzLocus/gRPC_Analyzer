@@ -46,7 +46,7 @@ class FileManager {
     // ファイル操作の設定
     private readonly fileOperationConfig: FileOperationConfig = {
         maxFileSize: 50 * 1024 * 1024, // 50MB
-        timeoutMs: 30000, // 30秒
+        timeoutMs: 60000, // 60秒（大きなファイル対応）
         encoding: 'utf-8',
         enableSizeCheck: true,
         enableTimeoutCheck: true
