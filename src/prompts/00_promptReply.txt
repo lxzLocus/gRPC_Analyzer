@@ -19,6 +19,7 @@ You are tasked with retrieving and reviewing specific source code files that wer
 
 ### Files you requested ###
 {{filesRequested}}
+{{retrievedSoFar}}
 
 ### Previous modifications or context ###
 {{previousModifications}}
@@ -38,12 +39,12 @@ You are tasked with retrieving and reviewing specific source code files that wer
 
 ### Your Next Action ###
 
-Review the new information in the `Context` section. In the `%_Thought_%` section, explain how this new information helps you proceed with your **plan**. Then, execute the **next step of your plan** by using one of the action tags (`%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`).
+Review the new information in the `Context` section. In the `%_Thought_%` section, explain how this new information helps you proceed with your **plan**. Then, execute the **next step of your plan** by using one of the action tags (`%_Reply Required_%`, `%_Modified_%`, or `%_No_Changes_Needed_%`).
 
 **CRITICAL**: Stay focused on your **correction goals** and follow your **plan** systematically. If new information reveals gaps or better approaches, revise your plan and explain the changes in the `%_Plan_%` tag.
-// Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
+// Expected response tags: %_Thought_%, and then either %_Reply Required_%`, `%_Modified_%`, or `%_No_Changes_Needed_%`.
 
-**IMPORTANT RULE: After you output a %_Modified_% tag, the system will apply it and show you the result. You MUST wait for this verification step. Output %%_Fin_%% only in a subsequent turn after you have verified that all your Correction Goals have been met.**
+**IMPORTANT RULE: After you output a %_Modified_% tag, the system will apply it and show you the result. You MUST wait for verification before the task is complete. The system will guide you through the VERIFYING state.**
 
 ---
 ## Response Structure Example ##

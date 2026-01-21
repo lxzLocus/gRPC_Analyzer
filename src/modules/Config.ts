@@ -339,9 +339,27 @@ class Config {
         previousThought?: string, 
         previousPlan?: string,
         correctionGoals?: string,
-        systemState?: string
+        systemState?: string,
+        retrievedSoFar?: { fileContents: Set<string>; directoryListings: Set<string> }
     ): string {
         const promptRefineText = fs.readFileSync(path.join(this.promptDir, '00_promptReply.txt'), 'utf-8');
+
+        // Priority 1: 取得済み情報をフォーマット
+        let retrievedSoFarText = '';
+        if (retrievedSoFar && (retrievedSoFar.fileContents.size > 0 || retrievedSoFar.directoryListings.size > 0)) {
+            const filesList = Array.from(retrievedSoFar.fileContents).sort();
+            const dirsList = Array.from(retrievedSoFar.directoryListings).sort();
+            
+            retrievedSoFarText = '\n### Retrieved So Far ###\n';
+            if (filesList.length > 0) {
+                retrievedSoFarText += '- FILE_CONTENT:\n';
+                filesList.forEach(f => retrievedSoFarText += `  - ${f}\n`);
+            }
+            if (dirsList.length > 0) {
+                retrievedSoFarText += '- DIRECTORY_LISTING:\n';
+                dirsList.forEach(d => retrievedSoFarText += `  - ${d}\n`);
+            }
+        }
 
         const context = {
             filesRequested: filesRequested, // required section from previous message
@@ -349,7 +367,8 @@ class Config {
             previousThought: previousThought || '', // 前回の思考内容
             previousPlan: previousPlan || '', // 前回の計画内容
             correctionGoals: correctionGoals || '', // 修正目標
-            systemState: systemState || '' // FSM状態情報
+            systemState: systemState || '', // FSM状態情報
+            retrievedSoFar: retrievedSoFarText // Priority 1: 取得済み情報
         };
         const template = Handlebars.compile(promptRefineText, { noEscape: true });
         return template(context);
@@ -441,6 +460,101 @@ class Config {
             systemState: systemState || ''
         };
         const template = Handlebars.compile(promptFinalCheckText, { noEscape: true });
+        return template(context);
+    }
+
+    /**
+     * VERIFYING状態用の検証プロンプトファイルを読み込み
+     */
+    readPromptVerifyingFile(
+        correctionGoals: string,
+        previousThought: string,
+        previousPlan: string,
+        modifiedFiles: string,
+        systemState?: string
+    ): string {
+        const promptVerifyingText = fs.readFileSync(path.join(this.promptDir, '00_promptVerifying.txt'), 'utf-8');
+
+        const context = {
+            correctionGoals: correctionGoals,
+            previousThought: previousThought,
+            previousPlan: previousPlan,
+            modifiedFiles: modifiedFiles,
+            systemState: systemState || ''
+        };
+        const template = Handlebars.compile(promptVerifyingText, { noEscape: true });
+        return template(context);
+    }
+
+    /**
+     * VERIFYING状態用の検証プロンプト（No Changes Needed用）を読み込み
+     */
+    readPromptVerifyingNoChangesFile(
+        correctionGoals: string,
+        previousThought: string,
+        previousPlan: string,
+        systemState?: string
+    ): string {
+        const promptPath = path.join(this.promptDir, '00_promptVerifyingNoChanges.txt');
+        
+        // プロンプトファイルが存在しない場合は通常のVerifyingプロンプトにフォールバック
+        if (!fs.existsSync(promptPath)) {
+            console.warn('⚠️  00_promptVerifyingNoChanges.txt not found, falling back to 00_promptVerifying.txt');
+            return this.readPromptVerifyingFile(
+                correctionGoals,
+                previousThought,
+                previousPlan,
+                '',  // No changes なので modified files は空
+                systemState
+            );
+        }
+        
+        const promptVerifyingNoChangesText = fs.readFileSync(promptPath, 'utf-8');
+
+        const context = {
+            correctionGoals: correctionGoals,
+            previousThought: previousThought,
+            previousPlan: previousPlan,
+            systemState: systemState || ''
+        };
+        const template = Handlebars.compile(promptVerifyingNoChangesText, { noEscape: true });
+        return template(context);
+    }
+
+    /**
+     * VERIFYING状態用の検証プロンプト（No Progress用）を読み込み
+     */
+    readPromptVerifyingNoProgressFile(
+        correctionGoals: string,
+        previousThought: string,
+        previousPlan: string,
+        requestedFiles: string,
+        systemState?: string
+    ): string {
+        const promptPath = path.join(this.promptDir, '00_promptVerifyingNoProgress.txt');
+        
+        // プロンプトファイルが存在しない場合は通常のVerifyingプロンプトにフォールバック
+        if (!fs.existsSync(promptPath)) {
+            console.warn('⚠️  00_promptVerifyingNoProgress.txt not found, falling back to 00_promptVerifying.txt');
+            return this.readPromptVerifyingFile(
+                correctionGoals,
+                previousThought,
+                previousPlan,
+                '',  // No Progress なので modified files は空
+                systemState
+            );
+        }
+        
+        const promptVerifyingNoProgressText = fs.readFileSync(promptPath, 'utf-8');
+
+        const context = {
+            correctionGoals: correctionGoals,
+            previousThought: previousThought,
+            previousPlan: previousPlan,
+            requestedFiles: requestedFiles,
+            systemState: systemState || ''
+        };
+        const template = Handlebars.compile(promptVerifyingNoProgressText, { noEscape: true });
         return template(context);
     }
 

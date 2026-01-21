@@ -1,0 +1,125 @@
+## Instructions ##
+
+You are in the VERIFYING state. The system detected that you **reached a no-progress state** during exploration. This means:
+- You did not produce a modification (`%_Modified_%`)
+- You did not explicitly conclude "no changes needed" (`%_No_Changes_Needed_%`)
+- The system exhausted exploration attempts without clear resolution
+
+This is **NOT the same as "no changes needed"**. This is a **fallback verification** to understand why progress stopped and whether the task is truly complete or requires different approach.
+
+---
+
+## System State ##
+{{systemState}}
+
+---
+
+## Context ##
+
+### Your Correction Goals ###
+{{correctionGoals}}
+
+### Your Exploration History ###
+{{previousThought}}
+
+### Your Last Attempted Plan ###
+{{previousPlan}}
+
+### Files You Requested ###
+{{requestedFiles}}
+
+---
+
+## Your Task: Diagnose No-Progress Situation ##
+
+You reached this state because the system detected **semantic stagnation**—repeated requests for the same information or inability to produce a concrete action. You must now **explain why** and determine the **actual status**.
+
+### Required Analysis Steps ###
+
+1. **Exploration Summary**: What did you investigate?
+2. **Blocking Factors**: What prevented you from producing a modification?
+3. **Conclusiveness**: Can you definitively state "no changes needed" or is this "unable to determine"?
+4. **Missing Information**: What information would have allowed you to proceed?
+
+### Response Format ###
+
+%_Thought_%
+[Reflect on why you could not produce a modification or explicit conclusion]
+
+%_Verification_Report_%
+🔍 No-Progress Diagnostic Report:
+
+1. Exploration Summary:
+   - Proto Changes Identified: [List what changes you found in .proto files]
+   - Code Areas Investigated: [List files/functions you examined]
+   - Approach Taken: [Describe your investigation strategy]
+
+2. Blocking Factors:
+   {{#if blockedByMissingInfo}}
+   - Missing Information: [What files/context you needed but couldn't access]
+   {{/if}}
+   {{#if blockedByComplexity}}
+   - Complexity: [What made the change too complex to handle]
+   {{/if}}
+   {{#if blockedByUncertainty}}
+   - Uncertainty: [What ambiguities prevented clear action]
+   {{/if}}
+   {{#if blockedByOther}}
+   - Other: [Describe the blocking factor]
+   {{/if}}
+
+3. Actual Status:
+   {{#if noChangesNeeded}}
+   ✅ **Definitive Conclusion: No Changes Needed**
+   Reason: [Explain why no changes are required despite no-progress state]
+   Evidence: [Provide evidence supporting this conclusion]
+   {{else if unableToDetermine}}
+   ⚠️  **Unable to Determine**
+   Reason: [Explain why you cannot reach a definitive conclusion]
+   Required: [What would be needed to make a determination]
+   {{else if needsDifferentApproach}}
+   🔄 **Requires Different Approach**
+   Issue: [Explain why current approach didn't work]
+   Suggestion: [Suggest alternative approach or tool]
+   {{/if}}
+
+4. Missing Information Analysis:
+   - Information Gaps: [List specific gaps that blocked progress]
+   - Would More Context Help?: [Yes/No and explain]
+   - Alternative Strategies: [What other approaches could work]
+
+5. Final Assessment:
+   Decision: [Choose ONE]
+   - [ ] No changes are needed (provide evidence above)
+   - [ ] Unable to determine without additional information
+   - [ ] Modification is needed but couldn't be produced (explain why)
+   
+   Confidence: [Low/Medium/High]
+   Recommendation: [What should happen next - accept as no-change, retry, manual review, etc.]
+
+---
+
+**CRITICAL INSTRUCTIONS**:
+- **Distinguish** between "no changes needed" and "unable to produce changes"
+- If you NOW realize changes ARE needed, output `%_Modified_%` with the patch
+- If you can definitively conclude no changes needed, state so clearly with evidence
+- If you're uncertain or blocked, acknowledge it honestly—this is valuable diagnostic information
+- The goal is **transparency** about why progress stopped, not forcing a conclusion
+- Your honesty helps improve the system and research validity
+
+---
+
+## Decision Points ##
+
+After your analysis, choose ONE of these paths:
+
+1. **If you NOW see what needs to be changed**:
+   Output `%_Modified_%` with the patch
+
+2. **If you're certain no changes are needed**:
+   State this clearly in verification report with evidence
+
+3. **If you're uncertain or blocked**:
+   Acknowledge this in verification report with detailed explanation
+   
+In ALL cases, output `%_Verification_Report_%` following the format above.

@@ -32,8 +32,8 @@ const TARGET_PR_CONFIG = {
     // 例: /app/dataset/filtered_fewChanged/repository_name/category_name/pr_title/
     // 以下はサンプルです。実際のデータに合わせて変更してください
     repositoryName: "boulder",           // リポジトリ名（例: "etcd-io_etcd"）
-    category: "issue",             // カテゴリ名（例: "breaking_changes"）
-    pullRequestTitle: "ratelimits-_Exempt_renewals_from_NewOrdersPerAccount_and_CertificatesPerDomain_limits",           // PRタイトル（例: "Pull_13207"）
+    category: "pullrequest",             // カテゴリ名（例: "breaking_changes"）
+    pullRequestTitle: "Add_certificateProfileName_to_RA-_SA-_and_Core_order_protos",           // PRタイトル（例: "Pull_13207"）
     
     // 出力ディレクトリ
     outputDir: "/app/output/single_pr"
@@ -50,6 +50,7 @@ const PROCESSING_OPTIONS = {
     enableGarbageCollection: true,
     enablePreVerification: false,
     forceTUI: true,  // TUI進捗表示を強制有効化
+    quietMode: false, // 詳細ログ出力を有効化（プロンプト/レスポンス確認用）
     
     // 単一PR実行モード用のフィルター
     targetPullRequest: {

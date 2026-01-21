@@ -69,6 +69,12 @@ type ExperimentMetadataType = {
     top_p?: number;
     [key: string]: any;
   };
+  // 完了理由の分離統計（Priority 3）
+  completion_category?: {
+    type: 'patch_generated' | 'llm_no_changes' | 'system_no_progress' | 'incomplete' | 'error';
+    has_no_changes_needed: boolean; // LLM明示判断
+    no_progress_fallback: boolean; // システム自動判定
+  };
 };
 
 export default class Logger {
@@ -144,7 +150,12 @@ export default class Logger {
       top_p?: number;
       [key: string]: any;
     },
-    summaryTokens?: number // 要約トークン数（オプション）
+    summaryTokens?: number, // 要約トークン数（オプション）
+    completionCategory?: { // 完了カテゴリ統計（Priority 3）
+      type: 'patch_generated' | 'llm_no_changes' | 'system_no_progress' | 'incomplete' | 'error';
+      has_no_changes_needed: boolean;
+      no_progress_fallback: boolean;
+    }
   ): void {
     this.experimentMetadata = {
       experiment_id: experimentId,
@@ -160,7 +171,8 @@ export default class Logger {
       },
       llm_provider: llmProvider,
       llm_model: llmModel,
-      ...(llmConfig && { llm_config: llmConfig })
+      ...(llmConfig && { llm_config: llmConfig }),
+      ...(completionCategory && { completion_category: completionCategory })
     };
   }
 

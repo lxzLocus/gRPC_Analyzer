@@ -42,6 +42,7 @@ export const ALLOWED_TAGS_BY_STATE: Record<AgentState, string[]> = {
   [AgentState.ANALYSIS]: [
     '%_Thought_%',
     '%_Plan_%',
+    '%_Correction_Goals_%',
     '%_Reply Required_%',
     '%_No_Changes_Needed_%'
   ],
@@ -131,7 +132,7 @@ export const STATE_TRANSITIONS: Record<AgentState, AgentState[]> = {
   [AgentState.ANALYSIS]: [
     AgentState.AWAITING_INFO,
     AgentState.MODIFYING,
-    AgentState.READY_TO_FINISH,
+    AgentState.VERIFYING,        // No changes needed時の検証フロー（必須）
     AgentState.ERROR
   ],
   [AgentState.AWAITING_INFO]: [
@@ -255,7 +256,7 @@ export function formatSystemState(state: AgentState, tagViolationNote?: string):
   // 状態遷移のフローと%%_Fin_%%の使用条件を追加
   result += `\n\nstate_transition_flow:\n`;
   result += `  ANALYSIS → MODIFYING → VERIFYING → READY_TO_FINISH → FINISHED\n`;
-  result += `  ANALYSIS → READY_TO_FINISH (via %_No_Changes_Needed_%)\n`;
+  result += `  ANALYSIS → VERIFYING (via %_No_Changes_Needed_%) → READY_TO_FINISH → FINISHED\n`;
   result += `\nIMPORTANT:\n`;
   result += `  - %%_Fin_%% tag can ONLY be used in READY_TO_FINISH state\n`;
   result += `  - To reach READY_TO_FINISH, you must EITHER:\n`;
@@ -265,7 +266,10 @@ export function formatSystemState(state: AgentState, tagViolationNote?: string):
   result += `       3. System will transition you to READY_TO_FINISH\n`;
   result += `    B. No changes needed path:\n`;
   result += `       1. Use %_No_Changes_Needed_% tag in ANALYSIS state\n`;
-  result += `       2. System will directly transition you to READY_TO_FINISH\n`;
+  result += `       2. System will transition you to VERIFYING for validation\n`;
+  result += `       3. Verify the conclusion using %_Verification_Report_%\n`;
+  result += `       4. System will transition you to READY_TO_FINISH\n`;
+  result += `  - VERIFYING state is MANDATORY for both paths\n`;
   result += `  - Current state: ${state} ${state === AgentState.READY_TO_FINISH ? '(%%_Fin_%% is now allowed)' : '(%%_Fin_%% is NOT allowed yet)'}`;
   
   // タグ違反通知を追加

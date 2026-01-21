@@ -59,12 +59,12 @@ Leverage this constraint to maximize your differential reasoning capabilities.
 ## Your Task & Response Format ##
 1.  **Analyze & Think**: Review the new information I've provided. Analyze how this impacts your original plan in a `%_Thought_%` section.
 2.  **Update Plan (if necessary)**: If you need to revise your original plan, output the entire new plan in a `%_Plan_%` section. If no changes to the plan are needed, omit this tag.
-3.  **Act**: Proceed with the next action according to your plan by using ONE of the following action tags: `%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`.
+3.  **Act**: Proceed with the next action according to your plan by using ONE of the following action tags: `%_Reply Required_%` or `%_Modified_%`.
     **Guideline for `%_Modified_%`**: Before generating a patch, you MUST re-verify that all variables, functions, and types you use are defined or imported within the provided code context. If a definition is not found, request additional files.
 
-// Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
+// Expected response tags: %_Thought_%, and then either %_Reply Required_% or %_Modified_%.
 
-**IMPORTANT RULE: After you output a %_Modified_% tag, the system will apply it and show you the result. You MUST wait for this verification step. Output %%_Fin_%% only in a subsequent turn after you have verified that all your Correction Goals have been met.**
+**IMPORTANT RULE: After you output a %_Modified_% tag, the system will apply it and show you the result. You MUST wait for this verification step. After modifications are confirmed, the system will automatically move to the verification phase.**
 
 **Phase 1: Analysis, Planning, and Initial Information Request**
 

@@ -59,7 +59,8 @@ class MessageHandler {
             modifiedDiff: '',
             commentText: '',
             has_fin_tag: false,
-            has_no_changes_needed: false,
+            has_no_changes_needed: false, // LLM明示判断
+            no_progress_fallback: false, // システム判定（初期値false）
             has_verification_report: false, // 検証レポートフラグ
             ready_for_final_check: false // 最終確認フラグ
         };

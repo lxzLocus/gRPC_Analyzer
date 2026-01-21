@@ -18,12 +18,19 @@ import type {
 } from './types.js';
 import Config from './Config.js';
 import OpenAIClient from './OpenAIClient.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 class ConversationSummarizer {
     private config: Config;
     private openAIClient: OpenAIClient;
     private historyManager: ConversationHistoryManager;
     private correctionGoalsCallback: () => string; // correctionGoalsを取得するコールバック
+    
+    // デバッグ用: 全会話履歴保存
+    private readonly DEBUG_SAVE_ALL_CONVERSATIONS: boolean;
+    private debugLogDir: string = '';
+    private summarizationCounter: number = 0;
     
     // 設定
     private readonly DEFAULT_SUMMARY_THRESHOLD = 30000; // デフォルトのトークン閾値
@@ -37,6 +44,16 @@ class ConversationSummarizer {
         this.config = config;
         this.openAIClient = openAIClient;
         this.correctionGoalsCallback = correctionGoalsCallback;
+        
+        // デバッグモード: 環境変数で制御
+        this.DEBUG_SAVE_ALL_CONVERSATIONS = process.env.DEBUG_SAVE_CONVERSATIONS === 'true' || process.env.DEBUG_SAVE_CONVERSATIONS === '1';
+        
+        if (this.DEBUG_SAVE_ALL_CONVERSATIONS) {
+            // デバッグログディレクトリを作成
+            this.debugLogDir = path.join(process.cwd(), 'logs', 'conversation_debug', new Date().toISOString().replace(/[:.]/g, '-'));
+            fs.mkdirSync(this.debugLogDir, { recursive: true });
+            console.log(`🔍 DEBUG: Conversation logging enabled at ${this.debugLogDir}`);
+        }
         
         this.historyManager = {
             messages: [],
@@ -244,6 +261,16 @@ class ConversationSummarizer {
             const beforeTokens = this.historyManager.totalTokens;
             const beforeMessages = this.historyManager.messages.length;
             
+            // デバッグ: 要約前の会話履歴を保存（エラーが起きてもメインフローは継続）
+            if (this.DEBUG_SAVE_ALL_CONVERSATIONS) {
+                this.summarizationCounter++;
+                try {
+                    await this.saveConversationSnapshot('before', triggerType, reason);
+                } catch (debugError) {
+                    console.warn('⚠️ DEBUG: Failed to save conversation snapshot (before), continuing...', debugError);
+                }
+            }
+            
             // 1. 要約用のプロンプトを生成
             const conversationHistory = this.formatConversationForSummary();
             const summarizePrompt = this.config.readPromptSummarizeFile(conversationHistory);
@@ -294,6 +321,16 @@ class ConversationSummarizer {
             
             // 要約履歴を記録
             this.recordSummarization(triggerType, reason, beforeTokens, beforeMessages);
+            
+            // デバッグ: 要約後の会話履歴を保存（エラーが起きてもメインフローは継続）
+            if (this.DEBUG_SAVE_ALL_CONVERSATIONS) {
+                try {
+                    await this.saveConversationSnapshot('after', triggerType, reason);
+                    await this.saveFileExtractionAnalysis();
+                } catch (debugError) {
+                    console.warn('⚠️ DEBUG: Failed to save conversation snapshot (after), continuing...', debugError);
+                }
+            }
             
             const reductionRate = Math.round((1 - this.historyManager.totalTokens / beforeTokens) * 100);
             
@@ -445,6 +482,101 @@ class ConversationSummarizer {
         this.MODEL_HARD_LIMIT = Math.floor(newThreshold * this.HARD_LIMIT_MULTIPLIER);
         console.log(`📊 Summary threshold adjusted to: ${newThreshold} tokens`);
         console.log(`📊 MODEL_HARD_LIMIT adjusted to: ${this.MODEL_HARD_LIMIT} tokens`);
+    }
+    
+    /**
+     * デバッグ: 会話履歴のスナップショットを保存
+     * エラーが発生してもメインフローに影響しないよう内部でキャッチ
+     */
+    private async saveConversationSnapshot(
+        stage: 'before' | 'after',
+        triggerType: string,
+        reason: string
+    ): Promise<void> {
+        if (!this.DEBUG_SAVE_ALL_CONVERSATIONS) return;
+        
+        try {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `${String(this.summarizationCounter).padStart(3, '0')}_${stage}_${triggerType}_${timestamp}.json`;
+            const filepath = path.join(this.debugLogDir, filename);
+            
+            const snapshot = {
+                stage,
+                triggerType,
+                reason,
+                timestamp: new Date().toISOString(),
+                messageCount: this.historyManager.messages.length,
+                totalTokens: this.historyManager.totalTokens,
+                messages: this.historyManager.messages.map((msg, idx) => ({
+                    index: idx,
+                    role: msg.role,
+                    contentLength: msg.content.length,
+                    contentPreview: msg.content.substring(0, 200) + (msg.content.length > 200 ? '...' : ''),
+                    hasFileContent: msg.content.includes('## File:') || msg.content.includes('📄 File:'),
+                    fileMatches: (msg.content.match(/## File: (.+)$/gm) || []).map(m => m.replace('## File: ', ''))
+                })),
+                fullMessages: this.historyManager.messages // 完全な内容も保存
+            };
+            
+            await fs.promises.writeFile(filepath, JSON.stringify(snapshot, null, 2), 'utf8');
+            console.log(`🔍 DEBUG: Saved conversation snapshot to ${filename}`);
+        } catch (error) {
+            // デバッグ機能のエラーはログのみ、メインフローには影響させない
+            console.warn('⚠️ DEBUG: Error in saveConversationSnapshot:', error instanceof Error ? error.message : String(error));
+        }
+    }
+    
+    /**
+     * デバッグ: ファイル抽出分析を保存
+     * エラーが発生してもメインフローに影響しないよう内部でキャッチ
+     */
+    private async saveFileExtractionAnalysis(): Promise<void> {
+        if (!this.DEBUG_SAVE_ALL_CONVERSATIONS) return;
+        
+        try {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `${String(this.summarizationCounter).padStart(3, '0')}_file_analysis_${timestamp}.json`;
+            const filepath = path.join(this.debugLogDir, filename);
+            
+            const extractedFiles = new Set<string>();
+            
+            for (const msg of this.historyManager.messages) {
+                if (msg.role === 'user') {
+                    // パターン1: "## File: path/to/file.go"
+                    const fileHeaderMatches = msg.content.matchAll(/^## File: (.+)$/gm);
+                    for (const match of fileHeaderMatches) {
+                        extractedFiles.add(match[1].trim());
+                    }
+                    
+                    // パターン2: "Reading file: path/to/file.go"
+                    const readingMatches = msg.content.matchAll(/Reading file: (.+)$/gm);
+                    for (const match of readingMatches) {
+                        extractedFiles.add(match[1].trim());
+                    }
+                    
+                    // パターン3: "📄 File: path/to/file.go"
+                    const emojiMatches = msg.content.matchAll(/📄 File: (.+)$/gm);
+                    for (const match of emojiMatches) {
+                        extractedFiles.add(match[1].trim());
+                    }
+                }
+            }
+            
+            const analysis = {
+                timestamp: new Date().toISOString(),
+                summarizationNumber: this.summarizationCounter,
+                extractedFilesCount: extractedFiles.size,
+                extractedFiles: Array.from(extractedFiles),
+                messageCount: this.historyManager.messages.length,
+                totalTokens: this.historyManager.totalTokens
+            };
+            
+            await fs.promises.writeFile(filepath, JSON.stringify(analysis, null, 2), 'utf8');
+            console.log(`🔍 DEBUG: Saved file extraction analysis (${extractedFiles.size} files found)`);
+        } catch (error) {
+            // デバッグ機能のエラーはログのみ、メインフローには影響させない
+            console.warn('⚠️ DEBUG: Error in saveFileExtractionAnalysis:', error instanceof Error ? error.message : String(error));
+        }
     }
 }
 

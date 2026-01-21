@@ -174,16 +174,16 @@ export class LLMRetryEnhancer {
             "1. Analyze the provided files and changes thoroughly",
             "2. Create a detailed plan in %_Plan_% section",
             "3. Provide actual code modifications in %_Modified_% section",
-            "4. End with %%_Fin_%% tag only after providing complete solution",
-            "5. Do not skip the implementation - provide working code",
+            "4. Complete the implementation with working code",
+            "5. Do not skip the implementation - provide full solution",
             "6. IMPORTANT: Ensure response fits within token limit - prioritize implementation over explanation",
-            "7. If you need to truncate, keep the %_Modified_% and %%_Fin_%% sections",
+            "7. If you need to truncate, keep the %_Modified_% section complete",
             "",
             "💡 GPT-5 SPECIFIC HINTS:",
             "- Use concise language while maintaining accuracy",
             "- Focus on the actual code changes needed",
-            "- Always end with the completion marker: %%_Fin_%%",
-            "- If response is long, prioritize: Analysis → Plan → Implementation → Completion marker",
+            "- After modifications, system will automatically move to verification phase",
+            "- If response is long, prioritize: Analysis → Plan → Implementation",
             "=========================="
         );
 

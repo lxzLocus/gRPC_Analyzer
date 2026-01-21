@@ -7,11 +7,83 @@ import fs from 'fs';
 import path from 'path';
 
 /**
+ * ファイル名からヒントを生成（静的ルールベース）
+ * Priority 4: DIRECTORY_LISTINGの情報密度向上
+ */
+function generateFileHint(fileName: string, dirPath: string): string {
+    const ext = path.extname(fileName);
+    const baseName = path.basename(fileName, ext);
+    
+    // テストファイル
+    if (fileName.includes('_test.') || fileName.includes('.test.') || fileName.endsWith('_test.go') || fileName.endsWith('_test.ts')) {
+        return 'test file (unlikely relevant)';
+    }
+    
+    // モックファイル
+    if (fileName.includes('mock') || baseName === 'mocks') {
+        return 'test mocks (unlikely relevant)';
+    }
+    
+    // protoファイル
+    if (ext === '.proto') {
+        return 'proto definition file';
+    }
+    
+    // 生成ファイル
+    if (fileName.endsWith('.pb.go') || fileName.endsWith('.pb.cc') || fileName.endsWith('.pb.h')) {
+        return 'auto-generated protobuf code (do not edit)';
+    }
+    
+    // gRPCハンドラー
+    if (fileName.includes('grpc') || fileName.includes('server') || fileName.includes('client')) {
+        return 'implements gRPC handlers or client';
+    }
+    
+    // ラッパー
+    if (fileName.includes('wrapper') || fileName.includes('adapter')) {
+        return 'wrapper or adapter layer';
+    }
+    
+    // インターフェース/型定義
+    if (fileName.includes('interface') || fileName.includes('type') || baseName === 'types') {
+        return 'interface or type definitions';
+    }
+    
+    // コアロジック（RAやSAなど）
+    if (baseName === 'ra' || baseName === 'sa' || baseName === 'ca' || baseName === 'wfe') {
+        return 'main service implementation';
+    }
+    
+    // 設定ファイル
+    if (fileName.includes('config') || ext === '.yaml' || ext === '.json' || ext === '.toml') {
+        return 'configuration file';
+    }
+    
+    // ドキュメント
+    if (ext === '.md' || ext === '.txt' || ext === '.rst') {
+        return 'documentation';
+    }
+    
+    // 実装ファイル（拡張子ベース）
+    if (ext === '.go') {
+        return 'Go implementation';
+    }
+    if (ext === '.ts' || ext === '.js') {
+        return 'TypeScript/JavaScript implementation';
+    }
+    if (ext === '.py') {
+        return 'Python implementation';
+    }
+    
+    return 'source file';
+}
+
+/**
  * 指定されたディレクトリの直下の構造を取得（1階層のみ）
  * @param targetPath - 対象のディレクトリパス
  * @param maxDepth - 使用されません（後方互換性のため残してあります）
  * @param excludePatterns - 除外するパターン
- * @returns ディレクトリ構造情報（機械可読形式）
+ * @returns ディレクトリ構造情報（機械可読形式、ヒント付き）
  */
 export default function getSurroundingDirectoryStructure(
     targetPath: string, 
@@ -27,9 +99,14 @@ export default function getSurroundingDirectoryStructure(
         'tmp',
         'temp'
     ]
-): { path: string; directories: string[]; files: string[]; note: string } {
+): { 
+    path: string; 
+    directories: string[]; 
+    files: Array<{name: string; hint: string}>; 
+    note: string 
+} {
     const directories: string[] = [];
-    const files: string[] = [];
+    const files: Array<{name: string; hint: string}> = [];
     
     try {
         const items = fs.readdirSync(targetPath, { withFileTypes: true });
@@ -39,18 +116,21 @@ export default function getSurroundingDirectoryStructure(
             !excludePatterns.some(pattern => item.name.includes(pattern))
         );
         
-        // ディレクトリとファイルを分離
+        // ディレクトリとファイルを分離（ファイルにはヒント付与）
         filteredItems.forEach((item) => {
             if (item.isDirectory()) {
                 directories.push(item.name);
             } else if (item.isFile()) {
-                files.push(item.name);
+                files.push({
+                    name: item.name,
+                    hint: generateFileHint(item.name, targetPath)
+                });
             }
         });
         
         // アルファベット順にソート
         directories.sort();
-        files.sort();
+        files.sort((a, b) => a.name.localeCompare(b.name));
         
     } catch (error) {
         console.warn(`Warning: Cannot read directory ${targetPath}:`, error);
@@ -66,7 +146,7 @@ export default function getSurroundingDirectoryStructure(
         path: targetPath,
         directories,
         files,
-        note: "One-level listing only. Use DIRECTORY_LISTING again for deeper levels."
+        note: "One-level listing with file hints. Use DIRECTORY_LISTING again for deeper levels."
     };
 }
 

@@ -69,7 +69,8 @@ export type LLMParsed = {
     modifiedDiff: string;
     commentText: string;
     has_fin_tag: boolean;
-    has_no_changes_needed: boolean; // 修正不要タグ
+    has_no_changes_needed: boolean; // LLM明示判断：修正不要タグ
+    no_progress_fallback: boolean; // システム判定：No Progress自動判定
     has_verification_report: boolean; // 検証レポートタグ
     ready_for_final_check?: boolean; // 最終確認フラグ
     // 新しいフィールド：LLMからの進行状況指示
@@ -89,7 +90,8 @@ export type ParsedContentLog = {
     modified_diff: string | null;
     commentText: string | null;
     has_fin_tag: boolean;
-    has_no_changes_needed: boolean;
+    has_no_changes_needed: boolean; // LLM明示判断
+    no_progress_fallback: boolean; // システム判定
 };
 
 export type Context = {
@@ -108,6 +110,11 @@ export type Context = {
     diff?: string;
     error?: Error | string;
     result?: unknown;
+    // Priority 1: 取得済み情報の追跡
+    retrievedSoFar?: {
+        fileContents: Set<string>;      // FILE_CONTENTで取得済みのファイルパス
+        directoryListings: Set<string>; // DIRECTORY_LISTINGで取得済みのディレクトリパス
+    };
 };
 
 export enum State {
@@ -119,7 +126,7 @@ export enum State {
     SystemAnalyzeRequest = 'SystemAnalyzeRequest',
     GetFileContent = 'GetFileContent',
     GetDirectoryListing = 'GetDirectoryListing',
-    ProcessRequiredInfos = 'ProcessRequiredInfos', // 新しいState
+    ProcessRequiredInfos = 'ProcessRequiredInfos',
     SendInfoToLLM = 'SendInfoToLLM',
     LLMReanalyze = 'LLMReanalyze',
     SystemParseDiff = 'SystemParseDiff',
@@ -127,8 +134,10 @@ export enum State {
     CheckApplyResult = 'CheckApplyResult',
     SendResultToLLM = 'SendResultToLLM',
     LLMNextStep = 'LLMNextStep',
-    SendFinalCheckToLLM = 'SendFinalCheckToLLM', // 最終確認状態
-    LLMFinalDecision = 'LLMFinalDecision', // 最終判断状態
+    SendVerificationPrompt = 'SendVerificationPrompt', // VERIFYING状態用プロンプト
+    LLMVerificationDecision = 'LLMVerificationDecision', // 検証後の判断
+    SendFinalCheckToLLM = 'SendFinalCheckToLLM', // レガシー：最終確認状態
+    LLMFinalDecision = 'LLMFinalDecision', // レガシー：最終判断状態
     SendErrorToLLM = 'SendErrorToLLM',
     LLMErrorReanalyze = 'LLMErrorReanalyze',
     End = 'End',

@@ -1,6 +1,6 @@
 import { AgentStateMachine, TagParser } from '../modules/AgentStateMachine.js';
 import { AgentStateRepository } from '../Repository/AgentStateRepository.js';
-import { AgentState } from '../types/AgentState.js';
+import { AgentState, ALLOWED_TAGS_BY_STATE } from '../types/AgentState.js';
 
 /**
  * エージェント状態管理Serviceの設定
@@ -38,8 +38,11 @@ export interface LLMResponseValidation {
   /** 推奨される次の状態 */
   suggestedNextState?: AgentState;
   
-  /** 再生成が必要か */
+  /** 再生成が必要か（corrective retryを実行すべきか） */
   requiresRegeneration: boolean;
+  
+  /** No Progress状態（LLMが意味的に行き詰まり、リトライしても改善しない） */
+  isNoProgress?: boolean;
 }
 
 /**
@@ -54,6 +57,11 @@ export class AgentStateService {
   private repository: AgentStateRepository;
   private config: AgentStateServiceConfig;
   private agentId: string;
+  
+  // No Progress 検出用
+  private lastState: AgentState | null = null;
+  private lastEffectiveTags: string[] = [];
+  private noProgressCount: number = 0;
 
   constructor(
     agentId: string,
@@ -154,17 +162,98 @@ export class AgentStateService {
   }
 
   /**
+   * タグ正規化: 現在の状態で有効なタグのみを抽出
+   * LLMが複数フェーズのタグを同時出力しても、現在の状態に適したもののみ採用
+   * @param detectedTags 検出されたすべてのタグ
+   * @returns 正規化されたタグと無視されたタグ
+   */
+  private normalizeTagsForState(detectedTags: string[]): { 
+    effectiveTags: string[], 
+    ignoredTags: string[] 
+  } {
+    const currentState = this.stateMachine.getCurrentState();
+    const allowedTags = ALLOWED_TAGS_BY_STATE[currentState];
+    
+    const effectiveTags: string[] = [];
+    const ignoredTags: string[] = [];
+    
+    // 状態ごとの優先度ルール
+    const priorityRules: Record<AgentState, string[]> = {
+      [AgentState.ANALYSIS]: [
+        '%_Reply Required_%',      // 最優先：情報要求
+        '%_No_Changes_Needed_%',   // 次：修正不要
+        '%_Plan_%',                // 次：計画完了
+        '%_Correction_Goals_%',    // 次：修正目標
+        '%_Thought_%'              // 最低：思考中
+        // '%_Modified_%' は ANALYSIS では無視（次フェーズのタグ）
+      ],
+      [AgentState.MODIFYING]: [
+        '%_Modified_%',            // 最優先：修正完了
+        '%_Reply Required_%'       // 次：追加情報要求
+      ],
+      [AgentState.VERIFYING]: [
+        '%_Verification_Report_%', // 最優先：検証完了
+        '%_Modified_%',            // 次：追加修正
+        '%_Thought_%'              // 最低：検証思考中
+      ],
+      [AgentState.AWAITING_INFO]: [
+        '%_Thought_%'              // 内部状態：即座にANALYSISへ戻る
+      ],
+      [AgentState.READY_TO_FINISH]: [],
+      [AgentState.FINISHED]: [],
+      [AgentState.ERROR]: []
+    };
+    
+    const priorities = priorityRules[currentState] || [];
+    
+    // 優先度順にタグを処理
+    for (const priorityTag of priorities) {
+      if (detectedTags.includes(priorityTag) && allowedTags.includes(priorityTag)) {
+        effectiveTags.push(priorityTag);
+      }
+    }
+    
+    // 残りの許可タグを追加（優先度リストにないが許可されているもの）
+    for (const tag of detectedTags) {
+      if (allowedTags.includes(tag) && !effectiveTags.includes(tag)) {
+        effectiveTags.push(tag);
+      }
+    }
+    
+    // 無視されたタグ（許可されていないが、エラーにしない）
+    for (const tag of detectedTags) {
+      if (!effectiveTags.includes(tag)) {
+        ignoredTags.push(tag);
+      }
+    }
+    
+    // 無視されたタグがあれば警告ログ
+    if (ignoredTags.length > 0) {
+      console.log(`⚠️  FSM: Ignoring out-of-phase tags in ${currentState}: [${ignoredTags.join(', ')}]`);
+      console.log(`✅ FSM: Using effective tags: [${effectiveTags.join(', ')}]`);
+    }
+    
+    return { effectiveTags, ignoredTags };
+  }
+
+  /**
    * LLMレスポンスを検証
    * @param responseText LLMレスポンステキスト
    * @returns 検証結果
    */
   validateLLMResponse(responseText: string): LLMResponseValidation {
     const detectedTags = TagParser.detectTags(responseText);
-    const validation = this.stateMachine.validateTags(detectedTags);
+    const currentState = this.stateMachine.getCurrentState();
+    
+    // タグ正規化: 現在の状態で有効なタグのみを抽出
+    const { effectiveTags, ignoredTags } = this.normalizeTagsForState(detectedTags);
+    
+    // 有効なタグのみで検証
+    const validation = this.stateMachine.validateTags(effectiveTags);
     
     const result: LLMResponseValidation = {
       valid: validation.isValid,
-      detectedTags,
+      detectedTags: effectiveTags,  // 正規化されたタグのみを返す
       allowedTags: validation.allowedTags,
       invalidTags: validation.invalidTags,
       requiresRegeneration: !validation.isValid && this.config.autoRetryOnInvalidTags === true
@@ -172,8 +261,42 @@ export class AgentStateService {
 
     // 検出されたタグに基づいて推奨される次の状態を決定
     if (validation.isValid) {
-      result.suggestedNextState = this.inferNextState(detectedTags);
+      result.suggestedNextState = this.inferNextState(effectiveTags);
     }
+    
+    // 有効なタグがない場合（すべて無視された）
+    if (effectiveTags.length === 0 && ignoredTags.length > 0) {
+      console.warn(`⚠️  FSM: No effective tags after normalization (all tags were out-of-phase)`);
+      result.valid = false;
+      result.requiresRegeneration = false; // リトライではなく、No Progress扱い
+    }
+    
+    // No Progress 検出: 状態もタグも変わっていない
+    const stateUnchanged = (this.lastState === currentState);
+    const tagsUnchanged = (
+      effectiveTags.length === this.lastEffectiveTags.length &&
+      effectiveTags.every(tag => this.lastEffectiveTags.includes(tag))
+    );
+    
+    if (stateUnchanged && tagsUnchanged && effectiveTags.length > 0) {
+      this.noProgressCount++;
+      console.warn(`⚠️  FSM: No progress detected (${this.noProgressCount}/2) - same state and tags`);
+      
+      if (this.noProgressCount >= 2) {
+        console.error(`❌ FSM: No progress threshold reached - LLM is semantically stuck`);
+        result.valid = false;
+        result.requiresRegeneration = false; // リトライは無意味
+        result.isNoProgress = true;          // No Progress専用フラグ
+        // suggestedNextStateは設定しない（llmFlowControllerでハンドリング）
+      }
+    } else {
+      // 進捗があればカウンターリセット
+      this.noProgressCount = 0;
+    }
+    
+    // 次回の比較のために記録
+    this.lastState = currentState;
+    this.lastEffectiveTags = [...effectiveTags];
 
     if (this.config.debug) {
       console.log(`[AgentStateService] Validation result:`, result);
@@ -186,36 +309,49 @@ export class AgentStateService {
    * 検出されたタグから次の状態を推測
    * @param tags 検出されたタグ
    * @returns 推奨される次の状態
+   * 
+   * 優先順序（normalizeTagsForStateと一致）：
+   * 1. %_Reply Required_%
+   * 2. %_No_Changes_Needed_%
+   * 3. %_Plan_%
+   * 4. %_Modified_%
+   * 5. %_Verification_Report_%
    */
   private inferNextState(tags: string[]): AgentState | undefined {
     const currentState = this.stateMachine.getCurrentState();
 
-    // タグの種類に基づいて次の状態を推測
-    
-    // %%_Fin_%%タグは廃止：LLMに終了判定させない
-    if (tags.includes('%%_Fin_%%')) {
-      console.warn(`⚠️  Deprecated Fin tag detected - FSM should handle completion automatically`);
-      return undefined;
+    // タグの種類に基づいて次の状態を推測（優先度順）
+
+    // 1️⃣ 最優先: %_Reply Required_%タグの検出
+    if (tags.includes('%_Reply Required_%')) {
+      if (currentState === AgentState.ANALYSIS) {
+        return AgentState.AWAITING_INFO;
+      }
+      if (currentState === AgentState.MODIFYING) {
+        return AgentState.AWAITING_INFO;
+      }
     }
 
-    // %_No_Changes_Needed_%タグはANALYSIS状態から直接完了へ
+    // 2️⃣ %_No_Changes_Needed_%タグ（ANALYSIS状態からVERIFYINGへ）
     if (tags.includes('%_No_Changes_Needed_%')) {
       if (currentState === AgentState.ANALYSIS) {
-        console.log('✅ No changes needed, transitioning directly to READY_TO_FINISH');
-        return AgentState.READY_TO_FINISH;
+        console.log('✅ No changes needed detected, transitioning to VERIFYING for validation');
+        return AgentState.VERIFYING;
       }
       console.warn(`⚠️  No_Changes_Needed tag detected in invalid state: ${currentState}`);
       return undefined;
     }
 
-    // %_Ready_For_Final_Check_%タグは廃止：内部状態として扱う
-    if (tags.includes('%_Ready_For_Final_Check_%')) {
-      console.warn(`⚠️  Deprecated Ready_For_Final_Check tag detected`);
-      return undefined;
+    // 3️⃣ %_Plan_%タグ（ANALYSIS状態でPlan完了時はMODIFYINGへ）
+    if (tags.includes('%_Plan_%')) {
+      if (currentState === AgentState.ANALYSIS) {
+        return AgentState.MODIFYING;
+      }
+      return AgentState.AWAITING_INFO;
     }
 
+    // 4️⃣ %_Modified_%タグ（MODIFYING状態からVERIFYINGへ）
     if (tags.includes('%_Modified_%')) {
-      // Modified DiffはMODIFYING状態からのみVERIFYINGへ遷移可能
       if (currentState === AgentState.MODIFYING) {
         console.log('✅ Modified diff detected in MODIFYING state, transitioning to VERIFYING');
         return AgentState.VERIFYING;
@@ -224,30 +360,16 @@ export class AgentStateService {
       return undefined;
     }
 
+    // 5️⃣ %_Verification_Report_%タグ（検証完了）
     if (tags.includes('%_Verification_Report_%')) {
-      // 検証完了：FSMが自動的にFINISHEDへ遷移
       console.log('✅ Verification complete, FSM will transition to FINISHED');
-      return AgentState.READY_TO_FINISH; // 内部的にREADY_TO_FINISHを経由してFINISHEDへ
+      return AgentState.READY_TO_FINISH;
     }
 
-    // %_Reply Required_%タグの検出
-    if (tags.includes('%_Reply Required_%')) {
-      // ANALYSIS状態からAWAITING_INFOへ
-      if (currentState === AgentState.ANALYSIS) {
-        return AgentState.AWAITING_INFO;
-      }
-      // MODIFYING状態からAWAITING_INFOへ
-      if (currentState === AgentState.MODIFYING) {
-        return AgentState.AWAITING_INFO;
-      }
-    }
-
-    if (tags.includes('%_Plan_%')) {
-      // ANALYSIS状態でPlan完了時はMODIFYINGへ
-      if (currentState === AgentState.ANALYSIS) {
-        return AgentState.MODIFYING;
-      }
-      return AgentState.AWAITING_INFO;
+    // 廃止タグの警告
+    if (tags.includes('%_Ready_For_Final_Check_%')) {
+      console.warn(`⚠️  Deprecated Ready_For_Final_Check tag detected`);
+      return undefined;
     }
 
     return undefined;

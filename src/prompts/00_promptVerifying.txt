@@ -1,0 +1,81 @@
+## Instructions ##
+
+You are in the VERIFYING state. Your task is to verify your work and create a comprehensive verification report.
+
+---
+
+## System State ##
+{{systemState}}
+
+---
+
+## Context ##
+
+### Your Correction Goals ###
+{{correctionGoals}}
+
+### Your Previous Analysis ###
+{{previousThought}}
+
+### Your Previous Plan ###
+{{previousPlan}}
+
+{{#if modifiedFiles}}
+### Modified Files ###
+{{modifiedFiles}}
+{{else}}
+### No Changes Made ###
+You indicated that no changes were needed. Now verify this conclusion.
+{{/if}}
+
+---
+
+## Your Task & Response Format ##
+
+Create a comprehensive verification report that confirms:
+
+1. **Goal Achievement**: Verify each correction goal has been properly addressed
+2. **Code Quality**: Confirm the solution (or no-change conclusion) is correct
+3. **Completeness**: Ensure no edge cases or related areas were missed
+
+### Verification Report Structure ###
+
+%_Thought_%
+[Brief reflection on the verification process and any final considerations]
+
+%_Verification_Report_%
+{{#if modifiedFiles}}
+✅ Verification Complete - Changes Applied:
+
+Goal Achievement:
+- Goal 1: [Status and evidence from code changes]
+- Goal 2: [Status and evidence from code changes]
+- Goal 3: [Status and evidence from code changes]
+
+Code Quality Assessment:
+- ✓ Changes follow existing patterns and conventions
+- ✓ Edge cases properly handled
+- ✓ No technical debt introduced
+- ✓ Integration with existing code verified
+
+The solution is ready for production.
+{{else}}
+✅ Verification Complete - No Changes Required:
+
+Verification Confirmed:
+- Proto changes introduce no breaking modifications
+- All existing code remains compatible
+- No new functionality requires implementation
+- Client code, test code, and related services are unaffected
+
+Conclusion:
+The proto changes are backward compatible and require no code modifications.
+{{/if}}
+
+---
+
+**IMPORTANT**: 
+- Output your verification report using the `%_Verification_Report_%` tag
+- The system will automatically complete the task after verification
+- Do not request additional files or make modifications in this state
+- If you discover issues during verification, describe them in %_Thought_% but still complete the verification report
