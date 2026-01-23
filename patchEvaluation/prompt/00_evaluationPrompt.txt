@@ -9,6 +9,11 @@ You MUST evaluate the agent's output along the following four dimensions. These 
 ### 1. Accuracy (Result Equivalence) ###
 - Measures whether the agent's output matches the final human-written patch.
 - This dimension MUST be evaluated ONLY by comparing the agent output to the Ground Truth Patch.
+- **CRITICAL: Evaluate ONLY handwritten code. You MUST exclude auto-generated files from comparison.**
+  - **Auto-generated files to EXCLUDE:** `.pb.go`, `.proto`, protobuf-generated files, any file with auto-generation headers/comments
+  - **Rationale:** Auto-generated files are produced by tools (e.g., `protoc`) and are not part of the agent's repair task
+  - **If the Ground Truth Patch contains changes to auto-generated files, IGNORE those changes when scoring Accuracy**
+  - **Focus ONLY on handwritten business logic, service implementations, and manually maintained code**
 - A decision to make no changes MUST be scored as 0.0.
 - **CRITICAL: You MUST ALWAYS provide an 'Accuracy Score' (0.0 to 1.0) based on the following rubric.**
 

@@ -36,9 +36,9 @@ export class APRLogService {
                     }
                     throw readdirError;
                 }
-                
+
                 result.logFiles = files.filter(file => file.endsWith('.log'));
-                
+
                 if (result.logFiles.length > 0) {
                     result.exists = true;
                     result.accessible = true;
@@ -67,7 +67,7 @@ export class APRLogService {
     async parseAPRLog(aprLogPath) {
         try {
             const aprLogData = await this.aprLogParser.parseLogEntry(aprLogPath);
-            
+
             if (!aprLogData || !aprLogData.turns || aprLogData.turns.length === 0) {
                 return {
                     success: false,
@@ -78,7 +78,7 @@ export class APRLogService {
 
             // 差分分析の実行
             const diffAnalysis = this.aprLogParser.analyzeDifferences(aprLogData);
-            
+
             return {
                 success: true,
                 error: null,
@@ -104,7 +104,7 @@ export class APRLogService {
      */
     extractFinalModifications(aprLogData) {
         const finalMods = this.aprLogParser.extractFinalModifications(aprLogData);
-        
+
         if (!finalMods.lastModification) {
             return {
                 hasModification: false,
@@ -115,7 +115,7 @@ export class APRLogService {
 
         // diffからファイルパスリストを抽出
         const aprDiffFiles = this.extractFilePathsFromDiff(finalMods.lastModification.diff);
-        
+
         const finalModInfo = {
             turn: finalMods.lastModification.turn,
             timestamp: finalMods.lastModification.timestamp,
@@ -140,7 +140,7 @@ export class APRLogService {
     extractFilePathsFromDiff(diffText) {
         const filePaths = [];
         const diffLines = diffText.split('\n');
-        
+
         for (const line of diffLines) {
             // APRの独自形式: "*** Update File: path/to/file.ext"
             const aprMatch = line.match(/^\*\*\* Update File: (.+)$/);
@@ -148,51 +148,51 @@ export class APRLogService {
                 filePaths.push(aprMatch[1]);
                 continue;
             }
-            
+
             // APRの作成形式: "*** Create File: path/to/file.ext"
             const aprCreateMatch = line.match(/^\*\*\* Create File: (.+)$/);
             if (aprCreateMatch) {
                 filePaths.push(aprCreateMatch[1]);
                 continue;
             }
-            
+
             // APRの削除形式: "*** Delete File: path/to/file.ext"
             const aprDeleteMatch = line.match(/^\*\*\* Delete File: (.+)$/);
             if (aprDeleteMatch) {
                 filePaths.push(aprDeleteMatch[1]);
                 continue;
             }
-            
+
             // 標準diff形式: "diff --git a/src/foo.js b/src/foo.js"
             const gitMatch = line.match(/^diff --git a\/(.+?) b\//);
             if (gitMatch) {
                 filePaths.push(gitMatch[1]);
                 continue;
             }
-            
+
             // 標準diff形式: "--- a/path" や "+++ b/path"
             const oldFileMatch = line.match(/^--- a\/(.+)$/);
             if (oldFileMatch) {
                 filePaths.push(oldFileMatch[1]);
                 continue;
             }
-            
+
             const newFileMatch = line.match(/^\+\+\+ b\/(.+)$/);
             if (newFileMatch) {
                 filePaths.push(newFileMatch[1]);
                 continue;
             }
         }
-        
+
         // 重複除去
         const uniquePaths = [...new Set(filePaths)];
-        
+
         // デバッグ情報
         console.log(`🔍 extractFilePathsFromDiff結果:`);
         console.log(`   - 元diff長: ${diffText.length}文字`);
         console.log(`   - 抽出ファイル数: ${uniquePaths.length}`);
         console.log(`   - ファイル一覧: ${JSON.stringify(uniquePaths)}`);
-        
+
         return uniquePaths;
     }
 
@@ -211,29 +211,29 @@ export class APRLogService {
         try {
             const { execSync } = await import('child_process');
             let combinedDiff = '';
-            
+
             for (const filePath of targetFiles) {
                 try {
                     const premergeFile = path.join(premergePath, filePath);
                     const mergeFile = path.join(mergePath, filePath);
-                    
+
                     // ファイルの存在確認
                     const [premergeExists, mergeExists] = await Promise.allSettled([
                         fs.access(premergeFile),
                         fs.access(mergeFile)
                     ]);
-                    
+
                     if (premergeExists.status === 'fulfilled' && mergeExists.status === 'fulfilled') {
                         // 両方のファイルが存在する場合、diffを作成
                         const diffCommand = `diff -u "${premergeFile}" "${mergeFile}" || true`;
                         const diffOutput = execSync(diffCommand, { encoding: 'utf8', stdio: 'pipe' });
-                        
+
                         if (diffOutput.trim()) {
                             // diffヘッダーを統一フォーマットに変更
                             const formattedDiff = diffOutput
                                 .replace(/^--- (.+)$/gm, `--- a/${filePath}`)
                                 .replace(/^\+\+\+ (.+)$/gm, `+++ b/${filePath}`);
-                            
+
                             combinedDiff += `diff --git a/${filePath} b/${filePath}\n${formattedDiff}\n`;
                         }
                     } else if (premergeExists.status === 'rejected' && mergeExists.status === 'fulfilled') {
@@ -268,9 +268,9 @@ export class APRLogService {
                     // 個別ファイルのエラーは継続
                 }
             }
-            
+
             return combinedDiff.trim() || null;
-            
+
         } catch (error) {
             console.error(`  Ground Truth Diff作成エラー:`, error.message);
             return null;

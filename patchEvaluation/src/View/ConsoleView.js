@@ -1,6 +1,15 @@
 /**
  * コンソールへの表示処理を担当するViewクラス
  */
+import { 
+    getStateDisplayName, 
+    getStateEmoji, 
+    getStateDescription,
+    isTerminalState,
+    isSuccessfulCompletion,
+    isErrorCompletion
+} from '../types/AgentStates.js';
+
 export class ConsoleView {
     /**
      * 分析開始メッセージの表示
@@ -379,5 +388,56 @@ export class ConsoleView {
     showAnalysisError(error) {
         console.error("❌ マッチング分析中にエラーが発生:", error);
         console.error("スタックトレース:", error.stack);
+    }
+
+    /**
+     * FSM状態情報の表示
+     * @param {string} status - 状態値
+     * @param {boolean} showDescription - 説明を表示するか（デフォルト: false）
+     */
+    showAgentState(status, showDescription = false) {
+        const emoji = getStateEmoji(status);
+        const displayName = getStateDisplayName(status);
+        
+        console.log(`  ${emoji} 状態: ${displayName} (${status})`);
+        
+        if (showDescription) {
+            const description = getStateDescription(status);
+            console.log(`     → ${description}`);
+        }
+        
+        // 終了状態の場合は追加情報を表示
+        if (isTerminalState(status)) {
+            if (isSuccessfulCompletion(status)) {
+                console.log(`     ✅ 正常に処理が完了しました`);
+            } else if (isErrorCompletion(status)) {
+                console.log(`     ⚠️ エラーが発生して処理が中断しました`);
+            }
+        }
+    }
+
+    /**
+     * 対話データの状態情報を表示
+     * @param {Object} dialogue - 対話データ
+     */
+    showDialogueStatus(dialogue) {
+        if (!dialogue) return;
+        
+        console.log(`  📊 対話ステータス:`);
+        
+        if (dialogue.statusEmoji && dialogue.statusDisplayName) {
+            console.log(`    ${dialogue.statusEmoji} ${dialogue.statusDisplayName} (${dialogue.status})`);
+        } else {
+            this.showAgentState(dialogue.status);
+        }
+        
+        if (dialogue.isTerminalState !== undefined) {
+            console.log(`    終了状態: ${dialogue.isTerminalState ? 'はい' : 'いいえ'}`);
+        }
+        
+        // 正規化された場合は元の値も表示
+        if (dialogue.rawStatus && dialogue.rawStatus !== dialogue.status) {
+            console.log(`    ⚠️ 元の値: ${dialogue.rawStatus} → 正規化後: ${dialogue.status}`);
+        }
     }
 }

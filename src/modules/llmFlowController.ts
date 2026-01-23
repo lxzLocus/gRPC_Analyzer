@@ -11,7 +11,7 @@ import { config } from 'dotenv';
 config({ path: path.join(process.cwd(), '.env') });
 
 import RestoreDiff from './RestoreDiff.js';
-import Logger from './Logger.js';
+import Logger, { APRStatus } from './Logger.js';
 import Config from './Config.js';
 import MessageHandler from './MessageHandler.js';
 import FileManager from './FileManager.js';
@@ -567,7 +567,9 @@ class LLMFlowController {
             
             // FSM: LLM応答を検証して状態遷移
             try {
-                const validationResult = this.agentStateService.validateLLMResponse(llm_content);
+                const validationResult = this.agentStateService.validateLLMResponse(llm_content, {
+                    modifiedLines: this.context.llmParsed.modifiedLines
+                });
                 if (!validationResult.valid) {
                     console.warn('⚠️ FSM: Invalid tags detected:', validationResult.invalidTags);
                     console.log('✅ FSM: Allowed tags:', validationResult.allowedTags);
@@ -619,7 +621,9 @@ class LLMFlowController {
             
             // FSM: 再解析時の応答検証（AWAITING_INFOは内部専用なのでここではANALYSIS状態）
             try {
-                const validationResult = this.agentStateService.validateLLMResponse(content);
+                const validationResult = this.agentStateService.validateLLMResponse(content, {
+                    modifiedLines: this.context.llmParsed.modifiedLines
+                });
                 const currentState = this.agentStateService.getCurrentState();
                 
                 // AWAITING_INFOの場合は既にANALYSISに戻っているはず
@@ -669,7 +673,9 @@ class LLMFlowController {
         const content = this.context.llmResponse?.choices?.[0]?.message?.content || '';
         
         // FSM: LLM応答を検証
-        const validationResult = this.agentStateService.validateLLMResponse(content);
+        const validationResult = this.agentStateService.validateLLMResponse(content, {
+            modifiedLines: parsed.modifiedLines
+        });
         const currentFSMState = this.agentStateService.getCurrentState();
         
         console.log(`🤖 FSM (Decision): Current state = ${currentFSMState}`);
@@ -1052,9 +1058,6 @@ class LLMFlowController {
             console.log('   Reason: LLM successfully generated verification, indicating progress was made');
             // no_progress_fallbackはクリア（成功の証拠がある）
             this.context.llmParsed.no_progress_fallback = false;
-            
-            // パッチファイル生成：LLM応答からパッチ内容を抽出して保存
-            await this.extractAndSavePatch(content);
         } else if (previousHasNoChangesNeeded || previousNoProgressFallback) {
             // Verification Reportがない場合のみ、フラグを復元（VERIFYING状態の応答では再度タグが出ないため）
             console.log('🔄 Preserving completion flags from previous state:');
@@ -1066,7 +1069,9 @@ class LLMFlowController {
         }
         
         // FSM検証
-        const validationResult = this.agentStateService.validateLLMResponse(content);
+        const validationResult = this.agentStateService.validateLLMResponse(content, {
+            modifiedLines: this.context.llmParsed.modifiedLines
+        });
         const currentFSMState = this.agentStateService.getCurrentState();
         
         console.log(`🤖 FSM (VerificationDecision): Current state = ${currentFSMState}`);
@@ -1142,7 +1147,9 @@ class LLMFlowController {
         this.context.llmParsed = this.messageHandler.analyzeMessages(content);
         
         // FSM検証
-        const validationResult = this.agentStateService.validateLLMResponse(content);
+        const validationResult = this.agentStateService.validateLLMResponse(content, {
+            modifiedLines: this.context.llmParsed.modifiedLines
+        });
         const currentFSMState = this.agentStateService.getCurrentState();
         
         console.log(`🤖 FSM (FinalDecision): Current state = ${currentFSMState}`);
@@ -1236,7 +1243,9 @@ class LLMFlowController {
         this.context.llmParsed = this.messageHandler.analyzeMessages(content);
         
         // FSM検証
-        const validationResult = this.agentStateService.validateLLMResponse(content);
+        const validationResult = this.agentStateService.validateLLMResponse(content, {
+            modifiedLines: this.context.llmParsed.modifiedLines
+        });
         const currentFSMState = this.agentStateService.getCurrentState();
         
         console.log(`🤖 FSM (ErrorReanalyze): Current state = ${currentFSMState}`);
@@ -2089,8 +2098,9 @@ Please respond again using only the allowed tags.`;
 
     /**
      * LLM応答からパッチ内容を抽出してfinal_patch.diffとして保存
+     * @returns パッチ抽出に成功した場合true、失敗した場合false
      */
-    private async extractAndSavePatch(llmContent: string): Promise<void> {
+    private async extractAndSavePatch(llmContent: string): Promise<boolean> {
         try {
             // パッチブロックを抽出（diff形式を探す）
             const patchPatterns = [
@@ -2116,7 +2126,7 @@ Please respond again using only the allowed tags.`;
 
             if (extractedPatches.length === 0) {
                 console.log('⚠️  No patch content found in LLM response');
-                return;
+                return false;
             }
 
             // 複数のパッチを結合
@@ -2135,9 +2145,10 @@ Please respond again using only the allowed tags.`;
             console.log(`   📊 Size: ${patchLines} lines, ${patchSize} bytes`);
             console.log(`   📦 Extracted ${extractedPatches.length} patch block(s)`);
             
+            return true;
         } catch (error) {
             console.error(`❌ Failed to extract and save patch:`, error);
-            // エラーでも処理は継続（パッチ保存は補助機能）
+            return false;
         }
     }
 
@@ -2151,7 +2162,7 @@ Please respond again using only the allowed tags.`;
         const experimentId = this.generateExperimentId();
         
         // FSM状態に基づく完了判定（優先）
-        let status: string;
+        let status: typeof APRStatus[keyof typeof APRStatus];
         const currentFSMState = this.agentStateService.getCurrentState();
         
         // 完了カテゴリの判定（Priority 3）
@@ -2161,53 +2172,62 @@ Please respond again using only the allowed tags.`;
         
         if (currentFSMState === AgentState.FINISHED) {
             // FSMがFINISHED状態に到達した場合、理由を判定
-            // 優先度: 具体的な成果物 > 明示的判断 > システム推測
+            // 優先度: LLMの明示的判断 > パッチ生成の証拠 > システム推測
             
-            if (this.context.llmParsed?.has_verification_report) {
-                // 優先度1: Verification Report = パッチ生成の証拠（最も具体的）
-                status = 'Completed (Verified)';
-                completionType = 'patch_generated';
-                console.log(`✅ Status: 'Completed (Verified)' via FSM verification flow (Priority 1)`);
+            if (this.context.llmParsed?.has_no_changes_needed) {
+                // 優先度1: No Changes Needed = LLMの明示的判断（最優先）
+                status = APRStatus.NO_CHANGES_NEEDED;
+                completionType = 'llm_no_changes';
+                console.log(`✅ Status: '${APRStatus.NO_CHANGES_NEEDED}' via FSM + explicit tag (Priority 1)`);
+            } else if (this.context.llmParsed?.has_verification_report) {
+                // 優先度2: Verification Report = パッチ生成の可能性
+                // パッチファイル生成を試行：最終的な応答からパッチを抽出
+                const lastLLMContent = this.context.llmResponse?.choices?.[0]?.message?.content || '';
+                const patchExtracted = await this.extractAndSavePatch(lastLLMContent);
+                
+                if (patchExtracted) {
+                    // パッチが実際に抽出できた場合のみpatch_generated
+                    status = APRStatus.FINISHED;
+                    completionType = 'patch_generated';
+                    console.log(`✅ Status: '${APRStatus.FINISHED}' - patch extracted successfully (Priority 2a)`);
+                } else {
+                    // Verification Reportはあるがパッチコードがない場合
+                    // -> LLMがNo Changesと判断した可能性が高い
+                    status = APRStatus.NO_CHANGES_NEEDED;
+                    completionType = 'llm_no_changes';
+                    console.log(`✅ Status: '${APRStatus.NO_CHANGES_NEEDED}' - verification report without patch (Priority 2b)`);
+                }
                 
                 // 成功の証拠があるため、no_progress_fallbackフラグをクリア
                 if (this.context.llmParsed.no_progress_fallback) {
-                    console.log(`   🔄 Clearing no_progress_fallback flag due to verification success`);
+                    console.log(`   🔄 Clearing no_progress_fallback flag due to verification flow`);
                     this.context.llmParsed.no_progress_fallback = false;
                 }
-                
-                // パッチファイル生成：最終的な応答からパッチを抽出
-                const lastLLMContent = this.context.llmResponse?.choices?.[0]?.message?.content || '';
-                await this.extractAndSavePatch(lastLLMContent);
-            } else if (this.context.llmParsed?.has_no_changes_needed) {
-                // 優先度2: No Changes Needed = LLMの明示的判断
-                status = 'Completed (No Changes Needed)';
-                completionType = 'llm_no_changes';
-                console.log(`✅ Status: 'Completed (No Changes Needed)' via FSM + explicit tag (Priority 2)`);
             } else if (this.context.llmParsed?.no_progress_fallback) {
                 // 優先度3: No Progress Fallback = システムの推測（フォールバック）
-                status = 'Completed (No Progress)';
+                status = APRStatus.INCOMPLETE;
                 completionType = 'system_no_progress';
-                console.log(`✅ Status: 'Completed (No Progress)' via FSM + system fallback (Priority 3)`);
+                console.log(`✅ Status: '${APRStatus.INCOMPLETE}' via FSM + system fallback (Priority 3)`);
             } else {
                 // フォールバック: FSMがFINISHEDだが理由不明
-                status = 'Completed (FSM)';
+                status = APRStatus.FINISHED;
                 completionType = 'patch_generated'; // デフォルトはパッチ生成とみなす
-                console.log(`✅ Status: 'Completed (FSM)' - reached FINISHED state (default to patch_generated)`);
+                console.log(`✅ Status: '${APRStatus.FINISHED}' - reached FINISHED state (default to patch_generated)`);
             }
         } else {
             // FSMがFINISHEDでない場合の従来ロジック（後方互換性）
-            status = this.context.llmParsed?.has_fin_tag ? 'Completed (%%_Fin_%%)' : 'Incomplete';
+            status = this.context.llmParsed?.has_fin_tag ? APRStatus.FINISHED : APRStatus.INCOMPLETE;
             
             // 優先1: %_No_Changes_Needed_%タグによる完了
             if (this.context.llmParsed?.has_no_changes_needed) {
-                status = 'Completed (No Changes Needed)';
+                status = APRStatus.NO_CHANGES_NEEDED;
                 completionType = 'llm_no_changes'; // LLM明示判断
-                console.log(`✅ Status: 'Completed (No Changes Needed)' via explicit tag (legacy path)`);
+                console.log(`✅ Status: '${APRStatus.NO_CHANGES_NEEDED}' via explicit tag (legacy path)`);
             }
         }
         
         // 後処理による完了判定ロジック（安全策・フォールバック）- FSMが正しく動作すればこのパスは通らない
-        if (currentFSMState !== AgentState.FINISHED && status === 'Incomplete' && !this.context.llmParsed?.has_fin_tag) {
+        if (currentFSMState !== AgentState.FINISHED && status === APRStatus.INCOMPLETE && !this.context.llmParsed?.has_fin_tag) {
             console.warn('⚠️ FSM did not reach FINISHED state, falling back to implicit completion logic');
             
             // ログ内に一度でも%_Modified_%が存在した場合の暗黙的完了判定
@@ -2217,7 +2237,7 @@ Please respond again using only the allowed tags.`;
             );
             
             if (hasModification) {
-                status = 'Completed (Implicit)'; // 暗黙的な完了としてステータスを更新
+                status = APRStatus.FINISHED; // 暗黙的な完了としてステータスを更新
                 completionType = 'patch_generated'; // パッチ生成
                 console.log(`✅ Status updated to 'Completed (Implicit)' based on fallback post-processing logic.`);
                 console.log(`   Reason: Found %_Modified_% tag without explicit %%_Fin_%% tag`);
@@ -2243,9 +2263,9 @@ Please respond again using only the allowed tags.`;
                         ];
                         
                         if (noModsKeywords.some(keyword => thought.toLowerCase().includes(keyword))) {
-                            status = 'Completed (No Changes Needed - Implicit)';
+                            status = APRStatus.NO_CHANGES_NEEDED;
                             completionType = 'system_no_progress'; // システム自動判定（暗黙的）
-                            console.log(`✅ Status updated to 'Completed (No Changes Needed - Implicit)' based on analysis.`);
+                            console.log(`✅ Status updated to '${APRStatus.NO_CHANGES_NEEDED}' based on analysis.`);
                             console.log(`   Reason: Empty reply_required with "no modifications" reasoning (fallback detection)`);
                         }
                     }

@@ -57,6 +57,7 @@ class MessageHandler {
             requiredFilepaths: [] as string[],
             requiredFileInfos: [] as RequiredFileInfo[], // 新しいフィールド
             modifiedDiff: '',
+            modifiedLines: 0, // Modifiedセクションの行数
             commentText: '',
             has_fin_tag: false,
             has_no_changes_needed: false, // LLM明示判断
@@ -234,6 +235,7 @@ class MessageHandler {
         sections.plan = buffers.plan.join('\n').trim() || null;
         sections.correctionGoals = buffers.correctionGoals.join('\n').trim() || null;
         sections.modifiedDiff = buffers.modified.join('\n').trim();
+        sections.modifiedLines = buffers.modified.length; // 行数を記録
         sections.commentText = buffers.comment.join('\n').trim();
 
         // プランセクションからファイル要求を自動抽出

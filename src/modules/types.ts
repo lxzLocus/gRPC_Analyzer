@@ -67,6 +67,7 @@ export type LLMParsed = {
     requiredFilepaths: string[];
     requiredFileInfos: RequiredFileInfo[]; // 新しいフィールド
     modifiedDiff: string;
+    modifiedLines?: number; // Modifiedセクションの行数（空チェック用）
     commentText: string;
     has_fin_tag: boolean;
     has_no_changes_needed: boolean; // LLM明示判断：修正不要タグ

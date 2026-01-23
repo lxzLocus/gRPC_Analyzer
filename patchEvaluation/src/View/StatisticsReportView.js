@@ -1,6 +1,14 @@
 /**
  * 統計レポートの表示を担当するViewクラス
  */
+import { 
+    AgentState,
+    getStateDisplayName, 
+    getStateEmoji,
+    isSuccessfulCompletion,
+    isErrorCompletion
+} from '../types/AgentStates.js';
+
 export class StatisticsReportView {
     /**
      * 統計レポートの表示
@@ -42,6 +50,9 @@ export class StatisticsReportView {
         console.log(`  💥 ステップ1失敗数: ${stats.aprParseFailure}`);
         console.log(`  🚀 評価パイプライン成功数（ステップ1＋LLM品質評価）: ${stats.evaluationPipelineSuccess}`);
         console.log(`  ❌ 評価パイプライン失敗数: ${stats.evaluationPipelineFailure}`);
+        
+        // FSM状態別統計を追加
+        this.showStateDistribution(stats);
     }
 
     /**
@@ -473,6 +484,62 @@ export class StatisticsReportView {
         const llmStats = stats.calculateLLMEvaluationStats();
         if (llmStats) {
             console.log(`   LLM品質評価結果: 正確性 ${llmStats.correctRate}%, 妥当性 ${llmStats.plausibleRate}%`);
+        }
+    }
+
+    /**
+     * FSM状態分布の表示
+     * @param {Object} stats - 統計情報
+     */
+    showStateDistribution(stats) {
+        // matchedPairsから状態情報を集計
+        const stateCount = {};
+        let totalWithStatus = 0;
+        
+        if (stats.matchedPairs && stats.matchedPairs.length > 0) {
+            stats.matchedPairs.forEach(pair => {
+                const status = pair.dialogue?.status || pair.status;
+                if (status) {
+                    stateCount[status] = (stateCount[status] || 0) + 1;
+                    totalWithStatus++;
+                }
+            });
+        }
+        
+        if (totalWithStatus === 0) return;
+        
+        console.log(`\n📋 FSM状態別統計 (合計: ${totalWithStatus}件):`);
+        
+        // 状態を件数の多い順にソート
+        const sortedStates = Object.entries(stateCount)
+            .sort((a, b) => b[1] - a[1]);
+        
+        sortedStates.forEach(([state, count]) => {
+            const emoji = getStateEmoji(state);
+            const displayName = getStateDisplayName(state);
+            const percentage = (count / totalWithStatus * 100).toFixed(1);
+            
+            console.log(`  ${emoji} ${displayName.padEnd(12)} : ${count.toString().padStart(3)} 件 (${percentage}%)`);
+            
+            // 成功/失敗の追加情報
+            if (isSuccessfulCompletion(state)) {
+                console.log(`       → ✅ 正常終了`);
+            } else if (isErrorCompletion(state)) {
+                console.log(`       → ❌ エラー終了`);
+            }
+        });
+        
+        // 成功率の表示
+        const finishedCount = stateCount[AgentState.FINISHED] || 0;
+        const errorCount = stateCount[AgentState.ERROR] || 0;
+        const successRate = totalWithStatus > 0 
+            ? (finishedCount / totalWithStatus * 100).toFixed(1)
+            : 0;
+        
+        console.log(`\n  🎯 成功率: ${successRate}% (${finishedCount}/${totalWithStatus})`);
+        if (errorCount > 0) {
+            const errorRate = (errorCount / totalWithStatus * 100).toFixed(1);
+            console.log(`  ⚠️  エラー率: ${errorRate}% (${errorCount}/${totalWithStatus})`);
         }
     }
 }

@@ -17,28 +17,28 @@ class ReportBasedLogService {
         try {
             const files = await fs.readdir(OUTPUT_DIR);
             const reports = [];
-            
+
             for (const file of files) {
                 if (file.startsWith('detailed_analysis_report_') && file.endsWith('.json')) {
                     const filePath = path.join(OUTPUT_DIR, file);
                     const stats = await fs.stat(filePath);
-                    
+
                     // ファイル名からセッションIDを抽出
                     const match = file.match(/detailed_analysis_report_(\d+_\d+)\.json/);
                     const sessionId = match ? match[1] : null;
-                    
+
                     // レポートの内容を読み込んでPR数を取得
                     try {
                         const content = await fs.readFile(filePath, 'utf-8');
                         const data = JSON.parse(content);
-                        
+
                         // 全ての正確性レベルのPR数を合計
-                        const totalPRs = 
+                        const totalPRs =
                             (data.correctnessLevels?.identical?.length || 0) +
                             (data.correctnessLevels?.semanticallyEquivalent?.length || 0) +
                             (data.correctnessLevels?.plausibleButDifferent?.length || 0) +
                             (data.correctnessLevels?.incorrect?.length || 0);
-                        
+
                         reports.push({
                             sessionId,
                             fileName: file,
@@ -58,7 +58,7 @@ class ReportBasedLogService {
                     }
                 }
             }
-            
+
             return reports.sort((a, b) => b.modified - a.modified);
         } catch (error) {
             console.error('❌ Error reading reports:', error);
@@ -75,15 +75,15 @@ class ReportBasedLogService {
             const filePath = path.join(OUTPUT_DIR, fileName);
             const content = await fs.readFile(filePath, 'utf-8');
             const data = JSON.parse(content);
-            
+
             const prs = [];
-            
+
             // 全ての正確性レベルからPRを収集（skippedも含む）
             const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect', 'skipped'];
-            
+
             for (const level of levels) {
                 const entries = data.correctnessLevels?.[level] || [];
-                
+
                 entries.forEach(entry => {
                     prs.push({
                         prName: entry.pullRequestName || entry.datasetEntry,
@@ -105,7 +105,7 @@ class ReportBasedLogService {
                     });
                 });
             }
-            
+
             return prs;
         } catch (error) {
             console.error(`❌ Error reading PRs in report ${sessionId}:`, error);
@@ -122,19 +122,19 @@ class ReportBasedLogService {
             const filePath = path.join(OUTPUT_DIR, fileName);
             const content = await fs.readFile(filePath, 'utf-8');
             const data = JSON.parse(content);
-            
+
             // 全ての正確性レベルからPRを検索（skippedも含む）
             const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect', 'skipped'];
-            
+
             for (const level of levels) {
                 const entries = data.correctnessLevels?.[level] || [];
                 const entry = entries.find(e => e.datasetEntry === datasetEntry);
-                
+
                 if (entry) {
                     return entry;
                 }
             }
-            
+
             throw new Error(`PR ${datasetEntry} not found in report ${sessionId}`);
         } catch (error) {
             throw new Error(`Failed to read PR evaluation: ${error.message}`);
@@ -147,7 +147,7 @@ class ReportBasedLogService {
     async getStatistics() {
         try {
             const reports = await this.getAvailableReports();
-            
+
             const stats = {
                 totalReports: reports.length,
                 totalPRs: 0,
@@ -174,7 +174,7 @@ class ReportBasedLogService {
                 stats.correctnessBreakdown.plausibleButDifferent += report.correctnessBreakdown.plausibleButDifferent;
                 stats.correctnessBreakdown.incorrect += report.correctnessBreakdown.incorrect;
             }
-            
+
             if (reports.length > 0) {
                 stats.latestReport = reports[0];
             }
@@ -195,7 +195,7 @@ class ReportBasedLogService {
             const filePath = path.join(OUTPUT_DIR, fileName);
             const content = await fs.readFile(filePath, 'utf-8');
             const data = JSON.parse(content);
-            
+
             const stats = {
                 sessionId,
                 timestamp: data.timestamp,
@@ -255,27 +255,27 @@ class ReportBasedLogService {
                 repairTypes: {},  // 修正タイプの統計
                 aprStatusDistribution: {}  // APR終了ステータスの分布
             };
-            
+
             // 全PRを収集して統計を計算（skippedも含む）
             const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect', 'skipped'];
             const allPRs = [];
-            
+
             for (const level of levels) {
                 const entries = data.correctnessLevels?.[level] || [];
                 allPRs.push(...entries);
             }
-            
+
             stats.totalPRs = allPRs.length;
-            stats.successRate = stats.totalPRs > 0 
+            stats.successRate = stats.totalPRs > 0
                 ? ((stats.correctnessDistribution.identical + stats.correctnessDistribution.semanticallyEquivalent) / stats.totalPRs * 100).toFixed(1)
                 : 0;
-            
+
             // 各PRの統計を収集
             allPRs.forEach(pr => {
                 // 意味的類似度
                 if (pr.semanticSimilarityScore != null) {
                     stats.semanticSimilarity.scores.push(pr.semanticSimilarityScore);
-                    
+
                     // 分布のカウント
                     if (pr.semanticSimilarityScore < 0.3) {
                         stats.semanticSimilarity.distribution.low++;
@@ -285,7 +285,7 @@ class ReportBasedLogService {
                         stats.semanticSimilarity.distribution.high++;
                     }
                 }
-                
+
                 // APRプロバイダーとモデル
                 if (pr.aprProvider) {
                     stats.aprProviders[pr.aprProvider] = (stats.aprProviders[pr.aprProvider] || 0) + 1;
@@ -293,7 +293,7 @@ class ReportBasedLogService {
                 if (pr.aprModel) {
                     stats.aprModels[pr.aprModel] = (stats.aprModels[pr.aprModel] || 0) + 1;
                 }
-                
+
                 // 変更統計
                 if (pr.modifiedLines != null) {
                     stats.modificationStats.totalLines += pr.modifiedLines;
@@ -301,7 +301,7 @@ class ReportBasedLogService {
                 if (pr.modifiedFiles != null) {
                     stats.modificationStats.totalFiles += pr.modifiedFiles;
                 }
-                
+
                 // 評価ステータス
                 if (pr.status === 'EVALUATED') {
                     stats.evaluationStatus.evaluated++;
@@ -319,22 +319,22 @@ class ReportBasedLogService {
                 } else {
                     stats.evaluationStatus.other++;
                 }
-                
+
                 // エラー元を区別
                 if (pr.errorSource === 'APR') {
                     stats.skipBreakdown.aprError++;
                 } else if (pr.errorSource === 'LLM_EVALUATION') {
                     stats.skipBreakdown.llmEvaluationError++;
                 }
-                
+
                 // Intent Fulfillment評価の統計
                 if (pr.intentFulfillmentEvaluation) {
                     const intentEval = pr.intentFulfillmentEvaluation;
-                    
+
                     if (intentEval.status === 'evaluated' && typeof intentEval.score === 'number') {
                         stats.intentFulfillmentEvaluation.totalEvaluated++;
                         stats.intentFulfillmentEvaluation.scores.push(intentEval.score);
-                        
+
                         // スコア分布
                         if (intentEval.score >= 0.9) stats.intentFulfillmentEvaluation.highScore++;
                         else if (intentEval.score >= 0.7) stats.intentFulfillmentEvaluation.mediumScore++;
@@ -346,12 +346,12 @@ class ReportBasedLogService {
                         stats.intentFulfillmentEvaluation.totalError++;
                     }
                 }
-                
+
                 // 4軸評価（LLM_B）の統計
                 if (pr.fourAxisEvaluation) {
                     const fourAxis = pr.fourAxisEvaluation;
                     stats.fourAxisEvaluation.totalEvaluated++;
-                    
+
                     // 各軸のスコアを収集
                     if (fourAxis.accuracy?.score != null) {
                         stats.fourAxisEvaluation.accuracy.scores.push(fourAxis.accuracy.score);
@@ -366,37 +366,37 @@ class ReportBasedLogService {
                         stats.fourAxisEvaluation.validity.scores.push(fourAxis.validity.score);
                     }
                 }
-                
+
                 // 修正タイプの統計
                 if (pr.repairTypes && Array.isArray(pr.repairTypes)) {
                     pr.repairTypes.forEach(repairType => {
                         stats.repairTypes[repairType] = (stats.repairTypes[repairType] || 0) + 1;
                     });
                 }
-                
+
                 // APRステータスの統計
                 if (pr.aprStatus) {
                     stats.aprStatusDistribution[pr.aprStatus] = (stats.aprStatusDistribution[pr.aprStatus] || 0) + 1;
                 }
             });
-            
+
             // Intent Fulfillment評価の平均スコア計算
             if (stats.intentFulfillmentEvaluation.scores.length > 0) {
                 const sum = stats.intentFulfillmentEvaluation.scores.reduce((a, b) => a + b, 0);
                 stats.intentFulfillmentEvaluation.averageScore = (sum / stats.intentFulfillmentEvaluation.scores.length).toFixed(3);
             }
-            
+
             // 4軸評価の平均スコア計算
             const calculateAverage = (scores) => {
                 if (scores.length === 0) return 0;
                 return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(3);
             };
-            
+
             stats.fourAxisEvaluation.accuracy.average = calculateAverage(stats.fourAxisEvaluation.accuracy.scores);
             stats.fourAxisEvaluation.decisionSoundness.average = calculateAverage(stats.fourAxisEvaluation.decisionSoundness.scores);
             stats.fourAxisEvaluation.directionalConsistency.average = calculateAverage(stats.fourAxisEvaluation.directionalConsistency.scores);
             stats.fourAxisEvaluation.validity.average = calculateAverage(stats.fourAxisEvaluation.validity.scores);
-            
+
             // 意味的類似度の統計計算
             if (stats.semanticSimilarity.scores.length > 0) {
                 const scores = stats.semanticSimilarity.scores;
@@ -404,13 +404,13 @@ class ReportBasedLogService {
                 stats.semanticSimilarity.min = Math.min(...scores).toFixed(3);
                 stats.semanticSimilarity.max = Math.max(...scores).toFixed(3);
             }
-            
+
             // 変更統計の平均
             if (stats.totalPRs > 0) {
                 stats.modificationStats.averageLines = (stats.modificationStats.totalLines / stats.totalPRs).toFixed(1);
                 stats.modificationStats.averageFiles = (stats.modificationStats.totalFiles / stats.totalPRs).toFixed(1);
             }
-            
+
             return stats;
         } catch (error) {
             console.error(`❌ Error in getReportStatistics for ${sessionId}:`, error);
@@ -442,7 +442,7 @@ class ReportBasedLogService {
     async findAPRLogPath(datasetEntry) {
         try {
             const aprLogDir = path.join(projectRoot, 'apr-logs', datasetEntry);
-            
+
             // ディレクトリの存在確認
             try {
                 await fs.access(aprLogDir);
@@ -450,16 +450,16 @@ class ReportBasedLogService {
                 console.warn(`APR log directory not found: ${aprLogDir}`);
                 return null;
             }
-            
+
             // ログファイル一覧を取得（最新のものを使用）
             const files = await fs.readdir(aprLogDir);
             const logFiles = files.filter(f => f.endsWith('.log')).sort().reverse();
-            
+
             if (logFiles.length === 0) {
                 console.warn(`No log files found in ${aprLogDir}`);
                 return null;
             }
-            
+
             // 最新のログファイルを返す
             return path.join(aprLogDir, logFiles[0]);
         } catch (error) {
@@ -477,17 +477,17 @@ class ReportBasedLogService {
     async extractAPRPatches(aprLogPath, mode = 'premerge-apr') {
         try {
             const logContent = await fs.readFile(aprLogPath, 'utf-8');
-            
+
             // JSONログからmodified_diffフィールドを抽出
             // より堅牢な正規表現を使用（エスケープされた引用符を考慮）
             const modifiedDiffRegex = /"modified_diff":\s*"((?:[^"\\]|\\.)*)"/g;
             const patches = [];
             let match;
-            
+
             while ((match = modifiedDiffRegex.exec(logContent)) !== null) {
                 // エスケープされたJSON文字列をアンエスケープ
                 let diffContent = match[1];
-                
+
                 // JSON文字列のエスケープを解除
                 try {
                     // JSON.parseを使用してエスケープを正しく処理
@@ -501,19 +501,19 @@ class ReportBasedLogService {
                         .replace(/\\"/g, '"')
                         .replace(/\\\\/g, '\\');
                 }
-                
+
                 // ```diff マーカーを削除
                 diffContent = diffContent
                     .replace(/```diff\n?/g, '')
                     .replace(/```\n?$/gm, '')
                     .replace(/```$/g, '')
                     .trim();
-                
+
                 // 各ファイルごとにdiffを分割（モードを渡す）
                 const fileDiffs = this._splitDiffByFile(diffContent, mode);
                 patches.push(...fileDiffs);
             }
-            
+
             if (patches.length === 0) {
                 return {
                     success: false,
@@ -521,7 +521,7 @@ class ReportBasedLogService {
                     error: 'No patches found in APR log file'
                 };
             }
-            
+
             return {
                 success: true,
                 patches
@@ -547,7 +547,7 @@ class ReportBasedLogService {
         const lines = diffContent.split('\n');
         let currentFile = null;
         let currentDiff = [];
-        
+
         for (const line of lines) {
             // ファイル名の検出: --- a/path/to/file.ext または --- path/to/file.ext
             const fileMatch = line.match(/^---\s+(?:a\/)?(.+)$/);
@@ -567,7 +567,7 @@ class ReportBasedLogService {
                 currentDiff.push(line);
             }
         }
-        
+
         // 最後のファイルを保存
         if (currentFile && currentDiff.length > 0) {
             const normalizedDiff = this._normalizeAPRDiff(currentFile, currentDiff.join('\n'), mode);
@@ -576,7 +576,7 @@ class ReportBasedLogService {
                 diff: normalizedDiff
             });
         }
-        
+
         return files;
     }
 
@@ -593,7 +593,7 @@ class ReportBasedLogService {
         let lineNum = 1;
         let oldLineNum = 1;
         let newLineNum = 1;
-        
+
         // モードに応じたラベルを決定
         let leftLabel = 'premerge';
         let rightLabel = 'APR patch';
@@ -601,10 +601,10 @@ class ReportBasedLogService {
             leftLabel = 'postmerge (Ground Truth)';
             rightLabel = 'APR patch';
         }
-        
+
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
-            
+
             // ファイルヘッダーをa/とb/プレフィックス付きに正規化（ラベル追加）
             if (line.startsWith('---')) {
                 if (!line.includes('a/')) {
@@ -622,7 +622,7 @@ class ReportBasedLogService {
                 }
                 continue;
             }
-            
+
             // ハンクヘッダーの検出と正規化
             if (line.startsWith('@@')) {
                 // 既に正しい形式かチェック
@@ -640,7 +640,7 @@ class ReportBasedLogService {
                     // コンテキスト部分は次の行として追加
                     const contextMatch = line.match(/^@@\s+(.*)$/);
                     const context = contextMatch ? contextMatch[1].trim() : '';
-                    
+
                     // 次の行から変更行数を推測
                     let oldCount = 3;
                     let newCount = 3;
@@ -654,10 +654,10 @@ class ReportBasedLogService {
                             newCount++;
                         }
                     }
-                    
+
                     // ハンクヘッダーのみを追加
                     normalized.push(`@@ -${oldLineNum},${oldCount} +${newLineNum},${newCount} @@`);
-                    
+
                     // コンテキストがあれば、それをコンテキスト行として追加
                     if (context) {
                         normalized.push(` ${context}`);
@@ -665,10 +665,10 @@ class ReportBasedLogService {
                 }
                 continue;
             }
-            
+
             // 通常の行
             normalized.push(line);
-            
+
             // 行番号を追跡
             if (line.startsWith('-')) {
                 oldLineNum++;
@@ -679,7 +679,7 @@ class ReportBasedLogService {
                 newLineNum++;
             }
         }
-        
+
         return normalized.join('\n');
     }
 
@@ -715,7 +715,7 @@ class ReportBasedLogService {
 
             // premergeとmerge/commit_snapshotディレクトリを探す
             const entries = await fs.readdir(datasetPath, { withFileTypes: true });
-            
+
             let premergeDir = null;
             let postmergeDir = null;
             let aprDir = null;
@@ -753,7 +753,7 @@ class ReportBasedLogService {
             // 変更ファイルリストを取得
             const fileChangesPath = path.join(datasetPath, '03_fileChanges.txt');
             let changedFiles = [];
-            
+
             try {
                 const fileChangesContent = await fs.readFile(fileChangesPath, 'utf-8');
                 // JSON形式でパース
@@ -834,7 +834,7 @@ class ReportBasedLogService {
         // モードに応じたラベルを決定
         let oldLabel = 'premerge';
         let newLabel = 'postmerge (Ground Truth)';
-        
+
         if (mode === 'premerge-apr') {
             oldLabel = 'premerge';
             newLabel = 'APR patch';
@@ -842,7 +842,7 @@ class ReportBasedLogService {
             oldLabel = 'postmerge (Ground Truth)';
             newLabel = 'APR patch';
         }
-        
+
         const patch = Diff.createPatch(
             fileName,
             oldContent,

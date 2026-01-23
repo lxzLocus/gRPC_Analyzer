@@ -120,7 +120,7 @@ export const ALLOWED_ACTIONS_BY_STATE: Record<AgentState, string[]> = {
  * - ANALYSIS → AWAITING_INFO (Reply Required検出時)
  * - ANALYSIS → MODIFYING (Plan完了時)
  * - AWAITING_INFO → ANALYSIS (ホストが情報を返した後、必ずANALYSISを経由)
- * - MODIFYING → VERIFYING (Modified Patch検出時)
+ * - MODIFYING → VERIFYING (Modified Patch検出時、modifiedLines === 0でもVERIFYING経由)
  * - MODIFYING → AWAITING_INFO (Reply Required検出時)
  * - VERIFYING → READY_TO_FINISH (検証パス時)
  * - VERIFYING → MODIFYING (追加修正が必要な時)

@@ -49,11 +49,23 @@ type InteractionLogEntry = {
   system_action: SystemActionLog;
 };
 
+// APR終了ステータス定数（patchEvaluationと統一）
+export const APRStatus = {
+  FINISHED: 'FINISHED',                       // パッチ生成完了
+  NO_CHANGES_NEEDED: 'NO_CHANGES_NEEDED',     // 修正不要と判定
+  TIMEOUT: 'TIMEOUT',                         // タイムアウト
+  ERROR: 'ERROR',                             // エラー発生
+  INVESTIGATION_PHASE: 'INVESTIGATION_PHASE', // 調査フェーズ（未完了）
+  INCOMPLETE: 'INCOMPLETE'                    // 不完全終了
+} as const;
+
+export type APRStatusType = typeof APRStatus[keyof typeof APRStatus];
+
 type ExperimentMetadataType = {
   experiment_id: string;
   start_time: string;
   end_time: string;
-  status: string;
+  status: APRStatusType;
   total_turns: number;
   total_tokens: {
     promptTokens: number;
@@ -138,7 +150,7 @@ export default class Logger {
     experimentId: string,
     startTime: string,
     endTime: string,
-    status: string,
+    status: APRStatusType,
     totalTurns: number,
     promptTokens: number,
     completionTokens: number,

@@ -239,9 +239,10 @@ export class AgentStateService {
   /**
    * LLMレスポンスを検証
    * @param responseText LLMレスポンステキスト
+   * @param context 追加のコンテキスト（modifiedLines等）
    * @returns 検証結果
    */
-  validateLLMResponse(responseText: string): LLMResponseValidation {
+  validateLLMResponse(responseText: string, context?: Record<string, any>): LLMResponseValidation {
     const detectedTags = TagParser.detectTags(responseText);
     const currentState = this.stateMachine.getCurrentState();
     
@@ -261,7 +262,7 @@ export class AgentStateService {
 
     // 検出されたタグに基づいて推奨される次の状態を決定
     if (validation.isValid) {
-      result.suggestedNextState = this.inferNextState(effectiveTags);
+      result.suggestedNextState = this.inferNextState(effectiveTags, context);
     }
     
     // 有効なタグがない場合（すべて無視された）
@@ -308,6 +309,7 @@ export class AgentStateService {
   /**
    * 検出されたタグから次の状態を推測
    * @param tags 検出されたタグ
+   * @param context 追加のコンテキスト（modifiedLines等）
    * @returns 推奨される次の状態
    * 
    * 優先順序（normalizeTagsForStateと一致）：
@@ -317,7 +319,7 @@ export class AgentStateService {
    * 4. %_Modified_%
    * 5. %_Verification_Report_%
    */
-  private inferNextState(tags: string[]): AgentState | undefined {
+  private inferNextState(tags: string[], context?: Record<string, any>): AgentState | undefined {
     const currentState = this.stateMachine.getCurrentState();
 
     // タグの種類に基づいて次の状態を推測（優先度順）
@@ -351,9 +353,16 @@ export class AgentStateService {
     }
 
     // 4️⃣ %_Modified_%タグ（MODIFYING状態からVERIFYINGへ）
+    // NOTE: Modifiedタグの中身が空の場合もVERIFYINGを経由する（全ケースでVERIFYING必須）
     if (tags.includes('%_Modified_%')) {
       if (currentState === AgentState.MODIFYING) {
-        console.log('✅ Modified diff detected in MODIFYING state, transitioning to VERIFYING');
+        // modifiedBufferの内容をチェック（0行の場合はNo Changes扱い）
+        const modifiedLines = context?.modifiedLines ?? 0;
+        if (modifiedLines === 0) {
+          console.log('⚠️  Modified tag detected but content is empty (0 lines) - transitioning to VERIFYING for validation');
+        } else {
+          console.log(`✅ Modified diff detected in MODIFYING state (${modifiedLines} lines), transitioning to VERIFYING`);
+        }
         return AgentState.VERIFYING;
       }
       console.warn(`⚠️  Modified tag detected in invalid state: ${currentState}`);

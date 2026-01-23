@@ -10,6 +10,14 @@ import MessageHandler from './messageHandler.js';
 import LLMClientController from './Controller/LLMClientController.js';
 import Config from './Config/config.js';
 import { isValidRepairType } from './types/RepairTypes.js';
+import { 
+    AgentState, 
+    isValidAgentState, 
+    isTerminalState,
+    getStateDisplayName,
+    getStateEmoji,
+    getStateDescription 
+} from './types/AgentStates.js';
 
 class APRLogParser {
     constructor() {
@@ -136,11 +144,19 @@ class APRLogParser {
             endTime: experimentMeta.end_time
         } : null;
 
+        // status値を検証して正規化
+        const rawStatus = experimentMeta?.status || 'unknown';
+        const normalizedStatus = isValidAgentState(rawStatus) ? rawStatus : AgentState.UNKNOWN;
+        
         const dialogue = {
             experimentId: experimentMeta?.experiment_id || 'unknown',
             turns: [],
             totalTokens: experimentMeta?.total_tokens?.total || 0,
-            status: experimentMeta?.status || 'unknown',
+            status: normalizedStatus,
+            rawStatus: rawStatus,  // 元の値も保持（デバッグ用）
+            statusDisplayName: getStateDisplayName(normalizedStatus),
+            statusEmoji: getStateEmoji(normalizedStatus),
+            isTerminalState: isTerminalState(normalizedStatus),
             modificationHistory: [],
             requestedFiles: new Set(),
             allThoughts: [],
@@ -219,7 +235,10 @@ class APRLogParser {
         console.log(`  - 総トークン数: ${dialogue.totalTokens}`);
         console.log(`  - 要求ファイル数: ${dialogue.requestedFiles.length}`);
         console.log(`  - 修正回数: ${dialogue.modificationHistory.length}`);
-        console.log(`  - ステータス: ${dialogue.status}`);
+        console.log(`  - ステータス: ${dialogue.statusEmoji} ${dialogue.statusDisplayName} (${dialogue.status})`);
+        if (dialogue.status !== dialogue.rawStatus) {
+            console.log(`    ⚠️ 元の値: ${dialogue.rawStatus} → 正規化: ${dialogue.status}`);
+        }
 
         return dialogue;
     }

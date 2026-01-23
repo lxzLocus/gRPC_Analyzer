@@ -1,5 +1,6 @@
 import express from 'express';
 import reportService from '../services/ReportBasedLogService.js';
+// ✅ 修正: patchEvaluation内のサービスを参照（親ディレクトリへの依存を削除）
 import prStatisticsService from '../../src/Service/PRStatisticsService.js';
 
 const router = express.Router();
@@ -33,7 +34,7 @@ router.get('/:sessionId/statistics', async (req, res) => {
         const { sessionId } = req.params;
         console.log(`📊 Getting statistics for sessionId: ${sessionId}, Full URL: ${req.url}`);
         const stats = await reportService.getReportStatistics(sessionId);
-        
+
         res.json({
             success: true,
             sessionId,
@@ -57,7 +58,7 @@ router.get('/:sessionId/prs', async (req, res) => {
     try {
         const { sessionId } = req.params;
         const prs = await reportService.getPRsInReport(sessionId);
-        
+
         res.json({
             success: true,
             sessionId,
@@ -82,9 +83,9 @@ router.get('/:sessionId/prs/:datasetEntry(*)/diffs', async (req, res) => {
         const contextLines = parseInt(req.query.context) || 5;
         const mode = req.query.mode || 'premerge-postmerge'; // デフォルトはpremerge-postmerge
         const decodedEntry = decodeURIComponent(datasetEntry);
-        
+
         console.log(`[DIFF API] Request: context=${req.query.context} (parsed: ${contextLines}), mode=${mode}, entry=${decodedEntry}`);
-        
+
         // APRパッチモードの場合、ログファイルからパッチを抽出
         if (mode === 'premerge-apr' || mode === 'postmerge-apr') {
             const aprLogPath = await reportService.findAPRLogPath(decodedEntry);
@@ -97,7 +98,7 @@ router.get('/:sessionId/prs/:datasetEntry(*)/diffs', async (req, res) => {
                     isAPRError: true
                 });
             }
-            
+
             const aprResult = await reportService.extractAPRPatches(aprLogPath, mode);
             if (!aprResult.success) {
                 return res.status(404).json({
@@ -108,19 +109,19 @@ router.get('/:sessionId/prs/:datasetEntry(*)/diffs', async (req, res) => {
                     isAPRError: true
                 });
             }
-            
+
             // Ground Truthから必要なファイルリストを取得
             // APRモードでもファイルリストを取得するためにpremerge-postmergeモードで呼び出す
             const diffInfo = await reportService.getPRDiffs(decodedEntry, 'premerge-postmerge');
             const groundTruthChangedFiles = diffInfo.changedFiles || [];
-            
+
             // キャッシュを無効化
             res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
             res.set('Pragma', 'no-cache');
             res.set('Expires', '0');
-            
+
             console.log('[DIFF API] APR mode - Ground Truth files:', groundTruthChangedFiles.length, ', APR modified:', aprResult.patches.length);
-            
+
             res.json({
                 available: true,
                 mode,
@@ -131,14 +132,14 @@ router.get('/:sessionId/prs/:datasetEntry(*)/diffs', async (req, res) => {
             });
             return;
         }
-        
+
         // Ground Truth比較モード（従来の処理）
         const diffInfo = await reportService.getPRDiffs(decodedEntry, mode);
-        
+
         if (!diffInfo.available) {
-            return res.status(404).json({ 
+            return res.status(404).json({
                 error: 'Diff not available',
-                message: diffInfo.message 
+                message: diffInfo.message
             });
         }
 
@@ -160,7 +161,7 @@ router.get('/:sessionId/prs/:datasetEntry(*)/diffs', async (req, res) => {
             label1 = 'postmerge';
             label2 = 'apr_patch';
         } else {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: 'Invalid comparison mode',
                 message: 'Valid modes are: premerge-postmerge, premerge-apr, postmerge-apr'
             });
@@ -193,7 +194,7 @@ router.get('/:sessionId/prs/:datasetEntry(*)/diffs', async (req, res) => {
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
         res.set('Pragma', 'no-cache');
         res.set('Expires', '0');
-        
+
         console.log('[DIFF API] Sending response with changedFiles:', diffInfo.changedFiles ? diffInfo.changedFiles.length : 0, 'files');
         res.json({
             available: true,
@@ -211,14 +212,29 @@ router.get('/:sessionId/prs/:datasetEntry(*)/diffs', async (req, res) => {
 
 /**
  * GET /api/reports/:sessionId/prs/:datasetEntry
- * 特定PRの評価結果詳細を取得
+ * 特定PRの評価結果詳細を取得、または/aprlogサフィックスでAPRログを取得
  * datasetEntryはエンコードされた形式で渡される（例: boulder%2Fpullrequest%2FAllow_WFEv1...）
  */
 router.get('/:sessionId/prs/:datasetEntry(*)', async (req, res) => {
     try {
         const { sessionId, datasetEntry } = req.params;
+
+        // /aprlog サフィックスをチェック
+        if (datasetEntry.endsWith('/aprlog')) {
+            const actualDatasetEntry = datasetEntry.slice(0, -7); // '/aprlog' を削除
+            const aprLogData = await reportService.getAPRLog(sessionId, actualDatasetEntry);
+
+            return res.json({
+                success: true,
+                sessionId,
+                datasetEntry: actualDatasetEntry,
+                data: aprLogData
+            });
+        }
+
+        // 通常のPR詳細取得
         const detail = await reportService.getPREvaluationDetail(sessionId, datasetEntry);
-        
+
         res.json({
             success: true,
             sessionId,
@@ -260,7 +276,7 @@ router.get('/:sessionId/pr-statistics', async (req, res) => {
     try {
         const { sessionId } = req.params;
         const enhancedReport = await prStatisticsService.generateEnhancedReport(sessionId);
-        
+
         res.json({
             success: true,
             sessionId,
@@ -282,7 +298,7 @@ router.get('/:sessionId/project-statistics', async (req, res) => {
     try {
         const { sessionId } = req.params;
         const enhancedReport = await prStatisticsService.generateEnhancedReport(sessionId);
-        
+
         res.json({
             success: true,
             sessionId,
@@ -306,7 +322,7 @@ router.get('/:sessionId', async (req, res) => {
     try {
         const { sessionId } = req.params;
         const content = await reportService.getReportContent(sessionId);
-        
+
         res.json({
             success: true,
             sessionId,
