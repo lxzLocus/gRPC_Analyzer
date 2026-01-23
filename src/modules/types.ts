@@ -116,6 +116,9 @@ export type Context = {
         fileContents: Set<string>;      // FILE_CONTENTで取得済みのファイルパス
         directoryListings: Set<string>; // DIRECTORY_LISTINGで取得済みのディレクトリパス
     };
+    // No Progress改善用フラグ
+    noProgressRetried?: boolean;        // No Progressリトライ済みフラグ
+    groundTruthChangedFiles?: string[]; // Ground Truthの変更ファイルリスト
 };
 
 export enum State {

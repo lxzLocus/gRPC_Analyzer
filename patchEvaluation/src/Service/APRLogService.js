@@ -276,4 +276,40 @@ export class APRLogService {
             return null;
         }
     }
+
+    /**
+     * APRログファイルを読み込んで解析されたデータを返す
+     * @param {string} logFilePath - ログファイルのパス
+     * @returns {Promise<Object>} 解析されたAPRログデータ
+     */
+    async getAPRLogData(logFilePath) {
+        try {
+            console.log('[APRLogService] Reading log file:', logFilePath);
+            
+            // ログファイルを読み込む
+            const logContent = await fs.readFile(logFilePath, 'utf-8');
+            
+            // JSON形式のログをパース
+            const logData = JSON.parse(logContent);
+            
+            // APRLogParserを使用して詳細データを抽出
+            const dialogue = this.aprLogParser.extractLLMDialogue(logData);
+            
+            return {
+                raw: logData,
+                dialogue: dialogue,
+                metadata: {
+                    totalTurns: dialogue.turns ? dialogue.turns.length : 0,
+                    finalStatus: dialogue.status || 'unknown',
+                    statusDisplay: dialogue.statusDisplayName || 'Unknown',
+                    totalTokens: dialogue.totalTokens || 0,
+                    startTime: logData.startTime,
+                    endTime: logData.endTime
+                }
+            };
+        } catch (error) {
+            console.error('[APRLogService] Error reading/parsing log:', error.message);
+            throw new Error(`Failed to read APR log: ${error.message}`);
+        }
+    }
 }

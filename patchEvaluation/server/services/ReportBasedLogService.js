@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import * as Diff from 'diff';
+import { APRLogService } from '../../src/Service/APRLogService.js';
 
 const projectRoot = '/app';
 const OUTPUT_DIR = path.join(projectRoot, 'output');
@@ -852,6 +853,79 @@ class ReportBasedLogService {
             { context: contextLines }
         );
         return patch;
+    }
+
+    /**
+     * APRログデータを取得
+     * @param {string} sessionId - セッションID
+     * @param {string} datasetEntry - データセットエントリ
+     * @returns {Promise<Object>} APRログデータ
+     */
+    async getAPRLog(sessionId, datasetEntry) {
+        try {
+            console.log('[getAPRLog] sessionId:', sessionId, 'datasetEntry:', datasetEntry);
+            
+            // APRログのパスを検索
+            const aprLogPath = await this.findAPRLogPath(datasetEntry);
+            
+            if (!aprLogPath) {
+                throw new Error(`APR log not found for ${datasetEntry}`);
+            }
+            
+            console.log('[getAPRLog] Found APR log at:', aprLogPath);
+            
+            // APRLogServiceをインスタンス化してログデータを取得
+            const aprLogService = new APRLogService();
+            const aprLogData = await aprLogService.getAPRLogData(aprLogPath);
+            
+            return {
+                logPath: aprLogPath,
+                fileName: path.basename(aprLogPath),
+                ...aprLogData
+            };
+        } catch (error) {
+            console.error('[getAPRLog] Error:', error.message);
+            throw new Error(`Failed to get APR log: ${error.message}`);
+        }
+    }
+
+    /**
+     * APRログファイルのパスを検索
+     * @param {string} datasetEntry - データセットエントリ
+     * @returns {Promise<string|null>} ログファイルパス
+     */
+    async findAPRLogPath(datasetEntry) {
+        const APR_LOGS_DIR = path.join(projectRoot, 'apr-logs');
+        
+        // datasetEntryから抽出: "boulder/pullrequest/publisher-_remove_storeSCT_from_proto"
+        // 実際のディレクトリ構造: /app/apr-logs/boulder/pullrequest/publisher-_remove_storeSCT_from_proto/
+        const prLogDir = path.join(APR_LOGS_DIR, datasetEntry);
+        
+        console.log('[findAPRLogPath] Searching in:', prLogDir);
+        
+        try {
+            const files = await fs.readdir(prLogDir);
+            
+            // ログファイルを検索（タイムスタンプ付きのファイル名）
+            // 例: 2026-01-22_16-46-22_JST.log
+            const logFiles = files.filter(f => f.endsWith('.log'));
+            
+            console.log('[findAPRLogPath] Found log files:', logFiles);
+            
+            // 最新のログファイルを返す（タイムスタンプでソート）
+            if (logFiles.length > 0) {
+                logFiles.sort().reverse();
+                const logPath = path.join(prLogDir, logFiles[0]);
+                console.log('[findAPRLogPath] Selected log:', logPath);
+                return logPath;
+            }
+            
+            console.log('[findAPRLogPath] No log files found');
+            return null;
+        } catch (error) {
+            console.error(`[findAPRLogPath] Error reading ${prLogDir}:`, error.message);
+            return null;
+        }
     }
 }
 

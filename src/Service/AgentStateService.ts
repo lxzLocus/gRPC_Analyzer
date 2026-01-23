@@ -365,6 +365,20 @@ export class AgentStateService {
         }
         return AgentState.VERIFYING;
       }
+      
+      // 【Phase 2改善】ANALYSIS状態でModified検出 → 自動リカバリー
+      if (currentState === AgentState.ANALYSIS) {
+        const modifiedLines = context?.modifiedLines ?? 0;
+        if (modifiedLines > 0) {
+          console.log(`🔧 AUTO-RECOVERY: Modified tag detected in ANALYSIS state (${modifiedLines} lines)`);
+          console.log(`🔧 AUTO-RECOVERY: Transitioning to MODIFYING to apply the patch`);
+          return AgentState.MODIFYING;
+        } else {
+          console.warn(`⚠️  Modified tag detected in ANALYSIS but content is empty - treating as invalid`);
+          return undefined;
+        }
+      }
+      
       console.warn(`⚠️  Modified tag detected in invalid state: ${currentState}`);
       return undefined;
     }

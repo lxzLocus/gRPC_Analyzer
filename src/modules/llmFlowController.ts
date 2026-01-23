@@ -422,6 +422,21 @@ class LLMFlowController {
         } catch (error) {
             console.warn('⚠️ Could not read proto file changes:', error);
         }
+        
+        // 【新規】Ground Truthの変更ファイルリストを読み込み（No Progress改善用）
+        try {
+            const fileChangesPath = path.join(this.config.inputProjectDir, '03_fileChanges.txt');
+            if (fs.existsSync(fileChangesPath)) {
+                const fileChangesContent = fs.readFileSync(fileChangesPath, 'utf-8');
+                this.context.groundTruthChangedFiles = fileChangesContent.trim().split('\n').filter(f => f.trim());
+                console.log(`📋 Ground Truth changed files loaded: ${this.context.groundTruthChangedFiles.length} files`);
+            } else {
+                this.context.groundTruthChangedFiles = [];
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not read ground truth file changes:', error);
+            this.context.groundTruthChangedFiles = [];
+        }
     }
 
     // =============================================================================
@@ -1792,7 +1807,7 @@ class LLMFlowController {
      */
     /**
      * No Progress時の処理: LLMが行き詰まった時のフォールバック
-     * リトライは無意味なので、これまでの修正を評価して終了する
+     * 【改善版】追加コンテキストを提供して1回リトライする
      */
     private async handleNoProgress(): Promise<void> {
         console.log('🔄 No Progress: LLM has exhausted its exploration, checking for modifications...');
@@ -1809,7 +1824,20 @@ class LLMFlowController {
             await this.agentStateService.transition(AgentState.MODIFYING, 'no_progress_with_modifications');
             this.state = State.SystemParseDiff;
         } else {
-            console.log('ℹ️  No modifications found, considering as "no changes needed"');
+            console.log('ℹ️  No modifications found, attempting recovery with additional context...');
+            
+            // 【改善】リトライフラグの確認
+            if (!this.context.noProgressRetried) {
+                console.log('🔄 First no-progress detection: attempting retry with enhanced context...');
+                this.context.noProgressRetried = true;
+                
+                // 追加コンテキストを提供してリトライ
+                await this.retryWithEnhancedContext();
+                return;
+            }
+            
+            // リトライ後も改善しなかった場合
+            console.log('⚠️  No improvement after retry, proceeding to no-progress verification...');
             
             // No Progressフラグを設定（システム判定であることを明示）
             if (!parsed) {
@@ -1833,6 +1861,49 @@ class LLMFlowController {
                 this.state = State.LLMVerificationDecision;
             }
         }
+    }
+    
+    /**
+     * 【新規】No Progress時の追加コンテキスト提供によるリトライ
+     */
+    private async retryWithEnhancedContext(): Promise<void> {
+        console.log('🔄 Providing enhanced context to help LLM find modification points...');
+        
+        // Ground Truthの変更ファイル情報を取得
+        const gtFiles = this.context.groundTruthChangedFiles || [];
+        const gtFileList = gtFiles.length > 0 
+            ? `\n\n**Hint**: The actual commit modified these files:\n${gtFiles.map(f => `- ${f}`).join('\n')}\n\nConsider why these files might need changes based on the commit message.`
+            : '';
+        
+        // 強化されたガイダンス
+        const enhancedGuidance = `
+**Important Reminder**: You have not made progress. Let's reconsider the task:
+
+1. **Re-read the commit message carefully**: What is the core intent? What functionality is being added, fixed, or changed?
+
+2. **Identify the modification points**: Based on the commit message, which files and functions need to be modified?
+
+3. **Don't give up too easily**: If you can't find the exact location, make a reasonable inference based on:
+   - Function names mentioned in the commit message
+   - Typical patterns in this codebase
+   - Similar changes you've seen before${gtFileList}
+
+4. **Proceed with modification**: Even if you're not 100% certain, provide your best attempt at the modification. The verification step will catch any issues.
+
+**Remember**: It's better to attempt a modification and refine it than to conclude "no changes needed" when the commit message clearly indicates changes were made.
+`;
+        
+        // 現在のメッセージに追加コンテキストを挿入
+        const enhancedMessage = {
+            role: 'user' as const,
+            content: enhancedGuidance
+        };
+        
+        this.currentMessages.push(enhancedMessage);
+        
+        // LLMを呼び出し
+        console.log('📤 Sending retry request with enhanced guidance...');
+        this.state = State.SendInfoToLLM;
     }
 
     private async performCorrectiveRetry(currentState: AgentState) {

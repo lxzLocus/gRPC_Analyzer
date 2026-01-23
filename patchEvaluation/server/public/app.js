@@ -572,6 +572,7 @@ function renderPRs(prs) {
             status: 'all',
             aprStatus: 'all',
             correctness: 'all',
+            intentFulfillment: 'all',
             sortBy: 'default'
         };
     }
@@ -581,6 +582,24 @@ function renderPRs(prs) {
         if (state.prFilters.status !== 'all' && pr.status !== state.prFilters.status) return false;
         if (state.prFilters.aprStatus !== 'all' && pr.aprStatus !== state.prFilters.aprStatus) return false;
         if (state.prFilters.correctness !== 'all' && pr.correctnessLevel !== state.prFilters.correctness) return false;
+        
+        // Intent Fulfillmentフィルター
+        if (state.prFilters.intentFulfillment !== 'all') {
+            const intent = pr.intentFulfillmentEvaluation;
+            if (!intent || intent.status !== 'evaluated') {
+                // 評価されていない場合は「評価なし」フィルターのみ通す
+                if (state.prFilters.intentFulfillment !== 'none') return false;
+            } else {
+                // スコアによるフィルタリング
+                const score = intent.score;
+                if (state.prFilters.intentFulfillment === 'high' && score < 0.9) return false;
+                if (state.prFilters.intentFulfillment === 'medium' && (score < 0.7 || score >= 0.9)) return false;
+                if (state.prFilters.intentFulfillment === 'low' && (score < 0.4 || score >= 0.7)) return false;
+                if (state.prFilters.intentFulfillment === 'very-low' && score >= 0.4) return false;
+                if (state.prFilters.intentFulfillment === 'none') return false; // 評価ありは除外
+            }
+        }
+        
         return true;
     });
 
@@ -642,6 +661,18 @@ function renderPRs(prs) {
                 </div>
                 
                 <div>
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">意図達成度 (LLM_C):</label>
+                    <select id="filter-intent-fulfillment" class="filter-select" onchange="updatePRFilters()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ced4da;">
+                        <option value="all">すべて</option>
+                        <option value="high">🎯 高 (≥90%) - ${prs.filter(p => p.intentFulfillmentEvaluation?.status === 'evaluated' && p.intentFulfillmentEvaluation.score >= 0.9).length}件</option>
+                        <option value="medium">🎯 中 (70-89%) - ${prs.filter(p => p.intentFulfillmentEvaluation?.status === 'evaluated' && p.intentFulfillmentEvaluation.score >= 0.7 && p.intentFulfillmentEvaluation.score < 0.9).length}件</option>
+                        <option value="low">🎯 低 (40-69%) - ${prs.filter(p => p.intentFulfillmentEvaluation?.status === 'evaluated' && p.intentFulfillmentEvaluation.score >= 0.4 && p.intentFulfillmentEvaluation.score < 0.7).length}件</option>
+                        <option value="very-low">🎯 極低 (<40%) - ${prs.filter(p => p.intentFulfillmentEvaluation?.status === 'evaluated' && p.intentFulfillmentEvaluation.score < 0.4).length}件</option>
+                        <option value="none">⏭️ 評価なし - ${prs.filter(p => !p.intentFulfillmentEvaluation || p.intentFulfillmentEvaluation.status !== 'evaluated').length}件</option>
+                    </select>
+                </div>
+                
+                <div>
                     <label style="display: block; margin-bottom: 5px; font-weight: bold;">並び替え:</label>
                     <select id="sort-by" class="filter-select" onchange="updatePRFilters()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ced4da;">
                         <option value="default">デフォルト順</option>
@@ -684,17 +715,17 @@ function renderPRs(prs) {
                 const scoreClass = intent.score >= 0.9 ? 'badge-identical' :
                     intent.score >= 0.7 ? 'badge-equivalent' :
                         intent.score >= 0.4 ? 'badge-plausible' : 'badge-incorrect';
-                intentBadge = `<div class="pr-info"><span class="correctness-badge ${scoreClass}" style="font-size: 0.8em;">🎯 ${(intent.score * 100).toFixed(0)}%</span></div>`;
+                intentBadge = `<div class="pr-info">意図達成度: <span class="correctness-badge ${scoreClass}" style="font-size: 0.8em;">🎯 ${(intent.score * 100).toFixed(0)}%</span></div>`;
             } else if (intent.status === 'skipped') {
-                intentBadge = '<div class="pr-info" style="color: #6c757d;">🎯 スキップ</div>';
+                intentBadge = '<div class="pr-info" style="color: #6c757d;">意図達成度: 🎯 スキップ</div>';
             } else if (intent.status === 'error') {
-                intentBadge = '<div class="pr-info" style="color: #dc3545;">🎯 エラー</div>';
+                intentBadge = '<div class="pr-info" style="color: #dc3545;">意図達成度: 🎯 エラー</div>';
             }
         }
 
         return `
                     <div class="pr-card" onclick="selectPR('${encodeURIComponent(pr.datasetEntry)}')">
-                        <h3>🐛 ${pr.prName}</h3>
+                        <h3 style="word-break: break-word; overflow-wrap: break-word; line-height: 1.4;">🐛 ${pr.prName}</h3>
                         <div class="pr-info">📦 ${pr.projectName}</div>
                         ${statusBadge}
                         ${aprStatusBadge}
@@ -713,6 +744,7 @@ function renderPRs(prs) {
     document.getElementById('filter-status').value = state.prFilters.status;
     document.getElementById('filter-apr-status').value = state.prFilters.aprStatus;
     document.getElementById('filter-correctness').value = state.prFilters.correctness;
+    document.getElementById('filter-intent-fulfillment').value = state.prFilters.intentFulfillment;
     document.getElementById('sort-by').value = state.prFilters.sortBy;
 
     // 元のPRリストを保存
@@ -725,6 +757,7 @@ function updatePRFilters() {
         status: document.getElementById('filter-status').value,
         aprStatus: document.getElementById('filter-apr-status').value,
         correctness: document.getElementById('filter-correctness').value,
+        intentFulfillment: document.getElementById('filter-intent-fulfillment').value,
         sortBy: document.getElementById('sort-by').value
     };
 
@@ -880,6 +913,186 @@ async function renderPRDetail(detail, sessionId, datasetEntry, aprLogData = null
         initializeDiffViewer(5);  // デフォルト5行
         initializeAPRLogToggles();  // APRログのアコーディオン初期化
     }, 0);
+}
+
+// APRログセクションのレンダリング
+function renderAPRLogSection(aprLogData) {
+    if (!aprLogData || !aprLogData.dialogue) {
+        return '<div class="detail-section"><h3>🤖 APRログ詳細</h3><p>APRログデータが利用できません</p></div>';
+    }
+
+    const dialogue = aprLogData.dialogue;
+    const metadata = aprLogData.metadata || {};
+    
+    // ターン別詳細のHTML生成
+    const turnsHtml = dialogue.turns && dialogue.turns.length > 0 ? dialogue.turns.map((turn, index) => {
+        const turnId = `turn-${index}`;
+        return `
+            <div class="apr-turn-item" style="margin-bottom: 15px; border: 1px solid #e9ecef; border-radius: 8px; overflow: hidden;">
+                <button class="apr-log-toggle" aria-expanded="false" style="width: 100%; padding: 15px; background: #f8f9fa; border: none; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 500;">
+                    <span>📊 ターン ${turn.turnNumber || index + 1} - ${turn.timestamp || 'N/A'}</span>
+                    <span class="toggle-icon">▶</span>
+                </button>
+                <div class="apr-log-content" id="${turnId}" style="display: none; padding: 20px; background: white;">
+                    ${turn.thought ? `
+                        <div style="margin-bottom: 15px;">
+                            <h4 style="color: #667eea; margin-bottom: 8px;">💭 思考プロセス</h4>
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; white-space: pre-wrap; word-break: break-word;">${escapeHtml(turn.thought)}</div>
+                        </div>
+                    ` : ''}
+                    
+                    ${turn.plan && turn.plan.length > 0 ? `
+                        <div style="margin-bottom: 15px;">
+                            <h4 style="color: #667eea; margin-bottom: 8px;">📋 実行計画</h4>
+                            <ol style="background: #f8f9fa; padding: 20px; border-radius: 6px; margin: 0;">
+                                ${turn.plan.map(p => `<li style="margin-bottom: 8px;">${escapeHtml(JSON.stringify(p, null, 2))}</li>`).join('')}
+                            </ol>
+                        </div>
+                    ` : ''}
+                    
+                    ${turn.requiredFiles && turn.requiredFiles.length > 0 ? `
+                        <div style="margin-bottom: 15px;">
+                            <h4 style="color: #667eea; margin-bottom: 8px;">📄 要求ファイル</h4>
+                            <ul style="background: #f8f9fa; padding: 20px; border-radius: 6px; margin: 0;">
+                                ${turn.requiredFiles.map(f => `<li>${escapeHtml(f.path || f)}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                    
+                    ${turn.modifiedDiff ? `
+                        <div style="margin-bottom: 15px;">
+                            <h4 style="color: #667eea; margin-bottom: 8px;">🔧 修正内容</h4>
+                            <pre style="background: #282c34; color: #abb2bf; padding: 15px; border-radius: 6px; overflow-x: auto; max-height: 300px;"><code>${escapeHtml(turn.modifiedDiff)}</code></pre>
+                        </div>
+                    ` : ''}
+                    
+                    ${turn.usage ? `
+                        <div style="margin-bottom: 15px;">
+                            <h4 style="color: #667eea; margin-bottom: 8px;">📊 トークン使用量</h4>
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px;">
+                                <p style="margin: 4px 0;"><strong>Prompt:</strong> ${turn.usage.prompt_tokens?.toLocaleString() || 'N/A'}</p>
+                                <p style="margin: 4px 0;"><strong>Completion:</strong> ${turn.usage.completion_tokens?.toLocaleString() || 'N/A'}</p>
+                                <p style="margin: 4px 0;"><strong>Total:</strong> ${turn.usage.total_tokens?.toLocaleString() || 'N/A'}</p>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    ${turn.systemAction ? `
+                        <div style="margin-bottom: 15px;">
+                            <h4 style="color: #667eea; margin-bottom: 8px;">⚙️ システムアクション</h4>
+                            <div style="background: #fff3cd; padding: 12px; border-radius: 6px;">
+                                <p style="margin: 4px 0;"><strong>Type:</strong> ${turn.systemAction.type || 'N/A'}</p>
+                                ${turn.systemAction.details ? `<p style="margin: 4px 0;"><strong>Details:</strong> ${escapeHtml(turn.systemAction.details)}</p>` : ''}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('') : '<p>ターンデータがありません</p>';
+
+    return `
+        <div class="detail-section" style="margin-top: 30px;">
+            <h3>🤖 APRログ詳細</h3>
+            <div class="detail-content">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 0.9rem; color: #6c757d;">最終ステータス</div>
+                        <div style="font-size: 1.3rem; font-weight: bold; color: #667eea; margin-top: 5px;">${metadata.statusDisplay || 'Unknown'}</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 0.9rem; color: #6c757d;">総ターン数</div>
+                        <div style="font-size: 1.3rem; font-weight: bold; color: #667eea; margin-top: 5px;">${metadata.totalTurns || 0}</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <div style="font-size: 0.9rem; color: #6c757d;">総トークン数</div>
+                        <div style="font-size: 1.3rem; font-weight: bold; color: #667eea; margin-top: 5px;">${(metadata.totalTokens || 0).toLocaleString()}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        ${dialogue.allPlans && dialogue.allPlans.length > 0 ? `
+        <div class="detail-section">
+            <h3>📋 全計画の統合ビュー</h3>
+            <div class="detail-content">
+                ${dialogue.allPlans.map((plan, turnIdx) => {
+                    // planが配列の場合（各ターンの計画がステップの配列）
+                    if (Array.isArray(plan)) {
+                        return `
+                            <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+                                <div style="font-weight: bold; color: #667eea; margin-bottom: 12px; font-size: 1.05rem;">📌 ターン ${turnIdx + 1} の計画</div>
+                                <div style="background: white; padding: 12px; border-radius: 6px;">
+                                    ${plan.map((step, stepIdx) => `
+                                        <div style="margin-bottom: ${stepIdx < plan.length - 1 ? '12px' : '0'}; padding-bottom: ${stepIdx < plan.length - 1 ? '12px' : '0'}; border-bottom: ${stepIdx < plan.length - 1 ? '1px solid #e9ecef' : 'none'};">
+                                            <div style="display: flex; align-items: start; gap: 10px;">
+                                                <div style="flex-shrink: 0; width: 24px; height: 24px; background: #667eea; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: bold;">${step.step || stepIdx + 1}</div>
+                                                <div style="flex: 1;">
+                                                    <div style="font-weight: 600; color: #495057; margin-bottom: 4px;">
+                                                        ${step.action ? `🔧 ${step.action}` : 'アクション'}
+                                                    </div>
+                                                    ${step.filePath ? `
+                                                        <div style="font-size: 0.9rem; color: #6c757d; margin-bottom: 4px;">
+                                                            📄 <code style="background: #e9ecef; padding: 2px 6px; border-radius: 3px;">${step.filePath}</code>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${step.reason ? `
+                                                        <div style="font-size: 0.9rem; color: #495057; margin-top: 6px;">
+                                                            💡 ${escapeHtml(step.reason)}
+                                                        </div>
+                                                    ` : ''}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        // planがオブジェクトの場合
+                        return `
+                            <div style="margin-bottom: 12px; padding: 12px; background: #f8f9fa; border-radius: 6px;">
+                                <pre style="margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.9rem;">${escapeHtml(JSON.stringify(plan, null, 2))}</pre>
+                            </div>
+                        `;
+                    }
+                }).join('')}
+            </div>
+        </div>
+        ` : ''}
+
+        ${dialogue.allThoughts && dialogue.allThoughts.length > 0 ? `
+        <div class="detail-section">
+            <h3>💭 全思考の統合ビュー</h3>
+            <div class="detail-content">
+                ${dialogue.allThoughts.map((thought, idx) => `
+                    <div style="margin-bottom: 15px; padding: 12px; background: #f8f9fa; border-left: 4px solid #667eea; border-radius: 4px;">
+                        <div style="font-weight: bold; color: #667eea; margin-bottom: 5px;">ターン ${idx + 1}</div>
+                        <div style="white-space: pre-wrap; word-break: break-word;">${escapeHtml(thought)}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+        ` : ''}
+
+        ${dialogue.requestedFiles && dialogue.requestedFiles.length > 0 ? `
+        <div class="detail-section">
+            <h3>📄 要求ファイルリスト</h3>
+            <div class="detail-content">
+                <ul style="padding-left: 20px;">
+                    ${dialogue.requestedFiles.map(file => `<li style="margin-bottom: 5px; word-break: break-word;">${escapeHtml(file.path || file)}</li>`).join('')}
+                </ul>
+            </div>
+        </div>
+        ` : ''}
+
+        <div class="detail-section">
+            <h3>📊 ターン別詳細</h3>
+            <div class="detail-content">
+                ${turnsHtml}
+            </div>
+        </div>
+    `;
 }
 
 // パンくずリストの更新
@@ -1244,6 +1457,32 @@ function initializeDiffViewer(contextLines = 5) {
             excludedFilesListPre.style.display = e.target.checked ? 'block' : 'none';
         });
     }
+}
+
+// APRログのアコーディオン機能を初期化
+function initializeAPRLogToggles() {
+    const toggleButtons = document.querySelectorAll('.apr-log-toggle');
+    
+    toggleButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const content = button.nextElementSibling;
+            const icon = button.querySelector('.toggle-icon');
+            
+            if (content && content.classList.contains('apr-log-content')) {
+                const isExpanded = content.style.display === 'block';
+                
+                if (isExpanded) {
+                    content.style.display = 'none';
+                    if (icon) icon.textContent = '▶';
+                    button.setAttribute('aria-expanded', 'false');
+                } else {
+                    content.style.display = 'block';
+                    if (icon) icon.textContent = '▼';
+                    button.setAttribute('aria-expanded', 'true');
+                }
+            }
+        });
+    });
 }
 
 // コンテキスト行数を更新
