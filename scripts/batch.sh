@@ -4,12 +4,12 @@
 # 各PRを独立したnodeプロセスで実行し、接続エラーを回避
 #
 # 使い方: 
-#   sh scripts/batch_run_single_pr.sh [dataset_index] [--resume <repo> <cat> <pr>]
+#   sh scripts/batch.sh [dataset_index] [--resume <repo> <cat> <pr>]
 #
 # 例:
-#   sh scripts/batch_run_single_pr.sh 0  # filtered_fewChanged（最初から）
-#   sh scripts/batch_run_single_pr.sh 4  # filtered_bugs
-#   sh scripts/batch_run_single_pr.sh 0 --resume "boulder" "issue" "pr_title"  # 途中から再開
+#   sh scripts/batch.sh 0  # filtered_fewChanged（最初から）
+#   sh scripts/batch.sh 4  # filtered_bugs
+#   sh scripts/batch.sh 0 --resume "boulder" "issue" "pr_title"  # 途中から再開
 #
 # 進捗確認:
 #   sh scripts/check_batch_progress.sh  # 前回の進捗を確認してresumeコマンドを表示
@@ -47,8 +47,6 @@ get_dataset_path() {
         3) echo "/app/dataset/filtered_protoChanged" ;;
         4) echo "/app/dataset/filtered_bugs" ;;
         5) echo "/app/dataset/incorrect_few" ;;
-        6) echo "/app/dataset/tmp" ;;
-        7) echo "/app/dataset/test_no_changes" ;;
         *) echo "" ;;
     esac
 }
@@ -95,8 +93,6 @@ if [ -z "$DATASET_DIR" ]; then
     echo "   3: /app/dataset/filtered_protoChanged"
     echo "   4: /app/dataset/filtered_bugs"
     echo "   5: /app/dataset/incorrect_few"
-    echo "   6: /app/dataset/tmp (エラーPR検証用)"
-    echo "   7: /app/dataset/test_no_changes (No Changes Needed検証用)"
     exit 1
 fi
 OUTPUT_BASE="/app/output/batch_$(date +%Y%m%d_%H%M%S)"
@@ -218,7 +214,7 @@ const PROCESSING_OPTIONS = {
     enableGarbageCollection: true,
     enablePreVerification: false,
     forceTUI: false,
-    quietMode: process.env.QUIET_MODE === 'false' ? false : true,  // 環境変数で制御可能
+    quietMode: true,
     targetPullRequest: {
         repositoryName: TARGET_PR_CONFIG.repositoryName,
         category: TARGET_PR_CONFIG.category,
@@ -292,15 +288,9 @@ EOF
                 cecho "${YELLOW}⏳ Status: Node process started (PID: ${NODE_PID})${NC}"
                 cecho "${YELLOW}🔄 Processing... (monitoring log for updates)${NC}"
                 
-                # プロセス監視ループ（タイムアウトとループ検出付き）
+                # プロセス監視ループ
                 LAST_LOG_SIZE=0
                 DOTS=""
-                NO_PROGRESS_COUNT=0
-                MAX_NO_PROGRESS=180  # 6分間（180秒）進捗なしでタイムアウト
-                LOOP_PATTERN_COUNT=0
-                MAX_LOOP_PATTERNS=30  # 同じパターンが30回繰り返されたらループと判定
-                LAST_LOG_PATTERN=""
-                
                 while kill -0 "$NODE_PID" 2>/dev/null; do
                     # ログファイルに新しい内容があるか確認
                     if [ -f "$PR_LOG" ]; then
@@ -311,43 +301,13 @@ EOF
                             if [ -n "$NEW_CONTENT" ]; then
                                 cecho "${BLUE}📝 [LOG]:${NC}"
                                 echo "$NEW_CONTENT"
-                                
-                                # ループパターン検出
-                                CURRENT_PATTERN=$(echo "$NEW_CONTENT" | grep -o "FSM: New state = ANALYSIS" | head -n 1)
-                                if [ "$CURRENT_PATTERN" = "FSM: New state = ANALYSIS" ]; then
-                                    if [ "$LAST_LOG_PATTERN" = "$CURRENT_PATTERN" ]; then
-                                        LOOP_PATTERN_COUNT=$((LOOP_PATTERN_COUNT + 1))
-                                        if [ $LOOP_PATTERN_COUNT -ge $MAX_LOOP_PATTERNS ]; then
-                                            cecho "${RED}🔄 Infinite loop detected! Killing process...${NC}" | tee -a "$LOG_FILE"
-                                            kill -9 "$NODE_PID" 2>/dev/null || true
-                                            break
-                                        fi
-                                    else
-                                        LOOP_PATTERN_COUNT=0
-                                    fi
-                                    LAST_LOG_PATTERN="$CURRENT_PATTERN"
-                                else
-                                    LOOP_PATTERN_COUNT=0
-                                    LAST_LOG_PATTERN=""
-                                fi
                             fi
                             LAST_LOG_SIZE=$CURRENT_LOG_SIZE
                             DOTS=""
-                            NO_PROGRESS_COUNT=0
                         else
-                            # ログに変化がない場合
-                            NO_PROGRESS_COUNT=$((NO_PROGRESS_COUNT + 2))
-                            
-                            # タイムアウトチェック
-                            if [ $NO_PROGRESS_COUNT -ge $MAX_NO_PROGRESS ]; then
-                                cecho "${RED}⏱️  Timeout: No progress for ${MAX_NO_PROGRESS}s. Killing process...${NC}" | tee -a "$LOG_FILE"
-                                kill -9 "$NODE_PID" 2>/dev/null || true
-                                break
-                            fi
-                            
-                            # ドットを表示
+                            # ログに変化がない場合はドットを表示
                             DOTS="${DOTS}."
-                            printf "\r${YELLOW}⏳ Waiting for response${DOTS} (${NO_PROGRESS_COUNT}s)${NC}"
+                            printf "\r${YELLOW}⏳ Waiting for response${DOTS}${NC}"
                             if [ ${#DOTS} -gt 10 ]; then
                                 DOTS=""
                             fi
