@@ -68,10 +68,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         path.join(projectRoot, "dataset", "filtered_confirmed"),     // 確認済み（アンマウント）
         path.join(projectRoot, "dataset", "filtered_commit"),        // コミット履歴（アンマウント）
         path.join(projectRoot, "dataset", "filtered_protoChanged"),   // プロトコル変更（アンマウント）
+        path.join(projectRoot, "tmp")            // 一時データセット（アンマウント） 
     ];
     
     // 現在選択されているデータセット（コマンドライン引数または デフォルト）
-    const selectedDataset = commandLineArgs.datasetPath || availableDatasets[1];
+    const selectedDataset = commandLineArgs.datasetPath || availableDatasets[5];
     const aprOutputPath = commandLineArgs.aprLogRootPath || commandLineArgs.aprOutputPath || path.join(projectRoot, "apr-logs");
 
     // キャッシュオプションの解析

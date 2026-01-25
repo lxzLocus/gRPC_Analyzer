@@ -36,9 +36,26 @@ export class CachedDatasetRepository {
                 }
                 throw readdirError;
             }
-            return entries
-                .filter(dirent => dirent.isDirectory())
-                .map(dirent => dirent.name);
+            
+            // シンボリックリンクもディレクトリとして扱う
+            const directories = [];
+            for (const dirent of entries) {
+                if (dirent.isDirectory()) {
+                    directories.push(dirent.name);
+                } else if (dirent.isSymbolicLink()) {
+                    // シンボリックリンク先がディレクトリかチェック
+                    try {
+                        const linkPath = path.join(datasetDir, dirent.name);
+                        const stat = await fs.stat(linkPath); // シンボリックリンクをフォロー
+                        if (stat.isDirectory()) {
+                            directories.push(dirent.name);
+                        }
+                    } catch (err) {
+                        console.warn(`⚠️ シンボリックリンク先の確認失敗: ${dirent.name}`);
+                    }
+                }
+            }
+            return directories;
         } catch (error) {
             throw new Error(`プロジェクトディレクトリ取得エラー: ${error.message}`);
         }
@@ -61,9 +78,26 @@ export class CachedDatasetRepository {
                 }
                 throw readdirError;
             }
-            return entries
-                .filter(dirent => dirent.isDirectory())
-                .map(dirent => dirent.name);
+            
+            // シンボリックリンクもディレクトリとして扱う
+            const directories = [];
+            for (const dirent of entries) {
+                if (dirent.isDirectory()) {
+                    directories.push(dirent.name);
+                } else if (dirent.isSymbolicLink()) {
+                    // シンボリックリンク先がディレクトリかチェック
+                    try {
+                        const linkPath = path.join(projectPath, dirent.name);
+                        const stat = await fs.stat(linkPath); // シンボリックリンクをフォロー
+                        if (stat.isDirectory()) {
+                            directories.push(dirent.name);
+                        }
+                    } catch (err) {
+                        console.warn(`⚠️ シンボリックリンク先の確認失敗: ${dirent.name}`);
+                    }
+                }
+            }
+            return directories;
         } catch (error) {
             throw new Error(`カテゴリディレクトリ取得エラー: ${error.message}`);
         }
@@ -86,9 +120,26 @@ export class CachedDatasetRepository {
                 }
                 throw readdirError;
             }
-            return entries
-                .filter(dirent => dirent.isDirectory())
-                .map(dirent => dirent.name);
+            
+            // シンボリックリンクもディレクトリとして扱う
+            const directories = [];
+            for (const dirent of entries) {
+                if (dirent.isDirectory()) {
+                    directories.push(dirent.name);
+                } else if (dirent.isSymbolicLink()) {
+                    // シンボリックリンク先がディレクトリかチェック
+                    try {
+                        const linkPath = path.join(categoryPath, dirent.name);
+                        const stat = await fs.stat(linkPath); // シンボリックリンクをフォロー
+                        if (stat.isDirectory()) {
+                            directories.push(dirent.name);
+                        }
+                    } catch (err) {
+                        console.warn(`⚠️ シンボリックリンク先の確認失敗: ${dirent.name}`);
+                    }
+                }
+            }
+            return directories;
         } catch (error) {
             throw new Error(`プルリクエストディレクトリ取得エラー: ${error.message}`);
         }
