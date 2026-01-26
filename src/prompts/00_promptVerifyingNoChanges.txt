@@ -1,8 +1,12 @@
-## Instructions ##
+## ⚠️ CRITICAL VERIFICATION ⚠️ ##
 
-You are in the VERIFYING state. You previously concluded that **no code changes are needed**. Now you must **verify this conclusion** by demonstrating反証可能性 (falsifiability).
+You are in the VERIFYING state. The system detected that you indicated **no code changes are needed**.
 
-This is NOT a formality. This is a critical validation step to prevent false negatives.
+**BEFORE PROCEEDING**: Did you actually generate a patch with `%_Modified_%` tag?
+- If YES and you provided a diff → **THIS PROMPT IS AN ERROR** → Output `%_Modified_%` again with your patch
+- If NO and you truly believe no changes are needed → Proceed with verification below
+
+This is NOT a formality. This is a critical validation step to prevent false negatives AND false positives.
 
 ---
 

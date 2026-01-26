@@ -54,11 +54,14 @@ IMPORTANT - State Transitions:
 ### Pull Request Title (Hint) ###
 {{pullRequestTitle}}
 
-### Proto file ###
+### Proto file (REFERENCE ONLY - Post-merge final state) ###
 {{protoFile}}
 
-### Proto file changes ###
+### Proto file changes (WHAT CHANGED - Study these to understand the API evolution) ###
 {{protoFileChanges}}
+
+### Generated Stub File Changes (AUTO-GENERATED - Shows how the API client code changed) ###
+{{stubFileChanges}}
 
 ### Changed files (Annotation - Paths only) ###
 {{fileChanges}}
@@ -66,27 +69,45 @@ IMPORTANT - State Transitions:
 ### List of All File Paths (Consider this a global view, prioritize targeted requests) ###
 {{surroundedFilePath}}
 
-### Suspected Files (Content provided - Pre-commit state) ###
+### Suspected Files (⚠️ YOUR TARGET - These files MUST BE UPDATED) ###
 {{suspectedFiles}}
 
 ---
 
 ## Your Task & Response Format ##
 
+## ⚠️ CRITICAL INSTRUCTION ⚠️ ##
+
+**YOU MUST FIX THE HAND-WRITTEN CODE**:
+
+1. ✅ The proto definitions have been updated (shown above for REFERENCE)
+2. ✅ The stub files have been auto-generated to match the new proto (shown for REFERENCE)
+3. ❌ **The hand-written code in "Suspected Files" is BROKEN and OUTDATED**
+4. 🎯 **YOUR JOB**: Modify the suspected files to work with the new API
+
+**DO NOT**:
+- ❌ Suggest changes to `.proto` files (they are finalized)
+- ❌ Suggest changes to stub files like `.pb.go`, `_pb2.py`, etc. (they are auto-generated)
+- ❌ Output `%_No_Changes_Needed_%` if there are suspected files shown
+
+**YOU MUST**:
+- ✅ Update code that creates/uses the modified proto messages
+- ✅ Add/remove/modify fields to match the new proto schema
+- ✅ Fix compilation errors caused by API changes
+- ✅ Adapt function calls to match new stub signatures
+
 **Phase 1: Analysis, Planning, and Initial Information Request**
 
 %_Thought_%
-[Your detailed analysis of the proto changes, their potential impact on the codebase, and your high-level strategy for addressing them. For example: "The proto change X likely affects how message Y is serialized in FileA. Also, service Z now has a new method, which might require implementation in FileB and updates to client calls in FileC. I need to verify these."]
+[Analyze the proto changes and stub changes to understand what was added/modified. Consider how these changes affect the handwritten code in "Suspected Files". For example: "The proto added field X to message Y. The stub now includes getter/setter for X. The suspected file FileA needs to populate this new field when creating message Y."]
 
 
 
 %_Plan_%
 [
-  {"step": 1, "action": "REVIEW_FILE_CONTENT", "filePath": "{{first_suspected_file_path}}", "reason": "Initial suspected file, check direct impact of proto change."},  {"step": 2, "action": "REQUEST_FILE_CONTENT", "filePath": "path/to/potentially_affected_file.ext", "reason": "This file likely uses the modified message/service based on its name/location within {{surroundedFilePath}} and the nature of {{protoFileChanges}}."},
-  {"step": 3, "action": "MODIFY_FILE", "filePath": "{{first_suspected_file_path}}", "reason": "Apply necessary changes based on reviewed content and proto."},
-  // ... more plan steps
-]
-
+  {"step": 1, "action": "REVIEW_FILE_CONTENT", "filePath": "{{first_suspected_file_path}}", "reason": "Check how this file currently uses the proto messages/services that were modified."},
+  {"step": 2, "action": "REQUEST_FILE_CONTENT", "filePath": "path/to/stub_file.pb.go", "reason": "Review the updated stub to understand the exact API changes (if needed)."},
+  {"step": 3, "action": "MODIFY_FILE", "filePath": "{{first_suspected_file_path}}", "reason": "Update to use new proto fields/messages according to the updated schema."},
 
 
 // If your plan requires file content not in {{suspectedFiles}} or specific directory listings:
@@ -99,6 +120,25 @@ IMPORTANT - State Transitions:
 **IMPORTANT - Action Types**:
 - The "type" field in %_Reply Required_% must use ONLY the allowed action types listed in System State
 - Do NOT invent new action types (e.g., "SEARCH", "READ_FILE", etc.)
+
+---
+
+**Phase 2: Code Modification**
+
+Once you have analyzed the changes and gathered necessary file content, provide your code modifications:
+
+%_Thought_%
+[Explain your modification strategy: which files will be changed, what specific updates are needed, and why these changes address the proto/stub updates]
+
+%_Modified_%
+--- path/to/file.ext
+[Show the complete unified diff format patch. Include enough context lines (at least 3) before and after each change.]
+
+**CRITICAL**: 
+- You MUST output the `%_Modified_%` tag when providing code changes
+- The diff must be in proper unified diff format (with --- and +++ headers)
+- If you generate a patch, you MUST include the `%_Modified_%` tag
+- Do NOT output `%_No_Changes_Needed_%` if you are providing code modifications
 - Available types are defined by your current FSM state
 - The "action" field in %_Plan_% is for documentation only and is NOT executed by the system
 

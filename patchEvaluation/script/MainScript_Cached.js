@@ -72,7 +72,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ];
     
     // 現在選択されているデータセット（コマンドライン引数または デフォルト）
-    const selectedDataset = commandLineArgs.datasetPath || availableDatasets[5];
+    const selectedDataset = commandLineArgs.datasetPath || availableDatasets[2];
     const aprOutputPath = commandLineArgs.aprLogRootPath || commandLineArgs.aprOutputPath || path.join(projectRoot, "apr-logs");
 
     // キャッシュオプションの解析

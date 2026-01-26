@@ -152,6 +152,7 @@ export type PromptTemplateContext = {
     pullRequestTitle: string;
     protoFile: string;
     protoFileChanges: string;
+    stubFileChanges: string; // NEW: スタブのdiff
     fileChanges: string;
     surroundedFilePath: string;
     suspectedFiles: string;
@@ -162,6 +163,7 @@ export type PromptFileConfig = {
     promptTextfile: string;
     protoFile: string;
     protoFileChanges: string;
+    stubFileChanges: string; // NEW: スタブのdiff
     fileChanges: string;
     surroundedFilePath: string;
     suspectedFiles: string;

@@ -271,6 +271,61 @@ async function main() {
                 }
                 fs.writeFileSync(fileChangesPath, JSON.stringify(changedFiles, null, 2), 'utf8');
 
+                // ========================================================================
+                // 02a_stubFileChanges.txt の処理（gRPC生成ファイルのdiff）
+                // 03_fileChanges.txtの後に生成（changedFilesを使用するため）
+                // ========================================================================
+
+                try {
+                    if (!premergePath || !mergePath) {
+                        console.error('Premerge or merge path not found for stub file changes');
+                        continue;
+                    }
+                    
+                    // gRPC生成ファイルのパターン
+                    const GRPC_GEN_PATTERNS = [
+                        '.pb.go', '.pb.cc', '.pb.h',      // C++, Go
+                        '_pb2.py', '_pb2.pyi', '.pb2.py', // Python
+                        '_grpc.pb.go', '_grpc.pb.cc',     // gRPC service stubs
+                        '.grpc.pb.cc', '.grpc.pb.h'
+                    ];
+                    
+                    // 変更されたファイルからgRPC生成ファイルを抽出
+                    const changedStubFiles = changedFiles.filter((file: string) => 
+                        GRPC_GEN_PATTERNS.some(pattern => file.includes(pattern))
+                    );
+                    
+                    const stubFileChangesPath = path.join(pullRequestPath, '02a_stubFileChanges.txt');
+                    
+                    if (changedStubFiles.length > 0) {
+                        console.log(`Generating stub file changes for ${changedStubFiles.length} files...`);
+                        
+                        // getDiffsForSpecificFilesを使用
+                        const stubDiffResults = await getDiffsForSpecificFiles(changedStubFiles, premergePath, mergePath);
+                        
+                        if (fs.existsSync(stubFileChangesPath)) {
+                            fs.unlinkSync(stubFileChangesPath);
+                        }
+                        
+                        if (stubDiffResults.length > 0) {
+                            for (const result of stubDiffResults) {
+                                fs.appendFileSync(stubFileChangesPath, result.diff + '\n', 'utf8');
+                            }
+                            console.log(`Generated stub file changes: ${stubDiffResults.length} diffs`);
+                        } else {
+                            fs.writeFileSync(stubFileChangesPath, '# No stub file changes detected', 'utf8');
+                        }
+                    } else {
+                        if (fs.existsSync(stubFileChangesPath)) {
+                            fs.unlinkSync(stubFileChangesPath);
+                        }
+                        fs.writeFileSync(stubFileChangesPath, '# No stub files were modified in this commit', 'utf8');
+                        console.log('No stub files modified, placeholder written.');
+                    }
+                } catch (error: any) {
+                    console.error(`Error processing stub file changes: ${error.message}`);
+                }
+
 
                 // ========================================================================
                 // 04_surroundedFilePath.txt の処理
