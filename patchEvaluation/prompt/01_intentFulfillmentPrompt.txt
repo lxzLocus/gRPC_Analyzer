@@ -16,25 +16,22 @@ Evaluate whether the agent's modifications (or decision to make no changes) alig
 
 ## Evaluation Criteria
 
-### Intent Fulfillment Level (Type-Based)
+### Intent Fulfillment Score (0.0 to 1.0)
 
-Evaluate using one of the following discrete levels:
-
-- **FULLY_IMPLEMENTED** (1.0): Agent output completely implements the described intent
-- **SUBSTANTIALLY_IMPLEMENTED** (0.8): Agent output substantially implements the intent with minor gaps or edge cases
-- **PARTIALLY_IMPLEMENTED** (0.5): Agent output addresses part of the intent but leaves significant portions unimplemented
-- **DIRECTIONALLY_CORRECT** (0.3): Agent output shows correct understanding of intent but implementation is incomplete
-- **NOT_ADDRESSED** (0.0): Agent output does not address the intent at all
+- **1.0**: Agent output fully implements the described intent
+- **0.7-0.9**: Agent output substantially implements the intent with minor gaps
+- **0.4-0.6**: Agent output partially addresses the intent
+- **0.1-0.3**: Agent output is directionally correct but incomplete
+- **0.0**: Agent output does not address the intent at all
 
 ### Special Cases
 
 **No Changes Needed (Agent made no modifications):**
-- Level **FULLY_IMPLEMENTED** if: The described intent is already implemented, or requires changes outside the current scope
-- Level **NOT_ADDRESSED** or **DIRECTIONALLY_CORRECT** if: The described intent clearly requires changes that the agent should have made
+- Score **1.0** if: The described intent is already implemented, or requires changes outside the current scope
+- Score **0.0-0.3** if: The described intent clearly requires changes that the agent should have made
 
 **Partial Implementation:**
-- If the commit message describes multiple changes and the agent only implemented some, use **PARTIALLY_IMPLEMENTED**
-- If most (>70%) is implemented, use **SUBSTANTIALLY_IMPLEMENTED**
+- If the commit message describes multiple changes and the agent only implemented some, score proportionally
 
 ---
 
@@ -75,23 +72,13 @@ Provide your evaluation in the following JSON format:
 ```json
 {
   "intent_fulfillment": {
-    "level": "NOT_ADDRESSED",
+    "score": 0.0,
     "reasoning": "Explain whether the agent's output aligns with the commit message intent. Be specific about what was expected vs. what was delivered.",
     "commit_intent_summary": "Brief summary of what the commit message describes (1-2 sentences)",
     "agent_output_summary": "Brief summary of what the agent actually did (1-2 sentences)",
     "alignment_analysis": "Detailed analysis of alignment or misalignment"
   }
 }
-```
-
-### Valid IntentFulfillmentLevel Values
-```typescript
-type IntentFulfillmentLevel = 
-  | "FULLY_IMPLEMENTED"         // 1.0
-  | "SUBSTANTIALLY_IMPLEMENTED"  // 0.8
-  | "PARTIALLY_IMPLEMENTED"      // 0.5
-  | "DIRECTIONALLY_CORRECT"      // 0.3
-  | "NOT_ADDRESSED";             // 0.0
 ```
 
 ### Response Guidelines
@@ -108,32 +95,26 @@ type IntentFulfillmentLevel =
 ### Example 1: Full Implementation
 **Commit:** "Add validation for email field in user registration"
 **Agent:** Added email validation logic
-**Level:** FULLY_IMPLEMENTED
+**Score:** 1.0
 **Reasoning:** "The commit describes adding email validation, and the agent implemented comprehensive email validation with regex and format checks."
 
 ### Example 2: Valid No-op
 **Commit:** "Refactor database connection pooling"
 **Agent:** No Changes Needed - "Current implementation already uses connection pooling"
-**Level:** FULLY_IMPLEMENTED
+**Score:** 1.0
 **Reasoning:** "The agent correctly identified that the described intent (connection pooling) is already implemented in the codebase."
 
 ### Example 3: Misalignment
 **Commit:** "Update API endpoint to return user preferences"
 **Agent:** No Changes Needed
-**Level:** NOT_ADDRESSED
+**Score:** 0.0
 **Reasoning:** "The commit clearly describes adding new functionality (returning user preferences), but the agent made no changes without valid justification."
 
 ### Example 4: Partial Implementation
 **Commit:** "Add caching for user queries and update logging"
 **Agent:** Implemented caching but did not update logging
-**Level:** PARTIALLY_IMPLEMENTED
-**Reasoning:** "The commit describes two changes. The agent implemented caching but did not address the logging update, leaving significant functionality unimplemented."
-
-### Example 5: Substantial Implementation
-**Commit:** "Refactor authentication flow and add session timeout"
-**Agent:** Completely refactored authentication flow, but session timeout logic has a minor edge case issue
-**Level:** SUBSTANTIALLY_IMPLEMENTED
-**Reasoning:** "The agent implemented the major refactoring completely and added session timeout logic. Only a minor edge case remains, representing >90% completion of the described intent."
+**Score:** 0.5
+**Reasoning:** "The commit describes two changes. The agent implemented caching (50%) but did not address the logging update (50%)."
 
 ---
 

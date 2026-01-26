@@ -435,22 +435,6 @@ export class LLMEvaluationService {
     }
 
     /**
-     * Intent Fulfillment levelを数値スコアにマッピング
-     * @param {string} level - IntentFulfillmentLevel
-     * @returns {number} 数値スコア (0.0-1.0)
-     */
-    _mapIntentFulfillmentLevelToScore(level) {
-        const mapping = {
-            'FULLY_IMPLEMENTED': 1.0,
-            'SUBSTANTIALLY_IMPLEMENTED': 0.8,
-            'PARTIALLY_IMPLEMENTED': 0.5,
-            'DIRECTIONALLY_CORRECT': 0.3,
-            'NOT_ADDRESSED': 0.0
-        };
-        return mapping[level] ?? null;
-    }
-
-    /**
      * Intent Fulfillmentレスポンスのパース
      * @param {string} responseContent - LLMからのレスポンス内容
      * @returns {Object} パースされた評価結果
@@ -463,33 +447,18 @@ export class LLMEvaluationService {
 
                 // intent_fulfillmentネストがある場合は展開
                 if (parsed.intent_fulfillment) {
-                    const intentData = parsed.intent_fulfillment;
-                    
-                    // 新形式（level）の場合は数値スコアに変換
-                    let score = intentData.score;
-                    if (intentData.level !== undefined) {
-                        score = this._mapIntentFulfillmentLevelToScore(intentData.level);
-                    }
-                    
                     return {
-                        score: score,
-                        level: intentData.level,
-                        reasoning: intentData.reasoning,
-                        commit_intent_summary: intentData.commit_intent_summary,
-                        agent_output_summary: intentData.agent_output_summary,
-                        alignment_analysis: intentData.alignment_analysis
+                        score: parsed.intent_fulfillment.score,
+                        reasoning: parsed.intent_fulfillment.reasoning,
+                        commit_intent_summary: parsed.intent_fulfillment.commit_intent_summary,
+                        agent_output_summary: parsed.intent_fulfillment.agent_output_summary,
+                        alignment_analysis: parsed.intent_fulfillment.alignment_analysis
                     };
                 }
 
-                // 既にフラット構造の場合
-                let score = parsed.score;
-                if (parsed.level !== undefined) {
-                    score = this._mapIntentFulfillmentLevelToScore(parsed.level);
-                }
-                
+                // 既にフラット構造の場合はそのまま返す
                 return {
-                    score: score,
-                    level: parsed.level,
+                    score: parsed.score,
                     reasoning: parsed.reasoning,
                     commit_intent_summary: parsed.commit_intent_summary,
                     agent_output_summary: parsed.agent_output_summary,

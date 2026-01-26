@@ -8,7 +8,7 @@
 #
 # 例:
 #   sh scripts/batch.sh 0  # filtered_fewChanged（最初から）
-#   sh scripts/batch.sh 5  # incorrect_few
+#   sh scripts/batch.sh 4  # filtered_bugs
 #   sh scripts/batch.sh 0 --resume "boulder" "issue" "pr_title"  # 途中から再開
 #
 # 進捗確認:
