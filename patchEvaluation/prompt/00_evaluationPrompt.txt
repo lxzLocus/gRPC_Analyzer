@@ -14,21 +14,18 @@ You MUST evaluate the agent's output along the following four dimensions. These 
   - **Rationale:** Auto-generated files are produced by tools (e.g., `protoc`) and are not part of the agent's repair task
   - **If the Ground Truth Patch contains changes to auto-generated files, IGNORE those changes when scoring Accuracy**
   - **Focus ONLY on handwritten business logic, service implementations, and manually maintained code**
-- A decision to make no changes MUST be assigned the type `NO_MATCH`.
-- **CRITICAL: You MUST ALWAYS provide an 'Accuracy Level' by selecting ONE of the following types.**
+- A decision to make no changes MUST be scored as 0.0.
+- **CRITICAL: You MUST ALWAYS provide an 'Accuracy Score' (0.0 to 1.0) based on the following rubric.**
 
-#### Accuracy Level Types (MANDATORY - Select ONE):
-
-| Type | Score | Description |
+#### Rubric for Accuracy Score (MANDATORY):
+| Score | Level | Description |
 | :--- | :--- | :--- |
-| **PERFECT_MATCH** | 1.0 | The patch is `Correct` (meets R0-R15 criteria for semantic equivalence). |
-| **NEAR_PERFECT** | 0.9 | Achieves the goal with only trivial, harmless differences not covered by R1-R15 (e.g., different log messages, cosmetic variations). |
-| **HIGH_SIMILARITY** | 0.75 | Modifies the correct functions/files with the correct core logic, but misses a minor edge case or has a small side effect. |
-| **PARTIAL_MATCH** | 0.55 | Modifies the correct files/functions, but the implementation logic is flawed or incomplete. |
-| **CORRECT_LOCUS** | 0.3 | Identifies the correct *location* for the fix, but the implementation logic is fundamentally wrong. |
-| **NO_MATCH** | 0.0 | Modifies the wrong files, the logic is completely unrelated, or no changes were made when modification was needed. |
-
-**NOTE:** These types map to numerical scores internally, but you MUST return the type name (e.g., "PERFECT_MATCH"), NOT the numerical value.
+| **1.0** | **Perfect Match** | The patch is `Correct` (meets R0-R15 criteria). |
+| **0.9** | **Near Perfect** | Achieves the goal with only trivial, harmless differences not covered by R1-R15 (e.g., different log messages). |
+| **0.7-0.8**| **High Similarity** | Modifies the correct functions/files with the correct core logic, but misses a minor edge case or has a small side effect. |
+| **0.5-0.6**| **Partial Match** | Modifies the correct files/functions, but the implementation logic is flawed or incomplete. |
+| **0.2-0.4**| **Correct Locus** | Identifies the correct *location* for the fix, but the implementation logic is fundamentally wrong. |
+| **0.0-0.1**| **No Match** | Modifies the wrong files, the logic is completely unrelated, or no changes were made. |
 
 #### Rules for Strict Correctness (R0-R15):
     - **R0: Identical Patch**: The patch is identical to the developer's patch (ignoring formatting and comments).
@@ -171,7 +168,7 @@ Based on all the provided information and the strict criteria above, provide you
 ```json
 {
   "accuracy": {
-    "level": "NO_MATCH",
+    "score": 0.0,
     "reasoning": "No changes were made, so the result does not match the final commit."
   },
   "decision_soundness": {
@@ -195,28 +192,20 @@ Based on all the provided information and the strict criteria above, provide you
 
 ### JSON Field Definitions
 
-  - **accuracy.level**: One of the predefined accuracy level types: "PERFECT_MATCH", "NEAR_PERFECT", "HIGH_SIMILARITY", "PARTIAL_MATCH", "CORRECT_LOCUS", or "NO_MATCH". This will be mapped to a numerical score (0.0 to 1.0) by the system.
+  - **accuracy.score**: A score from 0.0 to 1.0 indicating how closely the agent's output matches the Ground Truth Patch, based on the provided rubric.
   - **decision_soundness.score**: Binary score (1.0 or 0.0) indicating whether the agent's decision was sound given the available information, without reference to the Ground Truth Patch.
   - **directional_consistency.score**: Binary score (1.0 or 0.0) indicating whether the agent's output is consistent with the direction of the Ground Truth Patch.
   - **validity.score**: Binary score (1.0 or 0.0) indicating whether the agent's output is syntactically and semantically valid.
-  - **reasoning**: A brief explanation justifying the assigned score/level for each dimension.
+  - **reasoning**: A brief explanation justifying the assigned score for each dimension.
   - **analysis_labels.repair_types**: Array of repair type enum values (for post-analysis, does NOT affect scores).
   - **analysis_labels.semantic_rules_applied**: Array of R-rules that apply (e.g., ["R4", "R9"]) when accuracy is high.
 
 ### TypeScript Interface Definition
 
 ```typescript
-type AccuracyLevel = 
-  | "PERFECT_MATCH"      // 1.0
-  | "NEAR_PERFECT"       // 0.9
-  | "HIGH_SIMILARITY"    // 0.75
-  | "PARTIAL_MATCH"      // 0.55
-  | "CORRECT_LOCUS"      // 0.3
-  | "NO_MATCH";          // 0.0
-
 interface EvaluationResult {
   accuracy: {
-    level: AccuracyLevel; // Type-based accuracy level
+    score: number; // 0.0 to 1.0
     reasoning: string;
   };
   decision_soundness: {

@@ -23,24 +23,6 @@ export class LLMEvaluationService {
     }
 
     /**
-     * Accuracy levelタイプから数値スコアへの変換
-     * @param {string} accuracyLevel - Accuracy level type (PERFECT_MATCH, NEAR_PERFECT, etc.)
-     * @returns {number} Numerical score (0.0-1.0)
-     */
-    _mapAccuracyLevelToScore(accuracyLevel) {
-        const mapping = {
-            'PERFECT_MATCH': 1.0,
-            'NEAR_PERFECT': 0.9,
-            'HIGH_SIMILARITY': 0.75,
-            'PARTIAL_MATCH': 0.55,
-            'CORRECT_LOCUS': 0.3,
-            'NO_MATCH': 0.0
-        };
-        
-        return mapping[accuracyLevel] !== undefined ? mapping[accuracyLevel] : 0.0;
-    }
-
-    /**
      * 4軸評価用ヘルパーメソッド：accuracyスコアからsemantic_equivalence_levelへのマッピング
      * @param {number} accuracyScore - Accuracy score (0.0-1.0)
      * @returns {string} Semantic equivalence level
@@ -129,25 +111,9 @@ export class LLMEvaluationService {
                 
                 // 4軸評価形式（新形式）
                 if (parsed.accuracy !== undefined) {
-                    // Accuracy levelが文字列型の場合、数値スコアに変換
-                    let accuracyScore = 0;
-                    if (typeof parsed.accuracy === 'object') {
-                        if (parsed.accuracy.level !== undefined) {
-                            // 新形式：タイプベース
-                            accuracyScore = this._mapAccuracyLevelToScore(parsed.accuracy.level);
-                        } else if (parsed.accuracy.score !== undefined) {
-                            // 旧形式：数値スコア
-                            accuracyScore = parsed.accuracy.score;
-                        }
-                    }
-                    
                     return {
-                        // 4軸評価スコア（数値化）
-                        accuracy: {
-                            level: parsed.accuracy.level || null,
-                            score: accuracyScore,
-                            reasoning: parsed.accuracy.reasoning
-                        },
+                        // 4軸評価スコア
+                        accuracy: parsed.accuracy,
                         decision_soundness: parsed.decision_soundness,
                         directional_consistency: parsed.directional_consistency,
                         validity: parsed.validity,
@@ -156,17 +122,12 @@ export class LLMEvaluationService {
                         analysis_labels: parsed.analysis_labels,
                         
                         // 統合評価
-                        overall_assessment: parsed.overall_assessment || this._deriveOverallAssessment({
-                            accuracy: { score: accuracyScore },
-                            decision_soundness: parsed.decision_soundness,
-                            directional_consistency: parsed.directional_consistency,
-                            validity: parsed.validity
-                        }),
+                        overall_assessment: parsed.overall_assessment || this._deriveOverallAssessment(parsed),
                         
                         // 後方互換性のための変換
-                        is_correct: accuracyScore >= 0.7,
+                        is_correct: (parsed.accuracy?.score || 0) >= 0.7,
                         is_plausible: (parsed.validity?.score || 0) === 1.0,
-                        semantic_equivalence_level: this._mapAccuracyToLevel(accuracyScore)
+                        semantic_equivalence_level: this._mapAccuracyToLevel(parsed.accuracy?.score || 0)
                     };
                 }
                 
