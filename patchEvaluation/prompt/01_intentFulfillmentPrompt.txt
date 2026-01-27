@@ -16,22 +16,24 @@ Evaluate whether the agent's modifications (or decision to make no changes) alig
 
 ## Evaluation Criteria
 
-### Intent Fulfillment Score (0.0 to 1.0)
+### Intent Fulfillment Label (Choose ONE)
 
-- **1.0**: Agent output fully implements the described intent
-- **0.7-0.9**: Agent output substantially implements the intent with minor gaps
-- **0.4-0.6**: Agent output partially addresses the intent
-- **0.1-0.3**: Agent output is directionally correct but incomplete
-- **0.0**: Agent output does not address the intent at all
+| Label | Description | Score Equivalent |
+| :--- | :--- | :--- |
+| **FULLY_FULFILLED** | Agent output completely implements the described intent | 1.0 |
+| **SUBSTANTIALLY_FULFILLED** | Agent output substantially implements the intent with minor gaps | 0.8 |
+| **PARTIALLY_FULFILLED** | Agent output partially addresses the intent | 0.5 |
+| **MINIMALLY_FULFILLED** | Agent output is directionally correct but very incomplete | 0.2 |
+| **NOT_FULFILLED** | Agent output does not address the intent at all | 0.0 |
 
 ### Special Cases
 
 **No Changes Needed (Agent made no modifications):**
-- Score **1.0** if: The described intent is already implemented, or requires changes outside the current scope
-- Score **0.0-0.3** if: The described intent clearly requires changes that the agent should have made
+- Label **FULLY_FULFILLED** if: The described intent is already implemented, or requires changes outside the current scope
+- Label **NOT_FULFILLED** if: The described intent clearly requires changes that the agent should have made
 
 **Partial Implementation:**
-- If the commit message describes multiple changes and the agent only implemented some, score proportionally
+- If the commit message describes multiple changes and the agent only implemented some, use **PARTIALLY_FULFILLED** or **SUBSTANTIALLY_FULFILLED** based on coverage
 
 ---
 
@@ -72,7 +74,7 @@ Provide your evaluation in the following JSON format:
 ```json
 {
   "intent_fulfillment": {
-    "score": 0.0,
+    "label": "NOT_FULFILLED",
     "reasoning": "Explain whether the agent's output aligns with the commit message intent. Be specific about what was expected vs. what was delivered.",
     "commit_intent_summary": "Brief summary of what the commit message describes (1-2 sentences)",
     "agent_output_summary": "Brief summary of what the agent actually did (1-2 sentences)",
@@ -87,6 +89,7 @@ Provide your evaluation in the following JSON format:
 2. **Consider context**: "No Changes Needed" can be valid
 3. **Be specific**: Reference specific parts of the commit message
 4. **Separate concerns**: Don't penalize for implementation details if the intent is met
+5. **Use labels consistently**: Choose the label that best matches the degree of fulfillment
 
 ---
 
@@ -95,25 +98,25 @@ Provide your evaluation in the following JSON format:
 ### Example 1: Full Implementation
 **Commit:** "Add validation for email field in user registration"
 **Agent:** Added email validation logic
-**Score:** 1.0
+**Label:** FULLY_FULFILLED
 **Reasoning:** "The commit describes adding email validation, and the agent implemented comprehensive email validation with regex and format checks."
 
 ### Example 2: Valid No-op
 **Commit:** "Refactor database connection pooling"
 **Agent:** No Changes Needed - "Current implementation already uses connection pooling"
-**Score:** 1.0
+**Label:** FULLY_FULFILLED
 **Reasoning:** "The agent correctly identified that the described intent (connection pooling) is already implemented in the codebase."
 
 ### Example 3: Misalignment
 **Commit:** "Update API endpoint to return user preferences"
 **Agent:** No Changes Needed
-**Score:** 0.0
+**Label:** NOT_FULFILLED
 **Reasoning:** "The commit clearly describes adding new functionality (returning user preferences), but the agent made no changes without valid justification."
 
 ### Example 4: Partial Implementation
 **Commit:** "Add caching for user queries and update logging"
 **Agent:** Implemented caching but did not update logging
-**Score:** 0.5
+**Label:** PARTIALLY_FULFILLED
 **Reasoning:** "The commit describes two changes. The agent implemented caching (50%) but did not address the logging update (50%)."
 
 ---

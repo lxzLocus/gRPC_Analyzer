@@ -23,15 +23,35 @@ export class LLMEvaluationService {
     }
 
     /**
-     * 4軸評価用ヘルパーメソッド：accuracyスコアからsemantic_equivalence_levelへのマッピング
-     * @param {number} accuracyScore - Accuracy score (0.0-1.0)
+     * 4軸評価用ヘルパーメソッド：accuracyラベルからレガシースコアへのマッピング（後方互換性）
+     * @param {string} accuracyLabel - Accuracy label
+     * @returns {number} Legacy score (0.0-1.0)
+     */
+    _mapLabelToScore(accuracyLabel) {
+        const labelToScore = {
+            'IDENTICAL': 1.0,
+            'SEMANTICALLY_EQUIVALENT': 0.85,
+            'PARTIALLY_CORRECT': 0.5,
+            'WRONG_APPROACH': 0.25,
+            'NO_MATCH': 0.0
+        };
+        return labelToScore[accuracyLabel] || 0.0;
+    }
+
+    /**
+     * 4軸評価用ヘルパーメソッド：accuracyラベルからsemantic_equivalence_levelへのマッピング
+     * @param {string} accuracyLabel - Accuracy label
      * @returns {string} Semantic equivalence level
      */
-    _mapAccuracyToLevel(accuracyScore) {
-        if (accuracyScore >= 0.95) return 'IDENTICAL';
-        if (accuracyScore >= 0.7) return 'SEMANTICALLY_EQUIVALENT';
-        if (accuracyScore >= 0.3) return 'PLAUSIBLE_BUT_DIFFERENT';
-        return 'INCORRECT';
+    _mapLabelToSemanticLevel(accuracyLabel) {
+        const labelMapping = {
+            'IDENTICAL': 'IDENTICAL',
+            'SEMANTICALLY_EQUIVALENT': 'SEMANTICALLY_EQUIVALENT',
+            'PARTIALLY_CORRECT': 'PLAUSIBLE_BUT_DIFFERENT',
+            'WRONG_APPROACH': 'INCORRECT',
+            'NO_MATCH': 'INCORRECT'
+        };
+        return labelMapping[accuracyLabel] || 'INCORRECT';
     }
 
     /**
@@ -40,26 +60,16 @@ export class LLMEvaluationService {
      * @returns {string} Overall assessment
      */
     _deriveOverallAssessment(evaluation) {
-        const accuracy = evaluation.accuracy?.score || 0;
-        const decisionSoundness = evaluation.decision_soundness?.score || 0;
-        const directionalConsistency = evaluation.directional_consistency?.score || 0;
-        const validity = evaluation.validity?.score || 0;
+        const accuracyLabel = evaluation.accuracy?.label || 'NO_MATCH';
+        const validityLabel = evaluation.validity?.label || 'INVALID';
         
-        // 全て合格なら最高評価
-        if (accuracy >= 0.95 && decisionSoundness === 1.0 && directionalConsistency === 1.0 && validity === 1.0) {
-            return 'IDENTICAL';
+        // Validityが無効なら常にINCORRECT
+        if (validityLabel === 'INVALID') {
+            return 'INCORRECT';
         }
         
-        // Accuracyベースの評価
-        if (accuracy >= 0.7 && validity === 1.0) {
-            return 'SEMANTICALLY_EQUIVALENT';
-        }
-        
-        if (accuracy >= 0.3 && validity === 1.0) {
-            return 'PLAUSIBLE_BUT_DIFFERENT';
-        }
-        
-        return 'INCORRECT';
+        // Accuracyラベルに基づいて評価
+        return this._mapLabelToSemanticLevel(accuracyLabel);
     }
 
     /**
@@ -109,10 +119,13 @@ export class LLMEvaluationService {
             if (responseContent.trim().startsWith('{')) {
                 const parsed = JSON.parse(responseContent);
                 
-                // 4軸評価形式（新形式）
-                if (parsed.accuracy !== undefined) {
+                // 4軸評価形式（新ラベルベース形式）
+                if (parsed.accuracy?.label !== undefined) {
+                    const accuracyLabel = parsed.accuracy.label;
+                    const validityLabel = parsed.validity?.label || 'VALID';
+                    
                     return {
-                        // 4軸評価スコア
+                        // 4軸評価（ラベル形式）
                         accuracy: parsed.accuracy,
                         decision_soundness: parsed.decision_soundness,
                         directional_consistency: parsed.directional_consistency,
@@ -124,10 +137,54 @@ export class LLMEvaluationService {
                         // 統合評価
                         overall_assessment: parsed.overall_assessment || this._deriveOverallAssessment(parsed),
                         
-                        // 後方互換性のための変換
-                        is_correct: (parsed.accuracy?.score || 0) >= 0.7,
+                        // 後方互換性のための変換（レガシーシステム用）
+                        is_correct: ['IDENTICAL', 'SEMANTICALLY_EQUIVALENT'].includes(accuracyLabel),
+                        is_plausible: validityLabel === 'VALID',
+                        semantic_equivalence_level: this._mapLabelToSemanticLevel(accuracyLabel),
+                        
+                        // スコア形式への変換（統計・グラフ用）
+                        accuracy_score: this._mapLabelToScore(accuracyLabel),
+                        decision_soundness_score: parsed.decision_soundness?.label === 'SOUND' ? 1.0 : 0.0,
+                        directional_consistency_score: parsed.directional_consistency?.label === 'CONSISTENT' ? 1.0 : 0.0,
+                        validity_score: validityLabel === 'VALID' ? 1.0 : 0.0
+                    };
+                }
+                
+                // 旧スコア形式（後方互換性）
+                if (parsed.accuracy?.score !== undefined) {
+                    const accuracyScore = parsed.accuracy.score;
+                    
+                    return {
+                        // 旧形式のスコアをラベルに変換
+                        accuracy: {
+                            label: this._scoreToLabel(accuracyScore),
+                            reasoning: parsed.accuracy.reasoning,
+                            score: accuracyScore // 保持
+                        },
+                        decision_soundness: {
+                            label: parsed.decision_soundness?.score === 1.0 ? 'SOUND' : 'UNSOUND',
+                            reasoning: parsed.decision_soundness?.reasoning || ''
+                        },
+                        directional_consistency: {
+                            label: parsed.directional_consistency?.score === 1.0 ? 'CONSISTENT' : 'CONTRADICTORY',
+                            reasoning: parsed.directional_consistency?.reasoning || ''
+                        },
+                        validity: {
+                            label: parsed.validity?.score === 1.0 ? 'VALID' : 'INVALID',
+                            reasoning: parsed.validity?.reasoning || ''
+                        },
+                        analysis_labels: parsed.analysis_labels,
+                        overall_assessment: this._deriveOverallAssessment({
+                            accuracy: { label: this._scoreToLabel(accuracyScore) },
+                            validity: { label: parsed.validity?.score === 1.0 ? 'VALID' : 'INVALID' }
+                        }),
+                        is_correct: accuracyScore >= 0.7,
                         is_plausible: (parsed.validity?.score || 0) === 1.0,
-                        semantic_equivalence_level: this._mapAccuracyToLevel(parsed.accuracy?.score || 0)
+                        semantic_equivalence_level: this._mapAccuracyToLevel(accuracyScore),
+                        accuracy_score: accuracyScore,
+                        decision_soundness_score: parsed.decision_soundness?.score || 0,
+                        directional_consistency_score: parsed.directional_consistency?.score || 0,
+                        validity_score: parsed.validity?.score || 0
                     };
                 }
                 
@@ -179,6 +236,31 @@ export class LLMEvaluationService {
                 parse_error: error.message
             };
         }
+    }
+
+    /**
+     * スコアからラベルへの変換（旧形式の後方互換性用）
+     * @param {number} score - Accuracy score (0.0-1.0)
+     * @returns {string} Accuracy label
+     */
+    _scoreToLabel(score) {
+        if (score >= 0.95) return 'IDENTICAL';
+        if (score >= 0.7) return 'SEMANTICALLY_EQUIVALENT';
+        if (score >= 0.4) return 'PARTIALLY_CORRECT';
+        if (score >= 0.15) return 'WRONG_APPROACH';
+        return 'NO_MATCH';
+    }
+
+    /**
+     * レガシー用：スコアからレベルへのマッピング
+     * @param {number} accuracyScore - Accuracy score (0.0-1.0)
+     * @returns {string} Semantic equivalence level
+     */
+    _mapAccuracyToLevel(accuracyScore) {
+        if (accuracyScore >= 0.95) return 'IDENTICAL';
+        if (accuracyScore >= 0.7) return 'SEMANTICALLY_EQUIVALENT';
+        if (accuracyScore >= 0.3) return 'PLAUSIBLE_BUT_DIFFERENT';
+        return 'INCORRECT';
     }
 
     /**
@@ -445,25 +527,62 @@ export class LLMEvaluationService {
             if (responseContent.trim().startsWith('{')) {
                 const parsed = JSON.parse(responseContent);
 
-                // intent_fulfillmentネストがある場合は展開
+                // intent_fulfillmentネストがある場合
                 if (parsed.intent_fulfillment) {
+                    const intentFulfillment = parsed.intent_fulfillment;
+                    
+                    // ラベルベース形式（新形式）
+                    if (intentFulfillment.label !== undefined) {
+                        return {
+                            label: intentFulfillment.label,
+                            reasoning: intentFulfillment.reasoning,
+                            commit_intent_summary: intentFulfillment.commit_intent_summary,
+                            agent_output_summary: intentFulfillment.agent_output_summary,
+                            alignment_analysis: intentFulfillment.alignment_analysis,
+                            // 統計用にスコアも生成
+                            score: this._intentLabelToScore(intentFulfillment.label)
+                        };
+                    }
+                    
+                    // スコアベース形式（旧形式・後方互換性）
+                    if (intentFulfillment.score !== undefined) {
+                        return {
+                            label: this._intentScoreToLabel(intentFulfillment.score),
+                            score: intentFulfillment.score,
+                            reasoning: intentFulfillment.reasoning,
+                            commit_intent_summary: intentFulfillment.commit_intent_summary,
+                            agent_output_summary: intentFulfillment.agent_output_summary,
+                            alignment_analysis: intentFulfillment.alignment_analysis
+                        };
+                    }
+                }
+
+                // フラット構造でラベルがある場合
+                if (parsed.label !== undefined) {
                     return {
-                        score: parsed.intent_fulfillment.score,
-                        reasoning: parsed.intent_fulfillment.reasoning,
-                        commit_intent_summary: parsed.intent_fulfillment.commit_intent_summary,
-                        agent_output_summary: parsed.intent_fulfillment.agent_output_summary,
-                        alignment_analysis: parsed.intent_fulfillment.alignment_analysis
+                        label: parsed.label,
+                        reasoning: parsed.reasoning,
+                        commit_intent_summary: parsed.commit_intent_summary,
+                        agent_output_summary: parsed.agent_output_summary,
+                        alignment_analysis: parsed.alignment_analysis,
+                        score: this._intentLabelToScore(parsed.label)
                     };
                 }
 
-                // 既にフラット構造の場合はそのまま返す
-                return {
-                    score: parsed.score,
-                    reasoning: parsed.reasoning,
-                    commit_intent_summary: parsed.commit_intent_summary,
-                    agent_output_summary: parsed.agent_output_summary,
-                    alignment_analysis: parsed.alignment_analysis
-                };
+                // フラット構造でスコアがある場合（旧形式）
+                if (parsed.score !== undefined) {
+                    return {
+                        label: this._intentScoreToLabel(parsed.score),
+                        score: parsed.score,
+                        reasoning: parsed.reasoning,
+                        commit_intent_summary: parsed.commit_intent_summary,
+                        agent_output_summary: parsed.agent_output_summary,
+                        alignment_analysis: parsed.alignment_analysis
+                    };
+                }
+
+                // その他の形式
+                return parsed;
             }
 
             // テキスト形式の場合のエラー
@@ -477,6 +596,35 @@ export class LLMEvaluationService {
                 parse_error: error.message
             };
         }
+    }
+
+    /**
+     * Intent Fulfillmentラベルをスコアに変換
+     * @param {string} label - Intent fulfillment label
+     * @returns {number} Score (0.0-1.0)
+     */
+    _intentLabelToScore(label) {
+        const labelToScore = {
+            'FULLY_FULFILLED': 1.0,
+            'SUBSTANTIALLY_FULFILLED': 0.8,
+            'PARTIALLY_FULFILLED': 0.5,
+            'MINIMALLY_FULFILLED': 0.2,
+            'NOT_FULFILLED': 0.0
+        };
+        return labelToScore[label] || 0.0;
+    }
+
+    /**
+     * Intent Fulfillmentスコアをラベルに変換（旧形式の後方互換性用）
+     * @param {number} score - Intent fulfillment score (0.0-1.0)
+     * @returns {string} Intent fulfillment label
+     */
+    _intentScoreToLabel(score) {
+        if (score >= 0.95) return 'FULLY_FULFILLED';
+        if (score >= 0.65) return 'SUBSTANTIALLY_FULFILLED';
+        if (score >= 0.35) return 'PARTIALLY_FULFILLED';
+        if (score >= 0.05) return 'MINIMALLY_FULFILLED';
+        return 'NOT_FULFILLED';
     }
 }
 

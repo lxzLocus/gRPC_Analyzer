@@ -11,6 +11,22 @@ class PRStatisticsService {
     }
 
     /**
+     * Accuracyラベルをスコアに変換（統計計算用）
+     * @param {string} label - Accuracy label
+     * @returns {number} Numeric score (0.0-1.0)
+     */
+    _labelToScore(label) {
+        const labelToScore = {
+            'IDENTICAL': 1.0,
+            'SEMANTICALLY_EQUIVALENT': 0.85,
+            'PARTIALLY_CORRECT': 0.5,
+            'WRONG_APPROACH': 0.25,
+            'NO_MATCH': 0.0
+        };
+        return labelToScore[label] || 0.0;
+    }
+
+    /**
      * PRごとの統計をレポートから生成
      * @param {Object} reportData - detailed_analysis_report のデータ
      * @returns {Object} PRごとの統計
@@ -129,19 +145,31 @@ class PRStatisticsService {
             if (pr.fourAxisEvaluation) {
                 stats.fourAxisStatistics.totalEvaluated++;
                 
-                if (pr.fourAxisEvaluation.accuracy?.score !== undefined) {
+                // ラベル形式の評価に対応
+                if (pr.fourAxisEvaluation.accuracy?.label !== undefined) {
+                    // ラベルをスコアに変換して蓄積（統計用）
+                    const accuracyScore = this._labelToScore(pr.fourAxisEvaluation.accuracy.label);
+                    stats.fourAxisStatistics.accuracyScores.push(accuracyScore);
+                } else if (pr.fourAxisEvaluation.accuracy?.score !== undefined) {
+                    // 旧形式のスコアをそのまま使用
                     stats.fourAxisStatistics.accuracyScores.push(pr.fourAxisEvaluation.accuracy.score);
                 }
                 
-                if (pr.fourAxisEvaluation.decision_soundness?.score === 1.0) {
+                // Decision Soundness
+                if (pr.fourAxisEvaluation.decision_soundness?.label === 'SOUND' ||
+                    pr.fourAxisEvaluation.decision_soundness?.score === 1.0) {
                     stats.fourAxisStatistics.decisionSoundnessPass++;
                 }
                 
-                if (pr.fourAxisEvaluation.directional_consistency?.score === 1.0) {
+                // Directional Consistency
+                if (pr.fourAxisEvaluation.directional_consistency?.label === 'CONSISTENT' ||
+                    pr.fourAxisEvaluation.directional_consistency?.score === 1.0) {
                     stats.fourAxisStatistics.directionalConsistencyPass++;
                 }
                 
-                if (pr.fourAxisEvaluation.validity?.score === 1.0) {
+                // Validity
+                if (pr.fourAxisEvaluation.validity?.label === 'VALID' ||
+                    pr.fourAxisEvaluation.validity?.score === 1.0) {
                     stats.fourAxisStatistics.validityPass++;
                 }
             }

@@ -199,11 +199,13 @@ async function main() {
                 
                 const protoFilePath = path.join(pullRequestPath, '01_proto.txt');
 
-                // 既存のファイルがあれば削除
-                if (fs.existsSync(protoFilePath)) {
-                    fs.unlinkSync(protoFilePath);
+                // ファイルを書き込み（既存ファイルは自動上書き）
+                try {
+                    fs.writeFileSync(protoFilePath, JSON.stringify(protoOutput, null, 2), 'utf8');
+                } catch (err) {
+                    console.error(`Error writing ${protoFilePath}:`, err);
+                    continue;
                 }
-                fs.writeFileSync(protoFilePath, JSON.stringify(protoOutput, null, 2), 'utf8');
                 console.log(`Generated optimized proto file list: ${relevantProtoFiles.length} full content files, ${otherProtoFilePaths.length} path-only files`);
 
                 // ========================================================================
@@ -217,35 +219,22 @@ async function main() {
                     }
                     const diffResults = await getFilesDiff(premergePath, mergePath, 'proto');
                     const protoFileChangesPath = path.join(pullRequestPath, '02_protoFileChanges.txt');
-                    if (diffResults.length > 0) {
-                        // 既存のファイルがあれば削除
-                        if (fs.existsSync(protoFileChangesPath)) {
-                            fs.unlinkSync(protoFileChangesPath);
-                        }
-                        // 新しいファイルを作成
-                        for (const result of diffResults) {
-                            try {
-                                fs.appendFileSync(protoFileChangesPath, result.diff + '\n', 'utf8');
-                            } catch (error) {
-                                console.error(`Error appending to file: ${protoFileChangesPath}`, error);
+                    
+                    try {
+                        if (diffResults.length > 0) {
+                            // 新しいファイルを作成（既存は上書き）
+                            let allDiffs = '';
+                            for (const result of diffResults) {
+                                allDiffs += result.diff + '\n';
                             }
-                        }
-                    } else {
-
-                        // 既存のファイルがあれば削除
-                        if (fs.existsSync(protoFileChangesPath)) {
-                            fs.unlinkSync(protoFileChangesPath);
-                        }
-                        // 空配列を書き込む（変更がないことを明示）
-                        
-                        try {
+                            fs.writeFileSync(protoFileChangesPath, allDiffs, 'utf8');
+                        } else {
+                            // 空配列を書き込む（変更がないことを明示）
                             fs.writeFileSync(protoFileChangesPath, '[]', 'utf8');
-                        } catch (error) {
-                            console.error(`Error writing to file: ${protoFileChangesPath}`, error);
+                            console.log('No proto file changes detected, empty array written.');
                         }
-                        
-
-                        console.log('No proto file changes detected, empty array written.');
+                    } catch (error) {
+                        console.error(`Error writing ${protoFileChangesPath}:`, error);
                     }
                 } catch (error: any) {
                     console.error(`Error processing proto file changes: ${error.message}`);
@@ -265,11 +254,13 @@ async function main() {
                 console.log('Changed Files:', changedFiles); // デバッグ用
                 const fileChangesPath = path.join(pullRequestPath, '03_fileChanges.txt');
 
-                // 既存のファイルがあれば削除
-                if (fs.existsSync(fileChangesPath)) {
-                    fs.unlinkSync(fileChangesPath);
+                // ファイルを書き込み（既存は上書き）
+                try {
+                    fs.writeFileSync(fileChangesPath, JSON.stringify(changedFiles, null, 2), 'utf8');
+                } catch (err) {
+                    console.error(`Error writing ${fileChangesPath}:`, err);
+                    continue;
                 }
-                fs.writeFileSync(fileChangesPath, JSON.stringify(changedFiles, null, 2), 'utf8');
 
 
                 // ========================================================================
@@ -281,26 +272,52 @@ async function main() {
                 const GRPC_GEN_PATTERNS = ['.pb.', '_pb2.', '.pb2.', '.pb.go', '.pb.cc', '.pb.h', '.pb.rb', '.pb.swift', '.pb.m', '.pb-c.', '.pb-c.h', '.pb-c.c'];
                 const EXCLUDED_PATTERNS = ['.md', '.markdown', '.log', '.lock', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', 'Dockerfile', 'docker-compose.yml', '.dockerignore', 'LICENSE', '.github/', '.circleci/', '.vscode/', 'docs/'];
                 const isGeneratedFile = (filePath: string) => GRPC_GEN_PATTERNS.some(pat => filePath.includes(pat));
-                const isTestFile = (filePath: string) => filePath.toLowerCase().includes('test');
+                const isTestFile = (filePath: string) => {
+                    const lower = filePath.toLowerCase();
+                    // より正確なテストファイル判定: test/, tests/, *_test.*, *_spec.*, test_*.* のみを対象
+                    return lower.includes('/test/') || 
+                           lower.includes('/tests/') || 
+                           lower.includes('_test.') || 
+                           lower.includes('_spec.') || 
+                           lower.includes('test_');
+                };
                 const isExcludedFile = (filePath: string) => EXCLUDED_PATTERNS.some(pat => filePath.includes(pat));
 
                 const protoFiles: string[] = [];
                 const generatedFiles: string[] = [];
                 const handwrittenFiles: string[] = [];
+                const testFiles: string[] = []; // テストファイル用の配列を追加
+                const excludedFiles: string[] = []; // 除外ファイル用の配列を追加
 
                 changedFiles.forEach((file: string) => {
                     if (file.endsWith('.proto')) {
                         protoFiles.push(file);
                     } else if (isGeneratedFile(file)) {
                         generatedFiles.push(file);
-                    } else if (!isExcludedFile(file) && !isTestFile(file)) {
-                        handwrittenFiles.push(file);
+                    } else if (isTestFile(file)) {
+                        testFiles.push(file); // テストファイルを分離
+                    } else if (isExcludedFile(file)) {
+                        excludedFiles.push(file); // 除外ファイルを分離
+                    } else {
+                        handwrittenFiles.push(file); // 残りはhandwritten
                     }
                 });
 
                 console.log('Categorized Proto Files:', protoFiles);
                 console.log('Categorized Generated Files:', generatedFiles);
                 console.log('Categorized Handwritten Files:', handwrittenFiles);
+                console.log('Categorized Test Files:', testFiles);
+                console.log('Categorized Excluded Files:', excludedFiles);
+                
+                // デバッグ情報: handwrittenFilesが空の場合、詳細を出力
+                if (handwrittenFiles.length === 0) {
+                    console.warn('⚠️ No handwritten files found after categorization!');
+                    console.warn('   Total changed files:', changedFiles.length);
+                    console.warn('   Proto files:', protoFiles.length);
+                    console.warn('   Generated files:', generatedFiles.length);
+                    console.warn('   Test files:', testFiles.length);
+                    console.warn('   Excluded files:', excludedFiles.length);
+                }
 
 
                 // ステップB: トップダウンでプロジェクト全体の詳細な構造を一度に取得
@@ -411,11 +428,13 @@ async function main() {
 
                 // ステップE: 最終的な構造をファイルに書き込む
                 const structureFilePath = path.join(pullRequestPath, '04_surroundedFilePath.txt');
-                if (fs.existsSync(structureFilePath)) {
-                    fs.unlinkSync(structureFilePath);
+                try {
+                    fs.writeFileSync(structureFilePath, JSON.stringify(masterOutput, null, 2), 'utf8');
+                    console.log(`Generated final data at: ${structureFilePath}`);
+                } catch (err) {
+                    console.error(`Error writing ${structureFilePath}:`, err);
+                    continue;
                 }
-                fs.writeFileSync(structureFilePath, JSON.stringify(masterOutput, null, 2), 'utf8');
-                console.log(`Generated final data at: ${structureFilePath}`);
 
                 // ========================================================================
                 // 05_suspectedFiles.txt の処理
@@ -545,18 +564,71 @@ async function main() {
                 // 全ての行を結合して最終的なテキストを作成
                 let finalOutputText = outputLines.join('\n');
 
-                // 手書きファイルが存在しない場合の説明メッセージ
+                // 手書きファイルが存在しない場合の処理を改善
                 if (handwrittenFiles.length === 0) {
-                    finalOutputText = `No handwritten files found. Only auto-generated files were modified.
+                    console.warn('⚠️ No handwritten files detected - generating fallback suspected files');
+                    
+                    // フォールバック戦略1: テストファイルから推測
+                    const inferredFiles: string[] = [];
+                    
+                    // テストファイルから実装ファイルを推測
+                    testFiles.forEach(testFile => {
+                        const fileName = path.basename(testFile);
+                        const dirName = path.dirname(testFile);
+                        
+                        // _test.goパターン -> .go
+                        if (fileName.endsWith('_test.go')) {
+                            const implFile = fileName.replace('_test.go', '.go');
+                            inferredFiles.push(`${dirName}/${implFile}`);
+                        }
+                        // test_*.pyパターン -> *.py
+                        else if (fileName.startsWith('test_') && fileName.endsWith('.py')) {
+                            const implFile = fileName.replace('test_', '');
+                            inferredFiles.push(`${dirName}/${implFile}`);
+                        }
+                        // *_test.*パターン -> *.*
+                        else if (fileName.includes('_test.')) {
+                            const implFile = fileName.replace('_test.', '.');
+                            inferredFiles.push(`${dirName}/${implFile}`);
+                        }
+                    });
+                    
+                    // フォールバック戦略2: proto名から推測
+                    const protoBasedFiles: string[] = [];
+                    changedProtoNames.forEach(protoName => {
+                        // Go: service_name.go, service_name_handler.go
+                        protoBasedFiles.push(`${protoName.toLowerCase()}.go`);
+                        protoBasedFiles.push(`${protoName.toLowerCase()}_handler.go`);
+                        // Python: service_name.py
+                        protoBasedFiles.push(`${protoName.toLowerCase()}.py`);
+                        // Java: ServiceName.java
+                        protoBasedFiles.push(`${protoName}.java`);
+                    });
+                    
+                    finalOutputText = `No handwritten files found in changed files, but proto modifications suggest potential impacts.
 
-In this pull request, only .proto files and their auto-generated files (.pb.go, etc.) 
-were modified. No handwritten code files were changed.
-Therefore, no suspected handwritten files exist for analysis.
+**File Categorization**:
+- Proto files (${protoFiles.length}): ${protoFiles.join(', ') || 'none'}
+- Auto-generated files (${generatedFiles.length}): ${generatedFiles.slice(0, 3).join(', ')}${generatedFiles.length > 3 ? ', ...' : ''}
+- Test files (${testFiles.length}): ${testFiles.join(', ') || 'none'}
+- Excluded files (${excludedFiles.length}): ${excludedFiles.slice(0, 3).join(', ')}${excludedFiles.length > 3 ? ', ...' : ''}
 
-File categorization of changes:
-- Proto files: .proto files
-- Generated files: Files matching patterns like .pb.go, .pb.cc, .pb.h, etc.
-- Handwritten files: None (excluding excluded files, test files, and auto-generated files)`;
+**Inferred Potentially Affected Files** (based on proto changes and test files):
+${inferredFiles.length > 0 ? inferredFiles.map(f => `  - ${f}`).join('\n') : '  (none inferred from test files)'}
+
+**Proto-based File Suggestions** (files that may handle these proto messages):
+${protoBasedFiles.length > 0 ? protoBasedFiles.slice(0, 10).map(f => `  - ${f}`).join('\n') : '  (none)'}
+
+**IMPORTANT**: 
+The absence of handwritten files in the changeset does NOT necessarily mean no implementation is needed.
+Please analyze:
+1. Whether the proto changes require updates to existing server/client implementations
+2. Whether new RPC methods need handler implementations
+3. Whether data model changes affect serialization/deserialization code
+
+If you determine no changes are needed, provide detailed justification explaining why the proto modifications do not require code updates.`;
+                } else {
+                    console.log(`✅ Generated suspected files list with ${scoredFiles.length} files (top 3 with content)`);
                 }
 
                 // ファイルに書き込み

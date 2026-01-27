@@ -234,7 +234,18 @@ class MessageHandler {
         sections.thought = buffers.thought.join('\n').trim() || null;
         sections.plan = buffers.plan.join('\n').trim() || null;
         sections.correctionGoals = buffers.correctionGoals.join('\n').trim() || null;
-        sections.modifiedDiff = buffers.modified.join('\n').trim();
+        
+        // modifiedDiffの処理: マークダウンコードブロックを除去
+        let rawModified = buffers.modified.join('\n').trim();
+        if (rawModified) {
+            // マークダウンコードブロック（```diff, ```javascript, ``` など）を除去
+            rawModified = rawModified
+                .replace(/^```(?:diff|patch|javascript|js|python|py)?\s*\n?/i, '') // 開始コードブロック
+                .replace(/\n?```\s*$/i, '') // 終了コードブロック
+                .trim();
+            console.log('🔧 Cleaned modified diff (removed markdown code blocks)');
+        }
+        sections.modifiedDiff = rawModified;
         sections.modifiedLines = buffers.modified.length; // 行数を記録
         sections.commentText = buffers.comment.join('\n').trim();
 

@@ -221,6 +221,9 @@ export class LLMProcessingService {
             // ステータスを確認（%%_Fin_%%タグベースの厳密な判定）
             const status = logData.experiment_metadata?.status || 'Unknown';
             
+            // NO_CHANGES_NEEDEDの確認（LLMが明示的に変更不要と判断したケース）
+            const isNoChangesNeeded = status === 'NO_CHANGES_NEEDED';
+            
             // %%_Fin_%%タグの存在確認
             const hasFinTag = logContent.includes('%%_Fin_%%') || status.includes('%%_Fin_%%');
             
@@ -231,12 +234,15 @@ export class LLMProcessingService {
                             status.includes('Error') ||
                             status.includes('Failed');
 
-            // 成功条件: %%_Fin_%%タグがあり、重大なエラーがない
-            const isSuccess = hasFinTag && !hasErrors;
+            // 成功条件: 
+            // 1. %%_Fin_%%タグがあり、重大なエラーがない、または
+            // 2. NO_CHANGES_NEEDED（修正不要）で、重大なエラーがない
+            const isSuccess = (hasFinTag || isNoChangesNeeded) && !hasErrors;
 
             console.log(`📊 Processing result for ${pullRequestTitle}:`);
             console.log(`   Status: ${status}`);
             console.log(`   %%_Fin_%% tag: ${hasFinTag ? 'YES' : 'NO'}`);
+            console.log(`   NO_CHANGES_NEEDED: ${isNoChangesNeeded ? 'YES' : 'NO'}`);
             console.log(`   Has errors: ${hasErrors ? 'YES' : 'NO'}`);
             console.log(`   Final result: ${isSuccess ? 'SUCCESS' : 'FAILURE'}`);
 

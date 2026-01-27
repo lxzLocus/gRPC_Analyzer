@@ -14,18 +14,16 @@ You MUST evaluate the agent's output along the following four dimensions. These 
   - **Rationale:** Auto-generated files are produced by tools (e.g., `protoc`) and are not part of the agent's repair task
   - **If the Ground Truth Patch contains changes to auto-generated files, IGNORE those changes when scoring Accuracy**
   - **Focus ONLY on handwritten business logic, service implementations, and manually maintained code**
-- A decision to make no changes MUST be scored as 0.0.
-- **CRITICAL: You MUST ALWAYS provide an 'Accuracy Score' (0.0 to 1.0) based on the following rubric.**
+- **CRITICAL: You MUST ALWAYS provide an Accuracy Label from the following categories.**
 
-#### Rubric for Accuracy Score (MANDATORY):
-| Score | Level | Description |
+#### Accuracy Labels (MANDATORY - Choose ONE):
+| Label | Description | Examples |
 | :--- | :--- | :--- |
-| **1.0** | **Perfect Match** | The patch is `Correct` (meets R0-R15 criteria). |
-| **0.9** | **Near Perfect** | Achieves the goal with only trivial, harmless differences not covered by R1-R15 (e.g., different log messages). |
-| **0.7-0.8**| **High Similarity** | Modifies the correct functions/files with the correct core logic, but misses a minor edge case or has a small side effect. |
-| **0.5-0.6**| **Partial Match** | Modifies the correct files/functions, but the implementation logic is flawed or incomplete. |
-| **0.2-0.4**| **Correct Locus** | Identifies the correct *location* for the fix, but the implementation logic is fundamentally wrong. |
-| **0.0-0.1**| **No Match** | Modifies the wrong files, the logic is completely unrelated, or no changes were made. |
+| **IDENTICAL** | The patch is semantically identical (meets R0-R15 criteria). | Perfect match or R1-R15 equivalent patterns |
+| **SEMANTICALLY_EQUIVALENT** | Achieves the same goal with minor, semantically harmless differences. | Different variable names, equivalent logic structure, additional null checks |
+| **PARTIALLY_CORRECT** | Correct location and partial logic, but incomplete or has minor flaws. | Fixes the right function but misses edge case |
+| **WRONG_APPROACH** | Wrong implementation despite identifying the issue location. | Modifies correct file but uses fundamentally different logic |
+| **NO_MATCH** | Wrong files, wrong logic, or no changes made. | Modifies unrelated code or no modifications |
 
 #### Rules for Strict Correctness (R0-R15):
     - **R0: Identical Patch**: The patch is identical to the developer's patch (ignoring formatting and comments).
@@ -46,30 +44,45 @@ You MUST evaluate the agent's output along the following four dimensions. These 
     - **R15: Un-actionable code but not removing them**: Makes buggy code unreachable instead of deleting it.
 
 ### 2. Decision Soundness ###
-- Measures whether the agent made the most reasonable decision given the information available at that time.
-- This evaluation MUST consider:
-    - The provided Code Context
-    - The presence or absence of generated stubs (e.g., pb.go files)
-    - Whether modifying the code could introduce build failures or logical errors
-- A decision to make no changes MAY score 1.0 if modifying the code would likely introduce build failures or logical errors.
+- Measures whether the agent made a reasonable decision given the information available.
 - **CRITICAL: This dimension MUST NOT use the Ground Truth Patch as a reference.**
-- Score is binary: 1.0 (sound decision) or 0.0 (unsound decision).
+- Consider:
+  - The provided Code Context
+  - Available information about dependencies and generated code
+  - Risk of introducing build failures or logical errors
+- A decision to make no changes CAN be sound if modification would likely introduce errors.
+
+#### Decision Soundness Labels (Choose ONE):
+| Label | Description |
+| :--- | :--- |
+| **SOUND** | The decision was reasonable given available context |
+| **UNSOUND** | The decision contradicts available context or introduces obvious errors |
 
 ### 3. Directional Consistency ###
-- Measures whether the agent's output is logically consistent with the direction of the human-written patch.
-- Partial, incomplete, or deferred fixes MAY score 1.0 if they do not contradict the intent of the Ground Truth Patch.
-- This dimension evaluates non-contradiction, not equivalence.
-- A decision to make no changes MAY score 1.0 if it does not contradict the human patch direction.
-- Score is binary: 1.0 (consistent) or 0.0 (contradicts direction).
+- Measures whether the agent's approach aligns with the human patch's intent.
+- Evaluates non-contradiction, not equivalence.
+- Partial or incomplete fixes CAN be consistent if they don't contradict the intent.
+- A decision to make no changes CAN be consistent if it doesn't oppose the patch direction.
+
+#### Directional Consistency Labels (Choose ONE):
+| Label | Description |
+| :--- | :--- |
+| **CONSISTENT** | Aligns with or does not contradict the Ground Truth direction |
+| **CONTRADICTORY** | Directly opposes or contradicts the Ground Truth approach |
 
 ### 4. Validity ###
-- Measures whether the agent's output (patch or no-op decision) is syntactically and semantically valid as code.
-- **To determine validity, you MUST verify the following checklist:**
-    1.  **Syntactic Correctness**: Is the patch syntactically correct for the given programming language? (e.g., no missing brackets, correct keywords).
-    2.  **Dependency Resolution**: Does the patch reference variables, functions, or classes that are defined or imported within the provided `Code Context`?
-    3.  **Logical Soundness**: Does the patch introduce any obvious logical flaws or contradictions that would cause build failures?
-- A decision to make no changes MUST score 1.0 (valid decision).
-- Score is binary: 1.0 (valid) or 0.0 (invalid).
+- Measures whether the output is syntactically and semantically valid.
+- **Checklist for validity:**
+  1. **Syntactic Correctness**: Valid syntax for the language?
+  2. **Dependency Resolution**: References defined/imported entities?
+  3. **Logical Soundness**: No obvious build-breaking contradictions?
+- A decision to make no changes is always valid.
+
+#### Validity Labels (Choose ONE):
+| Label | Description |
+| :--- | :--- |
+| **VALID** | Syntactically and semantically correct code |
+| **INVALID** | Contains syntax errors, undefined references, or logical contradictions |
 
 ---
 ## Provided Data ##
@@ -168,19 +181,19 @@ Based on all the provided information and the strict criteria above, provide you
 ```json
 {
   "accuracy": {
-    "score": 0.0,
+    "label": "NO_MATCH",
     "reasoning": "No changes were made, so the result does not match the final commit."
   },
   "decision_soundness": {
-    "score": 1.0,
+    "label": "SOUND",
     "reasoning": "Given that generated stubs were outdated, modifying handwritten code would likely break the build."
   },
   "directional_consistency": {
-    "score": 1.0,
+    "label": "CONSISTENT",
     "reasoning": "The decision does not contradict the direction of the human patch."
   },
   "validity": {
-    "score": 1,
+    "label": "VALID",
     "reasoning": "The output does not introduce syntax or dependency errors."
   },
   "analysis_labels": {
@@ -192,11 +205,11 @@ Based on all the provided information and the strict criteria above, provide you
 
 ### JSON Field Definitions
 
-  - **accuracy.score**: A score from 0.0 to 1.0 indicating how closely the agent's output matches the Ground Truth Patch, based on the provided rubric.
-  - **decision_soundness.score**: Binary score (1.0 or 0.0) indicating whether the agent's decision was sound given the available information, without reference to the Ground Truth Patch.
-  - **directional_consistency.score**: Binary score (1.0 or 0.0) indicating whether the agent's output is consistent with the direction of the Ground Truth Patch.
-  - **validity.score**: Binary score (1.0 or 0.0) indicating whether the agent's output is syntactically and semantically valid.
-  - **reasoning**: A brief explanation justifying the assigned score for each dimension.
+  - **accuracy.label**: One of: `IDENTICAL`, `SEMANTICALLY_EQUIVALENT`, `PARTIALLY_CORRECT`, `WRONG_APPROACH`, `NO_MATCH`
+  - **decision_soundness.label**: One of: `SOUND`, `UNSOUND`
+  - **directional_consistency.label**: One of: `CONSISTENT`, `CONTRADICTORY`
+  - **validity.label**: One of: `VALID`, `INVALID`
+  - **reasoning**: A brief explanation justifying the assigned label for each dimension.
   - **analysis_labels.repair_types**: Array of repair type enum values (for post-analysis, does NOT affect scores).
   - **analysis_labels.semantic_rules_applied**: Array of R-rules that apply (e.g., ["R4", "R9"]) when accuracy is high.
 
@@ -205,23 +218,23 @@ Based on all the provided information and the strict criteria above, provide you
 ```typescript
 interface EvaluationResult {
   accuracy: {
-    score: number; // 0.0 to 1.0
+    label: "IDENTICAL" | "SEMANTICALLY_EQUIVALENT" | "PARTIALLY_CORRECT" | "WRONG_APPROACH" | "NO_MATCH";
     reasoning: string;
   };
   decision_soundness: {
-    score: number; // 0.0 or 1.0
+    label: "SOUND" | "UNSOUND";
     reasoning: string;
   };
   directional_consistency: {
-    score: number; // 0.0 or 1.0
+    label: "CONSISTENT" | "CONTRADICTORY";
     reasoning: string;
   };
   validity: {
-    score: number; // 0.0 or 1.0
+    label: "VALID" | "INVALID";
     reasoning: string;
   };
   analysis_labels: {
-    repair_types: RepairType[]; // Array of enum values
+    repair_types: RepairType[];
     semantic_rules_applied: string[]; // e.g., ["R0", "R4", "R9"]
   };
 }

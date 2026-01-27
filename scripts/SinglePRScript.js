@@ -26,10 +26,10 @@ config({ path: path.join(__dirname, '..', '.env') });
 const TARGET_PR_CONFIG = {
     // データセットのベースディレクトリ
     // 注意: 実際に存在するデータセットを指定してください
-    datasetDir: "/app/dataset/filtered_fewChanged",
+    datasetDir: "/app/dataset/filtered_confirmed",
     
     // PR情報（データセットディレクトリ構造に合わせて指定）
-    // 例: /app/dataset/filtered_fewChanged/repository_name/category_name/pr_title/
+    // 例: /app/dataset/filtered_confirmed/repository_name/category_name/pr_title/
     // 以下はサンプルです。実際のデータに合わせて変更してください
     repositoryName: "boulder",           // リポジトリ名（例: "etcd-io_etcd"）
     category: "pullrequest",             // カテゴリ名（例: "breaking_changes"）
