@@ -33,6 +33,7 @@ interface ExternalConfig {
         temperature?: number;
         timeout?: number;
         retryAttempts?: number;
+        summaryThreshold?: number;  // 要約機能のトークン閾値
         qualityCheck?: {
             enabled?: boolean;
             requireModifiedContent?: boolean;
@@ -206,6 +207,10 @@ class Config {
             if (!this.externalConfig.llm) this.externalConfig.llm = {};
             this.externalConfig.llm.retryAttempts = parseInt(process.env.LLM_RETRY_ATTEMPTS);
         }
+        if (process.env.LLM_SUMMARY_THRESHOLD) {
+            if (!this.externalConfig.llm) this.externalConfig.llm = {};
+            this.externalConfig.llm.summaryThreshold = parseInt(process.env.LLM_SUMMARY_THRESHOLD);
+        }
         
         // LLM品質チェック設定
         if (process.env.LLM_QUALITY_CHECK_ENABLED) {
@@ -337,6 +342,7 @@ class Config {
             console.log(`Log Level: ${this.logLevel}`);
             console.log(`LLM Model: ${this.getConfigValue('llm.model', 'N/A')}`);
             console.log(`Max Tokens: ${this.maxTokens}`);
+            console.log(`Summary Threshold: ${this.getConfigValue('llm.summaryThreshold', 30000)}`);
             console.log(`Input Project Dir: ${this.inputProjectDir}`);
             console.log(`Output Dir: ${this.outputDir}`);
             console.log(`Prompt Dir: ${this.promptDir}`);

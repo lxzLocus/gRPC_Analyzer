@@ -68,6 +68,7 @@ export type LLMParsed = {
     modifiedDiff: string;
     commentText: string;
     has_fin_tag: boolean;
+    has_no_changes_needed?: boolean; // LLM明示判断：変更不要タグ（オプショナル）
     // 新しいフィールド：LLMからの進行状況指示
     suggestedPhase?: ProcessingPhase;
     confidenceLevel?: 'HIGH' | 'MEDIUM' | 'LOW';
@@ -131,16 +132,37 @@ export enum State {
 export type PromptTemplateContext = {
     protoFile: string;
     protoFileChanges: string;
+    stubFileChanges: string;  // 新規追加: スタブファイルの差分
     fileChanges: string;
     surroundedFilePath: string;
     suspectedFiles: string;
     pullRequestTitle?: string;
 };
 
+// 終了ステータスの型定義
+export type CompletionType = 
+    | 'patch_generated'      // パッチ生成成功
+    | 'llm_no_changes'       // LLM明示判断：変更不要
+    | 'system_no_progress'   // システム判定：進捗なし
+    | 'incomplete'           // 未完了（最大ターン到達等）
+    | 'error';               // エラー
+
+// dialogue.json メタデータの型定義
+export type DialogueMetadata = {
+    completion_type: CompletionType;
+    total_turns: number;
+    total_tokens_used: number;
+    patch_file_path?: string;
+    error_message?: string;
+    summarization_count?: number;
+    final_token_count?: number;
+};
+
 export type PromptFileConfig = {
     promptTextfile: string;
     protoFile: string;
     protoFileChanges: string;
+    stubFileChanges: string;  // 新規追加
     fileChanges: string;
     surroundedFilePath: string;
     suspectedFiles: string;
@@ -197,6 +219,53 @@ export type ProcessingPlan = {
     protoFiles: string[];
     testFiles: string[];
     directories: string[];
+};
+
+// 要約機能の型定義
+export type ConversationSummary = {
+    original_goal_summary: string;
+    progress_summary: string[];
+    current_status: string;
+    open_correction_goals: string[];
+};
+
+// 要約トリガーの種類
+export type SummarizationTriggerType =
+    | 'TOKEN_THRESHOLD'      // トークン閾値超過
+    | 'PRE_SEND_CHECK'       // LLM送信直前チェック
+    | 'TURN_COMPLETION'      // ターン完了時
+    | 'TASK_COMPLETION'      // タスク完了時
+    | 'MANUAL';              // 手動トリガー
+
+// 要約トリガー情報
+export type SummarizationTrigger = {
+    type: SummarizationTriggerType;
+    reason: string;
+    timestamp: string;
+    tokenCount: number;
+    messageCount: number;
+};
+
+export type ConversationHistoryManager = {
+    messages: Array<{ role: string, content: string }>;
+    totalTokens: number;
+    summaryThreshold: number; // トークン数の閾値
+    lastSummaryTurn: number;  // 最後に要約した時のターン
+    summaryTokensUsed: number; // 要約処理で消費した総トークン数
+    lastTokenAtSummary: number; // 前回要約時のトークン数（成長率計算用）
+    summarizationHistory: SummarizationTrigger[]; // 要約履歴
+};
+
+export type SummarizeRequest = {
+    fullConversationHistory: string;
+    model?: string;          // 要約に使用するLLMモデル
+    temperature?: number;    // 要約時の温度設定
+};
+
+export type SummarizeResponse = {
+    summary: ConversationSummary;
+    success: boolean;
+    error?: string;
 };
 
 // Phase 3-2: diff適用システム改善のための追加型定義

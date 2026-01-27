@@ -21,14 +21,17 @@ You will first analyze the situation, create a plan, request any necessary addit
 
 ## Context ##
 
-### Pull Request Title ###
+### Pull Request Title (Hint) ###
 {{pullRequestTitle}}
 
-### Proto file ###
+### Proto file (REFERENCE ONLY - Post-merge final state) ###
 {{protoFile}}
 
-### Proto file changes###
+### Proto file changes (WHAT CHANGED - Study these to understand the API evolution) ###
 {{protoFileChanges}}
+
+### Generated Stub File Changes (AUTO-GENERATED - Shows how the API client code changed) ###
+{{stubFileChanges}}
 
 ### Changed files (Annotation - Paths only) ###
 {{fileChanges}}
@@ -36,25 +39,46 @@ You will first analyze the situation, create a plan, request any necessary addit
 ### List of All File Paths (Consider this a global view, prioritize targeted requests) ###
 {{surroundedFilePath}}
 
-### Suspected Files (Content provided - Pre-commit state) ###
+### Suspected Files (⚠️ YOUR TARGET - These files MUST BE UPDATED) ###
 {{suspectedFiles}}
 
 ---
 
 ## Your Task & Response Format ##
 
+## ⚠️ CRITICAL INSTRUCTION ⚠️ ##
+
+**YOU MUST FIX THE HAND-WRITTEN CODE**:
+
+1. ✅ The proto definitions have been updated (shown above for REFERENCE)
+2. ✅ The stub files have been auto-generated to match the new proto (shown for REFERENCE)
+3. ❌ **The hand-written code in "Suspected Files" is BROKEN and OUTDATED**
+4. 🎯 **YOUR JOB**: Modify the suspected files to work with the new API
+
+**DO NOT**:
+- ❌ Suggest changes to `.proto` files (they are finalized)
+- ❌ Suggest changes to stub files like `.pb.go`, `_pb2.py`, etc. (they are auto-generated)
+- ❌ Output `%%_Fin_%%` if there are suspected files shown
+
+**YOU MUST**:
+- ✅ Update code that creates/uses the modified proto messages
+- ✅ Add/remove/modify fields to match the new proto schema
+- ✅ Fix compilation errors caused by API changes
+- ✅ Adapt function calls to match new stub signatures
+
 **Phase 1: Analysis, Planning, and Initial Information Request**
 
 %_Thought_%
-[Your detailed analysis of the proto changes, their potential impact on the codebase, and your high-level strategy for addressing them. For example: "The proto change X likely affects how message Y is serialized in FileA. Also, service Z now has a new method, which might require implementation in FileB and updates to client calls in FileC. I need to verify these."]
+[Analyze the proto changes and stub changes to understand what was added/modified. Consider how these changes affect the handwritten code in "Suspected Files". For example: "The proto added field X to message Y. The stub now includes getter/setter for X. The suspected file FileA needs to populate this new field when creating message Y."]
 
 
 
 %_Plan_%
 [
-  {"step": 1, "action": "REVIEW_FILE_CONTENT", "filePath": "{{first_suspected_file_path}}", "reason": "Initial suspected file, check direct impact of proto change."},  {"step": 2, "action": "REQUEST_FILE_CONTENT", "filePath": "path/to/potentially_affected_file.ext", "reason": "This file likely uses the modified message/service based on its name/location within {{surroundedFilePath}} and the nature of {{protoFileChanges}}."},
-  {"step": 3, "action": "MODIFY_FILE", "filePath": "{{first_suspected_file_path}}", "reason": "Apply necessary changes based on reviewed content and proto."},
-  // ... more plan steps
+  {"step": 1, "action": "REVIEW_FILE_CONTENT", "filePath": "{{first_suspected_file_path}}", "reason": "Check how this file currently uses the proto messages/services that were modified."},
+  {"step": 2, "action": "REQUEST_FILE_CONTENT", "filePath": "path/to/stub_file.pb.go", "reason": "Review the updated stub to understand the exact API changes (if needed)."},
+  {"step": 3, "action": "MODIFY_FILE", "filePath": "{{first_suspected_file_path}}", "reason": "Update to use new proto fields/messages according to the updated schema."},
+  // ... more plan steps
 ]
 
 
@@ -63,9 +87,7 @@ You will first analyze the situation, create a plan, request any necessary addit
 %_Reply Required_%
 [
   {"type": "FILE_CONTENT", "path": "path/to/needed_file_A.ext"},
-  {"type": "DIRECTORY_LISTING", "path": "path/to/some_directory/"} // New capability
-]
-
+  {"type": "DIRECTORY_LISTING", "path": "path/to/some_directory/"}
 **CRITICAL**: Only use %_Reply Required_%  if the requested files are absolutely essential for understanding the changes. 
 If you can determine the necessary modifications from the existing context, proceed directly to %_Modified_% and %%_Fin_%%.
 

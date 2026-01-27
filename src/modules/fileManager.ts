@@ -37,6 +37,7 @@ class FileManager {
         promptTextfile: '00_prompt_gem.txt', // Gemini用プロンプトに変更
         protoFile: '01_proto.txt',
         protoFileChanges: '02_protoFileChanges.txt',
+        stubFileChanges: '02a_stubFileChanges.txt',  // 新規追加
         fileChanges: '03_fileChanges.txt',
         surroundedFilePath: '04_surroundedFilePath.txt',
         suspectedFiles: '05_suspectedFiles.txt'
@@ -176,6 +177,10 @@ class FileManager {
             this.defaultPromptFiles.protoFileChanges,
             '# プロトファイル変更情報が利用できません'
         );
+        const stubFileChanges = this.safeReadPromptFile(
+            this.defaultPromptFiles.stubFileChanges,
+            '# スタブファイル変更情報が利用できません'
+        );
         const fileChangesContent = this.safeReadPromptFile(
             this.defaultPromptFiles.fileChanges,
             '# ファイル変更情報が利用できません'
@@ -193,6 +198,7 @@ class FileManager {
         const context: PromptTemplateContext = {
             protoFile: protoFileContent,
             protoFileChanges: protoFileChanges,
+            stubFileChanges: stubFileChanges,
             fileChanges: fileChangesContent,
             surroundedFilePath: surroundedFilePath,
             suspectedFiles: suspectedFiles
@@ -1159,6 +1165,10 @@ Leverage this constraint to maximize your differential reasoning capabilities.`
             this.defaultPromptFiles.suspectedFiles,
             '# Suspected file information is not available'
         );
+        const stubFileChanges = this.safeReadPromptFile(
+            this.defaultPromptFiles.stubFileChanges,
+            '# Stub file changes information is not available'
+        );
 
         // Template 5用の要求されたファイル内容
         const fileVersionMismatchContent = useFileVersionMismatchTemplate && requestedFileContent
@@ -1169,6 +1179,7 @@ Leverage this constraint to maximize your differential reasoning capabilities.`
         const context: PromptTemplateContext = {
             protoFile: protoFileContent,
             protoFileChanges: protoFileChanges,
+            stubFileChanges: stubFileChanges,
             fileChanges: fileChangesContent,
             surroundedFilePath: surroundedFilePath,
             suspectedFiles: suspectedFiles,

@@ -845,10 +845,10 @@ class LLMFlowController {
         const experimentId = this.generateExperimentId();
         
         // 基本的なステータス判定
-        let status = this.context.llmParsed?.has_fin_tag ? 'Completed (%%_Fin_%%)' : 'Incomplete';
+        let status = this.context.llmParsed?.has_fin_tag ? 'FINISHED' : 'ERROR';
         
         // 後処理による完了判定ロジック（安全策）
-        if (status === 'Incomplete' && !this.context.llmParsed?.has_fin_tag) {
+        if (status === 'ERROR' && !this.context.llmParsed?.has_fin_tag) {
             // ログ内に一度でも%_Modified_%が存在した場合の暗黙的完了判定
             const hasModification = this.logger.getInteractionLog().some((turn: any) => 
                 turn.llm_response?.parsed_content?.modified_diff || 
@@ -856,8 +856,8 @@ class LLMFlowController {
             );
             
             if (hasModification) {
-                status = 'Completed (Implicit)'; // 暗黙的な完了としてステータスを更新
-                console.log(`✅ Status updated to 'Completed (Implicit)' based on post-processing logic.`);
+                status = 'FINISHED'; // 暗黙的な完了としてステータスを更新
+                console.log(`✅ Status updated to 'FINISHED' based on post-processing logic.`);
                 console.log(`   Reason: Found %_Modified_% tag without explicit %%_Fin_%% tag`);
             }
         }

@@ -267,17 +267,32 @@ async function main() {
     const pathParts = config.inputProjectDir.split(path.sep);
     const experimentId = path.join(pathParts[pathParts.length - 2], pathParts[pathParts.length - 1]);
 
+    // データセットパスから相対パスを抽出
+    // 例: /app/dataset/filtered_confirmed/boulder/issue/Implement_RA_method_for_unpausing_accounts
+    //  -> boulder/issue/Implement_RA_method_for_unpausing_accounts
+    const datasetBasePath = '/app/dataset';
+    let relativePath = config.inputProjectDir;
+    
+    // datasetディレクトリ以降の相対パスを抽出
+    const datasetIndex = pathParts.findIndex(part => part === 'dataset');
+    if (datasetIndex !== -1 && datasetIndex + 2 < pathParts.length) {
+        // filtered_confirmed などのデータセット種別をスキップして、その後のパスを取得
+        relativePath = pathParts.slice(datasetIndex + 2).join(path.sep);
+    }
+
     const logFileTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const logFilePath = path.join(config.outputDir, 'log', `${logFileTimestamp}_log.json`);
-    if (!fs.existsSync(path.dirname(logFilePath))) {
-        fs.mkdirSync(path.dirname(logFilePath), { recursive: true });
+    const logDirPath = path.join('/app/log', relativePath);
+    const logFilePath = path.join(logDirPath, `${logFileTimestamp}_log.log`);
+    
+    if (!fs.existsSync(logDirPath)) {
+        fs.mkdirSync(logDirPath, { recursive: true });
     }
 
     // --- 2. 対話ループの準備 ---
     let conversation_active = true;
     const max_turns = 15;
     let turn_count = 0;
-    let status = "Max turns reached"; // デフォルトの終了ステータス
+    let status = "ERROR"; // デフォルトの終了ステータス (AgentState互換)
 
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
@@ -346,7 +361,7 @@ async function main() {
         if (parsed_response.has_fin_tag) {
             console.log("Found '%%_Fin_%%' tag. Finalizing process.");
             system_action_log = { type: "TERMINATING", details: "%%_Fin_%% tag detected." };
-            status = "Completed (%%_Fin_%%)";
+            status = "FINISHED";
             conversation_active = false;
 
         } else if (parsed_response.requiredFilepaths.length > 0) {
@@ -386,7 +401,7 @@ async function main() {
         } else {
             console.log("No clear next action detected. Terminating process.");
             system_action_log = { type: "TERMINATING", details: "No actionable tags detected in LLM response." };
-            status = "Completed (No Action)";
+            status = "ERROR";
             conversation_active = false;
         }
 
@@ -404,6 +419,13 @@ async function main() {
     // --- 4. 最終処理 ---
     const endTime = new Date().toISOString();
 
+    const llmProvider = openAIClient.getProviderName();
+    const llmModel = process.env.OPENAI_MODEL || 'gpt-4o';
+    const llmConfig = {
+        temperature: 0.7,
+        max_tokens: undefined
+    };
+
     logger.setExperimentMetadata(
         experimentId,
         startTime,
@@ -411,7 +433,10 @@ async function main() {
         status,
         turn_count,
         totalPromptTokens,
-        totalCompletionTokens
+        totalCompletionTokens,
+        llmProvider,
+        llmModel,
+        llmConfig
     );
 
     const finalLog = logger.getFinalJSON();
