@@ -426,21 +426,17 @@ async function main() {
                     //outputLines.push(`File: ${file.filePath}`);
 
                     // --- 内容部分 ---
-                    // 上位3位までのファイルのみ、変更前の内容を出力
-                    if (rank <= 3 && premergePath) {
-                        const premergeFilePath = path.join(premergePath, file.filePath);
-                        if (fs.existsSync(premergeFilePath)) {
-                            try {
-                                const content = fs.readFileSync(premergeFilePath, 'utf8');
-                                // unix diff ライクなヘッダー
-                                outputLines.push(`--- /${file.filePath}`);
-                                outputLines.push(content);
-                            } catch (e: any) {
-                                console.error(`Error reading file content for ${premergeFilePath}:`, e.message);
-                                outputLines.push(`<< Error reading file content >>`);
-                            }
+                    // 上位3位までのファイルのみ、実際の差分を出力
+                    if (rank <= 3) {
+                        // 変更前（premerge）のファイル内容全体を読み込む
+                        const fullPath = path.join(premergePath, file.filePath);
+                        if (fs.existsSync(fullPath)) {
+                            const content = fs.readFileSync(fullPath, 'utf8');
+                            outputLines.push(`=== ${file.filePath} ===`);
+                            outputLines.push(content);
                         } else {
-                            outputLines.push(`<< File content not found in premerge directory >>`);
+                            outputLines.push(`=== ${file.filePath} ===`);
+                            outputLines.push(`<< File not found >>`);
                         }
                     }
 

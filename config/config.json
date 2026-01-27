@@ -7,10 +7,10 @@
   },
   "llm": {
     "provider": "openai",
-    "model": "gpt-5",
-    "maxTokens": 8000,
+    "model": "gpt-5.1-chat-latest",
+    "maxTokens": 30000,
     "temperature": 0.1,
-    "timeout": 30000
+    "timeout": 60000
   },
   "fileOperations": {
     "maxFileSize": 52428800,

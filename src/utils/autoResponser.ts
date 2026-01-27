@@ -225,10 +225,23 @@ class OpenAIClient {
     async fetchOpenAPI(messages: Array<{ role: string, content: string }>): Promise<any> {
         try {
             const model = process.env.OPENAI_MODEL || 'gpt-4o';
-            const completion = await this.client.chat.completions.create({
+            
+            // APIリクエストパラメータを準備
+            const apiParams: any = {
                 model: model,
                 messages: messages
-            });
+            };
+            
+            // gpt-5モデルの場合はtemperatureとmax_tokensをスキップ
+            if (!model.startsWith('gpt-5')) {
+                const temperature = parseFloat(process.env.OPENAI_TEMPERATURE || '0.7');
+                apiParams.temperature = temperature;
+                console.log(`🌡️  temperature: ${temperature}`);
+            } else {
+                console.log(`ℹ️  ${model}: temperatureパラメータはスキップされます`);
+            }
+            
+            const completion = await this.client.chat.completions.create(apiParams);
             return completion;
         } catch (error) {
             console.error((error as any).message);
@@ -421,10 +434,15 @@ async function main() {
 
     const llmProvider = openAIClient.getProviderName();
     const llmModel = process.env.OPENAI_MODEL || 'gpt-4o';
-    const llmConfig = {
-        temperature: 0.7,
+    
+    // gpt-5モデルの場合はtemperatureを含めない
+    const llmConfig: any = {
         max_tokens: undefined
     };
+    
+    if (!llmModel.startsWith('gpt-5')) {
+        llmConfig.temperature = parseFloat(process.env.OPENAI_TEMPERATURE || '0.7');
+    }
 
     logger.setExperimentMetadata(
         experimentId,
