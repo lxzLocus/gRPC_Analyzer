@@ -3,6 +3,18 @@
  * プロジェクト全体で使用する共通設定
  */
 
+// APR終了ステータス定数（/app/src/modules/Logger.tsと統一）
+// ※ patchEvaluationは独立したコンテナで動作するため、親ディレクトリからインポートできない
+// ※ このため、同じ定義をここに複製している
+export const APRStatus = {
+    FINISHED: 'FINISHED',                       // パッチ生成完了
+    NO_CHANGES_NEEDED: 'NO_CHANGES_NEEDED',     // 修正不要と判定（LLM明示）
+    TIMEOUT: 'TIMEOUT',                         // タイムアウト
+    ERROR: 'ERROR',                             // エラー発生
+    INVESTIGATION_PHASE: 'INVESTIGATION_PHASE', // 調査フェーズ（未完了）
+    INCOMPLETE: 'INCOMPLETE'                    // 進捗なし（システム推測）
+};
+
 // デフォルト設定オブジェクト
 export const DEFAULT_CONFIG = {
     system: { 

@@ -130,6 +130,43 @@
         .status-error { background: #fef2f2; color: #dc2626; }
         .status-warning { background: #fef3c7; color: #d97706; }
         
+        /* 意味的類似度スコアバッジ */
+        .score-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            min-width: 40px;
+            text-align: center;
+            color: white;
+            background: #6b7280;
+        }
+        .score-badge.perfect {
+            background: linear-gradient(135deg, #059669, #10b981);
+            box-shadow: 0 2px 4px rgba(5, 150, 105, 0.3);
+        }
+        .score-badge.near-perfect {
+            background: linear-gradient(135deg, #0d9488, #14b8a6);
+            box-shadow: 0 2px 4px rgba(13, 148, 136, 0.3);
+        }
+        .score-badge.high {
+            background: linear-gradient(135deg, #0891b2, #06b6d4);
+            box-shadow: 0 2px 4px rgba(8, 145, 178, 0.3);
+        }
+        .score-badge.medium {
+            background: linear-gradient(135deg, #d97706, #f59e0b);
+            box-shadow: 0 2px 4px rgba(217, 119, 6, 0.3);
+        }
+        .score-badge.low {
+            background: linear-gradient(135deg, #dc2626, #ef4444);
+            box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+        }
+        .score-badge.very-low {
+            background: linear-gradient(135deg, #991b1b, #dc2626);
+            box-shadow: 0 2px 4px rgba(153, 27, 27, 0.3);
+        }
+        
         .evaluation-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -301,7 +338,30 @@
                         </div>
                         <div class="evaluation-label">妥当性</div>
                     </div>
+                    {{#if llmEvaluation.semantic_similarity_score}}
+                    <div class="evaluation-card">
+                        <div class="evaluation-score">
+                            <span class="score-badge {{llmEvaluation.similarity_category}}">{{llmEvaluation.semantic_similarity_score}}</span>
+                        </div>
+                        <div class="evaluation-label">意味的類似度</div>
+                        <div style="font-size: 0.8em; color: #6b7280; margin-top: 5px;">
+                            {{#gte llmEvaluation.semantic_similarity_score 0.9}}完全一致{{/gte}}
+                            {{#lt llmEvaluation.semantic_similarity_score 0.9}}{{#gte llmEvaluation.semantic_similarity_score 0.8}}高類似{{/gte}}{{/lt}}
+                            {{#lt llmEvaluation.semantic_similarity_score 0.8}}{{#gte llmEvaluation.semantic_similarity_score 0.6}}中類似{{/gte}}{{/lt}}
+                            {{#lt llmEvaluation.semantic_similarity_score 0.6}}{{#gte llmEvaluation.semantic_similarity_score 0.4}}低類似{{/gte}}{{/lt}}
+                            {{#lt llmEvaluation.semantic_similarity_score 0.4}}低類似{{/lt}}
+                        </div>
+                    </div>
+                    {{/if}}
                 </div>
+                {{#if llmEvaluation.similarity_reasoning}}
+                <div style="margin-top: 20px;">
+                    <div class="info-card">
+                        <div class="info-label">類似度判定理由</div>
+                        <div class="info-value">{{llmEvaluation.similarity_reasoning}}</div>
+                    </div>
+                </div>
+                {{/if}}
                 <div style="margin-top: 20px;">
                     <div class="info-card">
                         <div class="info-label">総合評価</div>

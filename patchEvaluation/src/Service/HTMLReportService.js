@@ -42,6 +42,31 @@ export class HTMLReportService {
             return '0%';
         });
 
+        // 数値乗算ヘルパー（意味的類似度スコア用）
+        Handlebars.registerHelper('multiply', function(value, multiplier) {
+            if (typeof value === 'number' && typeof multiplier === 'number') {
+                return (value * multiplier).toFixed(1);
+            }
+            return '0.0';
+        });
+
+        // 比較演算ヘルパー
+        Handlebars.registerHelper('gte', function(value, threshold, options) {
+            if (parseFloat(value) >= parseFloat(threshold)) {
+                return options.fn(this);
+            } else {
+                return options.inverse(this);
+            }
+        });
+
+        Handlebars.registerHelper('lt', function(value, threshold, options) {
+            if (parseFloat(value) < parseFloat(threshold)) {
+                return options.fn(this);
+            } else {
+                return options.inverse(this);
+            }
+        });
+
         // 日付フォーマットヘルパー
         Handlebars.registerHelper('formatDate', function(date) {
             if (!date) return '';
@@ -214,7 +239,12 @@ export class HTMLReportService {
             jsonDataPath, // JSONデータへのリンク
             successfulMatches: stats.matchedPairs.slice(0, 10), // 最初の10件を表示
             errorEntries: stats.errorEntries.slice(0, 20), // 最初の20件を表示
-            unmatchedEntries: stats.unmatchedEntries.slice(0, 15) // 最初の15件を表示
+            unmatchedEntries: stats.unmatchedEntries.slice(0, 15), // 最初の15件を表示
+            // 完全なmatchedPairsデータをJSON出力用に保存
+            matchedPairs: stats.matchedPairs,
+            // エラーエントリーと未マッチングエントリーの完全版
+            allErrorEntries: stats.errorEntries,
+            allUnmatchedEntries: stats.unmatchedEntries
         };
 
         const htmlContent = await this.renderStatisticsTemplate(reportData);
@@ -395,8 +425,74 @@ export class HTMLReportService {
             llmStats: this.extractLLMStats(stats),
             
             // LLM評価結果統計
-            llmEvaluationResults: this.extractLLMEvaluationResults(stats)
+            llmEvaluationResults: this.extractLLMEvaluationResults(stats),
+            
+            // Intent Fulfillment評価統計
+            intentFulfillmentStats: this.extractIntentFulfillmentStats(stats)
         };
+    }
+
+    /**
+     * Intent Fulfillment評価統計の抽出
+     * @param {Object} stats - ProcessingStats オブジェクト
+     * @returns {Object} Intent Fulfillment統計
+     */
+    extractIntentFulfillmentStats(stats) {
+        const intentStats = {
+            totalEvaluated: 0,
+            totalSkipped: 0,
+            scores: [],
+            averageScore: 0,
+            highScore: 0,
+            mediumScore: 0,
+            lowScore: 0,
+            veryLowScore: 0,
+            evaluations: []
+        };
+
+        stats.matchedPairs.forEach(pair => {
+            const intentEval = pair.finalModification?.intentFulfillmentEvaluation;
+            if (!intentEval) return;
+
+            const evalEntry = {
+                entryId: pair.datasetEntry,
+                score: null,
+                reasoning: null,
+                status: 'unknown'
+            };
+
+            if (intentEval.skipped) {
+                intentStats.totalSkipped++;
+                evalEntry.status = 'skipped';
+                evalEntry.reasoning = intentEval.skipped;
+            } else if (intentEval.error) {
+                intentStats.totalSkipped++;
+                evalEntry.status = 'error';
+                evalEntry.reasoning = intentEval.error;
+            } else if (typeof intentEval.score === 'number') {
+                intentStats.totalEvaluated++;
+                intentStats.scores.push(intentEval.score);
+                evalEntry.score = intentEval.score;
+                evalEntry.reasoning = intentEval.reasoning;
+                evalEntry.status = 'evaluated';
+
+                // スコア分布
+                if (intentEval.score >= 0.9) intentStats.highScore++;
+                else if (intentEval.score >= 0.7) intentStats.mediumScore++;
+                else if (intentEval.score >= 0.4) intentStats.lowScore++;
+                else intentStats.veryLowScore++;
+            }
+
+            intentStats.evaluations.push(evalEntry);
+        });
+
+        // 平均スコアを計算
+        if (intentStats.scores.length > 0) {
+            const sum = intentStats.scores.reduce((a, b) => a + b, 0);
+            intentStats.averageScore = sum / intentStats.scores.length;
+        }
+
+        return intentStats;
     }
 
     /**
@@ -587,6 +683,51 @@ export class HTMLReportService {
     }
 
     /**
+     * 意味的類似度スコアを分類
+     * @param {number} score - 0.0-1.0のスコア
+     * @returns {string} スコア分類
+     */
+    categorizeSemanticSimilarityScore(score) {
+        if (score === 1.0) return 'perfect';
+        if (score >= 0.9) return 'nearPerfect';
+        if (score >= 0.7) return 'high';
+        if (score >= 0.5) return 'medium';
+        if (score >= 0.2) return 'low';
+        return 'veryLow';
+    }
+
+    /**
+     * 意味的類似度統計を処理
+     * @param {Object} results - 結果オブジェクト
+     * @param {number|null} score - 意味的類似度スコア
+     */
+    processSemanticSimilarityScore(results, score) {
+        if (score !== null && score !== undefined && !isNaN(score)) {
+            // スコアの有効性を確認
+            const validScore = Math.max(0, Math.min(1, parseFloat(score)));
+            
+            results.semanticSimilarity.allScores.push(validScore);
+            results.semanticSimilarity.totalWithScore++;
+            
+            // スコア分類別の統計
+            const category = this.categorizeSemanticSimilarityScore(validScore);
+            results.semanticSimilarity.scoreBreakdown[category]++;
+        }
+    }
+
+    /**
+     * 意味的類似度統計を最終化
+     * @param {Object} results - 結果オブジェクト
+     */
+    finalizeSemanticSimilarityStats(results) {
+        const scores = results.semanticSimilarity.allScores;
+        if (scores.length > 0) {
+            const sum = scores.reduce((acc, score) => acc + score, 0);
+            results.semanticSimilarity.averageScore = parseFloat((sum / scores.length).toFixed(3));
+        }
+    }
+
+    /**
      * エラーの分類
      * @param {string} errorMessage - エラーメッセージ
      * @returns {string} エラーカテゴリ
@@ -653,6 +794,21 @@ export class HTMLReportService {
             skippedCount: 0,
             totalEvaluated: 0,
             
+            // 意味的類似度統計
+            semanticSimilarity: {
+                averageScore: 0,
+                scoreBreakdown: {
+                    perfect: 0,      // 1.0
+                    nearPerfect: 0,  // 0.9-0.99
+                    high: 0,         // 0.7-0.89
+                    medium: 0,       // 0.5-0.69
+                    low: 0,          // 0.2-0.49
+                    veryLow: 0       // 0.0-0.19
+                },
+                totalWithScore: 0,
+                allScores: []
+            },
+            
             // スキップ統計の詳細
             skipDetails: {
                 totalSkipped: 0,
@@ -687,8 +843,56 @@ export class HTMLReportService {
             } else if (pair.finalModification && pair.finalModification.llmEvaluation && !pair.finalModification.llmEvaluation.error) {
                 const evaluation = pair.finalModification.llmEvaluation;
                 
-                // 正確性評価の統計（semantic_equivalence_level ベース）
+                // 4軸評価の統計（新形式）
+                if (evaluation.accuracy !== undefined) {
+                    results.fourAxis = results.fourAxis || {
+                        totalEvaluated: 0,
+                        accuracyScores: [],
+                        decisionSoundnessPass: 0,
+                        directionalConsistencyPass: 0,
+                        validityPass: 0
+                    };
+                    results.fourAxis.totalEvaluated++;
+                    
+                    // Accuracyスコア（0.0-1.0）
+                    if (typeof evaluation.accuracy === 'object' && evaluation.accuracy.score !== undefined) {
+                        results.fourAxis.accuracyScores.push(evaluation.accuracy.score);
+                    }
+                    
+                    // Decision Soundness（0.0 or 1.0）
+                    if (evaluation.decision_soundness?.score === 1.0) {
+                        results.fourAxis.decisionSoundnessPass++;
+                    }
+                    
+                    // Directional Consistency（0.0 or 1.0）
+                    if (evaluation.directional_consistency?.score === 1.0) {
+                        results.fourAxis.directionalConsistencyPass++;
+                    }
+                    
+                    // Validity（0.0 or 1.0）
+                    if (evaluation.validity?.score === 1.0) {
+                        results.fourAxis.validityPass++;
+                    }
+                    
+                    // Repair Types統計
+                    if (evaluation.analysis_labels?.repair_types) {
+                        results.repairTypes = results.repairTypes || {};
+                        evaluation.analysis_labels.repair_types.forEach(type => {
+                            results.repairTypes[type] = (results.repairTypes[type] || 0) + 1;
+                        });
+                    }
+                }
+                
+                // 後方互換性：古い2軸評価形式も維持
                 if (evaluation.correctness_evaluation) {
+                    results.correctness = results.correctness || {
+                        totalEvaluated: 0,
+                        identicalCount: 0,
+                        semanticallyEquivalentCount: 0,
+                        plausibleButDifferentCount: 0,
+                        incorrectCount: 0,
+                        unknownCount: 0
+                    };
                     results.correctness.totalEvaluated++;
                     const level = evaluation.correctness_evaluation.semantic_equivalence_level;
                     
@@ -705,41 +909,8 @@ export class HTMLReportService {
                         case 'INCORRECT':
                             results.correctness.incorrectCount++;
                             break;
-                        case 'CORRECT':  // 後方互換性
-                            results.correctness.correctCount++;
-                            break;
                         default:
-                            console.warn(`Unknown correctness level: ${level}`);
                             results.correctness.unknownCount++;
-                    }
-                }
-                
-                // 妥当性評価の統計（is_plausible ベース）
-                if (evaluation.plausibility_evaluation) {
-                    results.plausibility.totalEvaluated++;
-                    if (evaluation.plausibility_evaluation.is_plausible) {
-                        results.plausibility.plausibleCount++;
-                        
-                        // 妥当性の詳細分析（reasoning基づく）
-                        const reasoning = evaluation.plausibility_evaluation.reasoning || '';
-                        if (reasoning.toLowerCase().includes('syntactically correct') || 
-                            reasoning.toLowerCase().includes('syntactic')) {
-                            results.plausibility.syntacticallyCorrectCount++;
-                        }
-                        if (reasoning.toLowerCase().includes('logical') || 
-                            reasoning.toLowerCase().includes('logically sound')) {
-                            results.plausibility.logicallyValidCount++;
-                        }
-                        if (reasoning.toLowerCase().includes('dependency') || 
-                            reasoning.toLowerCase().includes('dependencies')) {
-                            results.plausibility.dependencyResolvedCount++;
-                        }
-                        if (reasoning.toLowerCase().includes('all') && 
-                            reasoning.toLowerCase().includes('check')) {
-                            results.plausibility.completelyPlausibleCount++;
-                        }
-                    } else {
-                        results.plausibility.notPlausibleCount++;
                     }
                 }
                 
@@ -765,10 +936,46 @@ export class HTMLReportService {
                         console.warn(`Unknown evaluation level: ${evaluation.overall_assessment}`);
                         results.unknownCount++;
                 }
+            } else if (pair.evaluationResult && pair.evaluationResult.result) {
+                // 新しい評価構造の処理
+                results.totalEvaluated++;
+                results.correctness.totalEvaluated++;
+                
+                const level = pair.evaluationResult.result;
+                
+                // 意味的類似度スコアを処理
+                const score = pair.evaluationResult.semantic_similarity_score;
+                this.processSemanticSimilarityScore(results, score);
+                
+                switch (level) {
+                    case 'IDENTICAL':
+                        results.correctness.identicalCount++;
+                        results.identicalCount++;
+                        break;
+                    case 'SEMANTICALLY_EQUIVALENT':
+                        results.correctness.semanticallyEquivalentCount++;
+                        results.semanticallyEquivalentCount++;
+                        break;
+                    case 'PLAUSIBLE_BUT_DIFFERENT':
+                        results.correctness.plausibleButDifferentCount++;
+                        results.plausibleCount++;
+                        break;
+                    case 'INCORRECT':
+                        results.correctness.incorrectCount++;
+                        results.incorrectCount++;
+                        break;
+                    default:
+                        console.warn(`Unknown evaluation result: ${level}`);
+                        results.correctness.unknownCount++;
+                        results.unknownCount++;
+                }
             } else {
                 results.skippedCount++;
             }
         });
+
+        // 意味的類似度統計を最終化
+        this.finalizeSemanticSimilarityStats(results);
 
         // 割合を計算
         const total = stats.totalDatasetEntries || 1;
@@ -867,6 +1074,83 @@ export class HTMLReportService {
     }
 
     /**
+     * Intent Fulfillment評価統計の抽出
+     * @param {Object} stats - ProcessingStats オブジェクト
+     * @returns {Object} Intent Fulfillment統計
+     */
+    extractIntentFulfillmentStats(stats) {
+        const intentStats = {
+            totalEvaluated: 0,
+            totalSkipped: 0,
+            scores: [],
+            averageScore: 0,
+            highScore: 0,
+            mediumScore: 0,
+            lowScore: 0,
+            veryLowScore: 0,
+            evaluations: []
+        };
+
+        stats.matchedPairs.forEach(pair => {
+            const intentEval = pair.finalModification?.intentFulfillmentEvaluation;
+            if (!intentEval) return;
+
+            const evalEntry = {
+                entryId: pair.datasetEntry,
+                project: pair.project,
+                category: pair.category,
+                pullRequest: pair.pullRequest,
+                score: null,
+                reasoning: null,
+                status: 'unknown'
+            };
+
+            if (intentEval.skipped === true) {
+                intentStats.totalSkipped++;
+                evalEntry.status = 'skipped';
+                evalEntry.reasoning = intentEval.reason || 'unknown';
+            } else if (intentEval.error) {
+                intentStats.totalSkipped++;
+                evalEntry.status = 'error';
+                evalEntry.reasoning = intentEval.error;
+            } else if (typeof intentEval.score === 'number') {
+                intentStats.totalEvaluated++;
+                intentStats.scores.push(intentEval.score);
+                evalEntry.score = intentEval.score;
+                evalEntry.reasoning = intentEval.reasoning;
+                evalEntry.status = 'evaluated';
+                evalEntry.commitIntentSummary = intentEval.commit_intent_summary;
+                evalEntry.agentOutputSummary = intentEval.agent_output_summary;
+                evalEntry.alignmentAnalysis = intentEval.alignment_analysis;
+
+                // スコア分布
+                if (intentEval.score >= 0.9) intentStats.highScore++;
+                else if (intentEval.score >= 0.7) intentStats.mediumScore++;
+                else if (intentEval.score >= 0.4) intentStats.lowScore++;
+                else intentStats.veryLowScore++;
+            }
+
+            intentStats.evaluations.push(evalEntry);
+        });
+
+        // 平均スコアを計算
+        if (intentStats.scores.length > 0) {
+            const sum = intentStats.scores.reduce((a, b) => a + b, 0);
+            intentStats.averageScore = sum / intentStats.scores.length;
+        }
+
+        // 割合を計算
+        if (intentStats.totalEvaluated > 0) {
+            intentStats.highScoreRate = ((intentStats.highScore / intentStats.totalEvaluated) * 100).toFixed(1);
+            intentStats.mediumScoreRate = ((intentStats.mediumScore / intentStats.totalEvaluated) * 100).toFixed(1);
+            intentStats.lowScoreRate = ((intentStats.lowScore / intentStats.totalEvaluated) * 100).toFixed(1);
+            intentStats.veryLowScoreRate = ((intentStats.veryLowScore / intentStats.totalEvaluated) * 100).toFixed(1);
+        }
+
+        return intentStats;
+    }
+
+    /**
      * 詳細評価データの抽出（APRシステムの分析用）
      * @param {Object} stats - ProcessingStats オブジェクト
      * @returns {Object} 詳細評価データ
@@ -900,6 +1184,8 @@ export class HTMLReportService {
         }
         
         const detailedData = {
+            // 全マッチングペアデータ（HTMLレポート生成用）
+            matched_pairs: [],
             // 正確性レベル別の詳細データ
             correctnessLevels: {
                 identical: [],
@@ -927,29 +1213,70 @@ export class HTMLReportService {
         // matchedPairsから詳細データを抽出
         console.log(`📋 ${stats.matchedPairs.length}件のmatchedPairsを処理中...`);
         stats.matchedPairs.forEach((pair, index) => {
-            if (pair.evaluationSkipReason) {
+            // evaluationSkippedフラグまたはevaluationSkipReasonがあればスキップケース
+            if (pair.finalModification?.evaluationSkipped || pair.evaluationSkipReason) {
                 // スキップされたケース
                 const skipData = this.extractPairDetails(pair, 'SKIPPED');
+                detailedData.matched_pairs.push(skipData);
                 detailedData.correctnessLevels.skipped.push(skipData);
                 detailedData.plausibilityLevels.skipped.push(skipData);
                 return;
             }
 
-            if (!pair.finalModification || !pair.finalModification.llmEvaluation || pair.finalModification.llmEvaluation.error) {
-                // 評価エラーケース
+            // 評価結果の取得（新しい4軸構造と古い構造の両方に対応）
+            let evaluation = null;
+            let correctnessLevel = null;
+            let accuracyScore = null;
+            
+            if (pair.finalModification && pair.finalModification.llmEvaluation) {
+                evaluation = pair.finalModification.llmEvaluation;
+                if (evaluation.error) {
+                    const errorData = this.extractPairDetails(pair, 'ERROR');
+                    detailedData.matched_pairs.push(errorData);
+                    detailedData.correctnessLevels.skipped.push(errorData);
+                    detailedData.plausibilityLevels.skipped.push(errorData);
+                    return;
+                }
+                
+                // 4軸評価（新形式）
+                if (evaluation.accuracy !== undefined) {
+                    accuracyScore = typeof evaluation.accuracy === 'object' ? evaluation.accuracy.score : evaluation.accuracy;
+                    // accuracyスコアをcorrectnessLevelにマッピング
+                    if (accuracyScore >= 0.95) correctnessLevel = 'IDENTICAL';
+                    else if (accuracyScore >= 0.7) correctnessLevel = 'SEMANTICALLY_EQUIVALENT';
+                    else if (accuracyScore >= 0.3) correctnessLevel = 'PLAUSIBLE_BUT_DIFFERENT';
+                    else correctnessLevel = 'INCORRECT';
+                }
+                // 古い2軸評価
+                else if (evaluation.correctness_evaluation) {
+                    correctnessLevel = evaluation.correctness_evaluation.semantic_equivalence_level;
+                }
+            } else if (pair.evaluationResult) {
+                // 新しい構造
+                correctnessLevel = pair.evaluationResult.result;
+            } else if (pair.finalModification && pair.finalModification.llmEvaluation === undefined) {
+                // llmEvaluationが存在しないケース（修正なし/スキップケース）
+                // これは正常な状態なのでSKIPPEDとして扱う
+                const skipData = this.extractPairDetails(pair, 'SKIPPED');
+                detailedData.matched_pairs.push(skipData);
+                detailedData.correctnessLevels.skipped.push(skipData);
+                detailedData.plausibilityLevels.skipped.push(skipData);
+                return;
+            } else {
+                // 評価結果なし（エラーケース）
                 const errorData = this.extractPairDetails(pair, 'ERROR');
+                detailedData.matched_pairs.push(errorData);
                 detailedData.correctnessLevels.skipped.push(errorData);
                 detailedData.plausibilityLevels.skipped.push(errorData);
                 return;
             }
 
-            const evaluation = pair.finalModification.llmEvaluation;
             const pairDetails = this.extractPairDetails(pair, 'EVALUATED');
+            detailedData.matched_pairs.push(pairDetails);
 
             // 正確性評価による分類
-            if (evaluation.correctness_evaluation) {
-                const level = evaluation.correctness_evaluation.semantic_equivalence_level;
-                switch (level) {
+            if (correctnessLevel) {
+                switch (correctnessLevel) {
                     case 'IDENTICAL':
                         detailedData.correctnessLevels.identical.push({...pairDetails, correctnessLevel: 'IDENTICAL'});
                         break;
@@ -965,12 +1292,35 @@ export class HTMLReportService {
                     case 'CORRECT':  // 後方互換性
                         detailedData.correctnessLevels.semanticallyEquivalent.push({...pairDetails, correctnessLevel: 'CORRECT'});
                         break;
+                    default:
+                        console.log(`⚠️ 不明な正確性レベル: ${correctnessLevel}`);
+                        detailedData.correctnessLevels.skipped.push({...pairDetails, correctnessLevel: correctnessLevel});
                 }
             }
 
             // 妥当性評価による分類
-            if (evaluation.plausibility_evaluation) {
-                if (evaluation.plausibility_evaluation.is_plausible) {
+            if (evaluation) {
+                // 4軸評価（新形式）
+                if (evaluation.validity !== undefined) {
+                    const validityScore = typeof evaluation.validity === 'object' ? evaluation.validity.score : evaluation.validity;
+                    if (validityScore === 1.0) {
+                        detailedData.plausibilityLevels.plausible.push({...pairDetails, plausibilityLevel: 'PLAUSIBLE'});
+                    } else {
+                        detailedData.plausibilityLevels.notPlausible.push({...pairDetails, plausibilityLevel: 'NOT_PLAUSIBLE'});
+                    }
+                }
+                // 古い2軸評価
+                else if (evaluation.plausibility_evaluation) {
+                    if (evaluation.plausibility_evaluation.is_plausible) {
+                        detailedData.plausibilityLevels.plausible.push({...pairDetails, plausibilityLevel: 'PLAUSIBLE'});
+                    } else {
+                        detailedData.plausibilityLevels.notPlausible.push({...pairDetails, plausibilityLevel: 'NOT_PLAUSIBLE'});
+                    }
+                }
+            } else if (pair.evaluationResult) {
+                // evaluationResultから妥当性を推定
+                const isPlausible = pair.evaluationResult.result !== 'INCORRECT';
+                if (isPlausible) {
                     detailedData.plausibilityLevels.plausible.push({...pairDetails, plausibilityLevel: 'PLAUSIBLE'});
                 } else {
                     detailedData.plausibilityLevels.notPlausible.push({...pairDetails, plausibilityLevel: 'NOT_PLAUSIBLE'});
@@ -1014,37 +1364,65 @@ export class HTMLReportService {
             // APR情報
             aprProvider: 'Unknown',
             aprModel: 'Unknown',
+            aprStatus: pair.aprStatus || null,  // APRログの終了ステータスを追加
             
             // 評価情報
             evaluationReasoning: '',
             evaluationDetails: null,
             
+            // エラー/スキップ分類情報
+            errorSource: null,  // 'APR' or 'LLM_EVALUATION' or null
+            skipSource: null,   // 'APR' or 'LLM_EVALUATION' or null
+            
             // タイムスタンプ
             processedAt: new Date().toISOString()
         };
 
-        // APRログからの情報抽出
-        if (pair.aprLogData) {
-            // 修正ファイル数とライン数の抽出
-            if (pair.aprLogData.interaction_log) {
-                const modStats = this.extractModificationStats(pair.aprLogData.interaction_log);
+        // APR側のスキップ理由を記録
+        if (pair.finalModification?.evaluationSkipped && pair.finalModification?.skipReason) {
+            details.skipSource = 'APR';
+            details.aprSkipReason = pair.finalModification.skipReason;
+            details.skipReasonSummary = pair.finalModification.skipReason.reason;
+            details.skipReasonDetails = pair.finalModification.skipReason.details;
+        }
+
+        // APRログからの情報抽出（aprLogDataまたはaprLogをチェック）
+        const aprLogData = pair.aprLogData || pair.aprLog;
+        if (aprLogData) {
+            console.log(`🔍 APRログ処理開始: ${pair.datasetEntry}`);
+            console.log(`   - データ構造キー: [${Object.keys(aprLogData).join(', ')}]`);
+            
+            // 修正ファイル数とライン数の抽出（新しいturns構造に対応）
+            if (aprLogData.turns && Array.isArray(aprLogData.turns)) {
+                console.log(`✅ 新しい構造検出: ${aprLogData.turns.length}ターン`);
+                const modStats = this.extractModificationStatsFromTurns(aprLogData.turns);
                 details.modifiedFiles = modStats.files;
                 details.modifiedLines = modStats.lines;
                 details.modificationTypes = modStats.types;
+                console.log(`🔧 修正統計取得: ${details.modifiedFiles}ファイル, ${details.modifiedLines}行 (${pair.datasetEntry})`);
+            } else if (aprLogData.interaction_log && Array.isArray(aprLogData.interaction_log)) {
+                console.log(`⚠️ 古い構造検出: ${aprLogData.interaction_log.length}エントリー`);
+                // 旧式のinteraction_log構造のフォールバック
+                const modStats = this.extractModificationStatsFromInteractionLog(aprLogData.interaction_log);
+                details.modifiedFiles = modStats.files;
+                details.modifiedLines = modStats.lines;
+                details.modificationTypes = modStats.types;
+                console.log(`🔧 修正統計取得（古い構造）: ${details.modifiedFiles}ファイル, ${details.modifiedLines}行 (${pair.datasetEntry})`);
+            } else {
+                console.log(`❌ 認識できない構造: ${pair.datasetEntry}`);
             }
 
-            // APRメタデータの抽出（llmMetadataから取得）
-            if (pair.aprLogData.llmMetadata) {
-                details.aprProvider = pair.aprLogData.llmMetadata.provider || 'Unknown';
-                details.aprModel = pair.aprLogData.llmMetadata.model || 'Unknown';
+            // APRメタデータの抽出（複数のソースを試行）
+            if (aprLogData.llmMetadata) {
+                details.aprProvider = aprLogData.llmMetadata.provider || 'Unknown';
+                details.aprModel = aprLogData.llmMetadata.model || 'Unknown';
                 console.log(`🔍 APRモデル情報取得: ${details.aprProvider}/${details.aprModel} (${pair.datasetEntry})`);
+            } else if (aprLogData.experiment_metadata) {
+                details.aprProvider = aprLogData.experiment_metadata.llm_provider || 'Unknown';
+                details.aprModel = aprLogData.experiment_metadata.llm_model || 'Unknown';
+                console.log(`🔍 APRモデル情報取得（experiment_metadata）: ${details.aprProvider}/${details.aprModel} (${pair.datasetEntry})`);
             } else {
                 console.log(`⚠️ APRモデル情報なし: ${pair.datasetEntry}`);
-                console.log(`   - aprLogData存在: ${!!pair.aprLogData}`);
-                console.log(`   - llmMetadata存在: ${!!pair.aprLogData?.llmMetadata}`);
-                if (pair.aprLogData?.llmMetadata) {
-                    console.log(`   - llmMetadata内容: ${JSON.stringify(pair.aprLogData.llmMetadata, null, 2)}`);
-                }
             }
         }
 
@@ -1052,8 +1430,40 @@ export class HTMLReportService {
         if (pair.finalModification && pair.finalModification.llmEvaluation) {
             const evaluation = pair.finalModification.llmEvaluation;
             
+            // LLM評価エラーの記録
+            if (evaluation.error) {
+                details.errorSource = 'LLM_EVALUATION';
+                details.llmEvaluationError = evaluation.error;
+            }
+            
+            // 4軸評価形式（新形式）
+            if (evaluation.accuracy !== undefined) {
+                details.fourAxisEvaluation = {
+                    accuracy: evaluation.accuracy,
+                    decision_soundness: evaluation.decision_soundness,
+                    directional_consistency: evaluation.directional_consistency,
+                    validity: evaluation.validity,
+                    analysis_labels: evaluation.analysis_labels,
+                    overall_assessment: evaluation.overall_assessment
+                };
+                
+                // 統合された推論を抽出
+                details.evaluationReasoning = [
+                    evaluation.accuracy?.reasoning,
+                    evaluation.decision_soundness?.reasoning,
+                    evaluation.directional_consistency?.reasoning,
+                    evaluation.validity?.reasoning
+                ].filter(Boolean).join(' | ');
+                
+                // Repair Types情報
+                if (evaluation.analysis_labels?.repair_types) {
+                    details.repairTypes = evaluation.analysis_labels.repair_types;
+                }
+            }
+            
+            // 後方互換性：古い2軸評価形式
             if (evaluation.correctness_evaluation) {
-                details.evaluationReasoning = evaluation.correctness_evaluation.reasoning || '';
+                details.evaluationReasoning = details.evaluationReasoning || evaluation.correctness_evaluation.reasoning || '';
                 details.evaluationDetails = evaluation.correctness_evaluation;
             }
             
@@ -1061,6 +1471,67 @@ export class HTMLReportService {
                 details.plausibilityReasoning = evaluation.plausibility_evaluation.reasoning || '';
                 details.plausibilityDetails = evaluation.plausibility_evaluation;
             }
+        } else if (pair.evaluationResult) {
+            // 直接evaluationResultから抽出する場合
+            details.evaluationReasoning = pair.evaluationResult.explanation || pair.evaluationResult.reasoning || '';
+            
+            // 意味的類似度スコア情報を追加
+            details.semanticSimilarityScore = pair.evaluationResult.semantic_similarity_score || null;
+            details.similarityReasoning = pair.evaluationResult.similarity_reasoning || '';
+            
+            details.evaluationDetails = {
+                is_correct: pair.evaluationResult.accuracy === 'correct' || pair.evaluationResult.result === 'IDENTICAL' || pair.evaluationResult.result === 'SEMANTICALLY_EQUIVALENT',
+                semantic_equivalence_level: pair.evaluationResult.result,
+                reasoning: details.evaluationReasoning,
+                // 新しいフィールドを追加
+                semantic_similarity_score: details.semanticSimilarityScore,
+                similarity_reasoning: details.similarityReasoning
+            };
+            console.log(`📋 評価結果抽出: ${pair.evaluationResult.result} (スコア: ${details.semanticSimilarityScore}) (${pair.datasetEntry})`);
+        }
+
+        // Intent Fulfillment評価情報の抽出
+        if (pair.finalModification && pair.finalModification.intentFulfillmentEvaluation) {
+            const intentEval = pair.finalModification.intentFulfillmentEvaluation;
+            
+            if (intentEval.error) {
+                // Intent評価エラーケース
+                if (!details.errorSource) {
+                    details.errorSource = 'LLM_EVALUATION';
+                }
+                details.intentFulfillmentEvaluation = {
+                    status: 'error',
+                    error: intentEval.error
+                };
+                details.intentEvaluationError = intentEval.error;
+            } else if (intentEval.skipped) {
+                // Intent評価スキップケース
+                if (!details.skipSource) {
+                    details.skipSource = 'LLM_EVALUATION';
+                }
+                details.intentFulfillmentEvaluation = {
+                    status: 'skipped',
+                    reason: intentEval.reason || 'no_commit_messages'
+                };
+            } else if (typeof intentEval.score === 'number') {
+                // 評価完了ケース
+                details.intentFulfillmentEvaluation = {
+                    status: 'evaluated',
+                    score: intentEval.score,
+                    reasoning: intentEval.reasoning,
+                    commit_intent_summary: intentEval.commit_intent_summary,
+                    agent_output_summary: intentEval.agent_output_summary,
+                    alignment_analysis: intentEval.alignment_analysis
+                };
+            } else {
+                // その他のケース
+                details.intentFulfillmentEvaluation = {
+                    status: 'unknown',
+                    data: intentEval
+                };
+            }
+            
+            console.log(`🎯 Intent Fulfillment評価抽出: ${details.intentFulfillmentEvaluation.status} (${pair.datasetEntry})`);
         }
 
         // エラー情報の抽出
@@ -1116,6 +1587,248 @@ export class HTMLReportService {
      * @param {Array} interactionLog - インタラクションログ
      * @returns {Object} 修正統計
      */
+    /**
+     * APRログのturns構造から修正統計を抽出
+     * @param {Array} turns - ターン配列
+     * @returns {Object} 修正統計
+     */
+    extractModificationStatsFromTurns(turns) {
+        const stats = {
+            files: 0,
+            lines: 0,
+            types: []
+        };
+
+        if (!Array.isArray(turns)) return stats;
+
+        const modifiedFiles = new Set();
+        let totalLines = 0;
+        const modTypes = new Set();
+
+        turns.forEach((turn, index) => {
+            // modified_diffまたはmodifiedDiffから修正内容を抽出
+            const modifiedDiff = turn.modifiedDiff || turn.modified_diff;
+            
+            if (modifiedDiff && typeof modifiedDiff === 'string' && modifiedDiff.trim().length > 0) {
+                console.log(`🔧 Turn ${index + 1}: 修正あり (${modifiedDiff.length}文字)`);
+                
+                // ファイル名の抽出（diff形式から）
+                const files = this.extractFileNamesFromDiff(modifiedDiff);
+                files.forEach(file => modifiedFiles.add(file));
+                
+                // 修正行数の計算
+                const lines = this.countModifiedLines(modifiedDiff);
+                totalLines += lines;
+                
+                // 修正タイプの推定（thoughtやplanから）
+                if (turn.thought) {
+                    const types = this.classifyModificationType(turn.thought);
+                    types.forEach(type => modTypes.add(type));
+                }
+                
+                if (turn.plan) {
+                    const types = this.classifyModificationType(turn.plan);
+                    types.forEach(type => modTypes.add(type));
+                }
+                
+                // modifiedDiff自体からもタイプを推定
+                const diffTypes = this.classifyModificationType(modifiedDiff);
+                diffTypes.forEach(type => modTypes.add(type));
+            } else {
+                console.log(`🔧 Turn ${index + 1}: 修正なし`);
+            }
+        });
+
+        stats.files = modifiedFiles.size;
+        stats.lines = totalLines;
+        stats.types = Array.from(modTypes);
+
+        console.log(`📊 修正統計: ${stats.files}ファイル, ${stats.lines}行, タイプ: [${stats.types.join(', ')}]`);
+        return stats;
+    }
+
+    /**
+     * diffからファイル名を抽出
+     * @param {string} diff - 差分文字列
+     * @returns {Array} ファイル名の配列
+     */
+    extractFileNamesFromDiff(diff) {
+        const files = new Set();
+        
+        if (!diff) return Array.from(files);
+        
+        const lines = diff.split('\n');
+        
+        lines.forEach(line => {
+            // "--- a/filename" や "+++ b/filename" の形式
+            if (line.startsWith('--- a/') || line.startsWith('+++ b/')) {
+                const filename = line.substring(6); // "--- a/" または "+++ b/" を除去
+                if (filename && filename !== '/dev/null') {
+                    files.add(filename);
+                }
+            }
+            // "diff --git a/filename b/filename" の形式
+            else if (line.startsWith('diff --git ')) {
+                const match = line.match(/diff --git a\/(.+?) b\/(.+)/);
+                if (match && match[1]) {
+                    files.add(match[1]);
+                }
+            }
+            // APR特有の "*** Update File: filename" 形式
+            else if (line.startsWith('*** Update File: ')) {
+                const filename = line.substring(17).trim(); // "*** Update File: " を除去
+                if (filename) {
+                    files.add(filename);
+                }
+            }
+            // "@@ -line,count +line,count @@ filename" の形式
+            else if (line.startsWith('@@') && line.includes('@@')) {
+                const parts = line.split('@@');
+                if (parts.length > 2 && parts[2].trim()) {
+                    // ファイル名が含まれている場合
+                    const filename = parts[2].trim();
+                    if (filename && !filename.startsWith(' ')) {
+                        files.add(filename);
+                    }
+                }
+            }
+        });
+        
+        return Array.from(files);
+    }
+
+    /**
+     * 古いinteraction_log構造から修正統計を抽出
+     * @param {Array} interactionLog - interaction_log配列
+     * @returns {Object} 修正統計
+     */
+    extractModificationStatsFromInteractionLog(interactionLog) {
+        const stats = {
+            files: 0,
+            lines: 0,
+            types: []
+        };
+
+        if (!Array.isArray(interactionLog) || interactionLog.length === 0) {
+            console.log('❌ interaction_log配列が空または無効');
+            return stats;
+        }
+
+        let totalLines = 0;
+        const modifiedFiles = new Set();
+        const modificationTypes = new Set();
+
+        interactionLog.forEach((entry, index) => {
+            console.log(`🔧 interaction_log[${index}] を処理中...`);
+            console.log(`   キー: [${Object.keys(entry).join(', ')}]`);
+            
+            // LLMレスポンスから生成されたコンテンツを抽出
+            if (entry.llm_response && entry.llm_response.raw_content) {
+                const content = entry.llm_response.raw_content;
+                console.log(`📄 raw_content長: ${content.length}文字`);
+                
+                // %_Modified_%セクションを優先的に検索
+                const modifiedMatch = content.match(/%_Modified_%\s*([\s\S]*?)(?=%_\w+_%|$)/);
+                if (modifiedMatch) {
+                    const modifiedContent = modifiedMatch[1].trim();
+                    console.log('✅ %_Modified_%セクションを検出');
+                    console.log(`📄 Modified内容長: ${modifiedContent.length}文字`);
+                    
+                    // ファイル名を抽出
+                    const files = this.extractFileNamesFromDiff(modifiedContent);
+                    console.log(`📁 ファイル検出: ${files.length}件`);
+                    files.forEach(file => {
+                        modifiedFiles.add(file);
+                        console.log(`  - ${file}`);
+                    });
+
+                    // 行数を計算
+                    const lines = this.countModifiedLines(modifiedContent);
+                    console.log(`📊 変更行数: ${lines}行`);
+                    totalLines += lines;
+
+                    // 修正タイプを分類
+                    const types = this.classifyModificationType(modifiedContent);
+                    console.log(`🏷️ タイプ: [${types.join(', ')}]`);
+                    types.forEach(type => modificationTypes.add(type));
+                }
+                // %_Modified_%が見つからない場合、diff形式のコンテンツを検索
+                else if (content.includes('diff --git') || content.includes('---') || content.includes('+++')) {
+                    console.log('✅ diff形式のコンテンツを検出');
+                    
+                    // ファイル名を抽出
+                    const files = this.extractFileNamesFromDiff(content);
+                    console.log(`📁 ファイル検出: ${files.length}件`);
+                    files.forEach(file => {
+                        modifiedFiles.add(file);
+                        console.log(`  - ${file}`);
+                    });
+
+                    // 行数を計算
+                    const lines = this.countModifiedLines(content);
+                    console.log(`📊 変更行数: ${lines}行`);
+                    totalLines += lines;
+
+                    // 修正タイプを分類
+                    const types = this.classifyModificationType(content);
+                    console.log(`🏷️ タイプ: [${types.join(', ')}]`);
+                    types.forEach(type => modificationTypes.add(type));
+                } else {
+                    console.log('⚠️ diff形式ではないコンテンツ');
+                    
+                    // %_Plan_%セクションからファイル情報を抽出
+                    const planMatch = content.match(/%_Plan_%\s*([\s\S]*?)(?=%_\w+_%|$)/);
+                    if (planMatch) {
+                        const planContent = planMatch[1];
+                        const fileMatches = planContent.match(/"filePath":\s*"([^"]+)"/g);
+                        if (fileMatches) {
+                            fileMatches.forEach(match => {
+                                const fileMatch = match.match(/"filePath":\s*"([^"]+)"/);
+                                if (fileMatch) {
+                                    modifiedFiles.add(fileMatch[1]);
+                                    console.log(`📁 Plan からファイル検出: ${fileMatch[1]}`);
+                                }
+                            });
+                        }
+                    }
+                    
+                    // Go言語のコードパターンを検索してファイル推定
+                    const goPatterns = [
+                        /package\s+\w+/,
+                        /func\s+\w+/,
+                        /import\s+/,
+                        /\.go\b/
+                    ];
+                    
+                    if (goPatterns.some(pattern => pattern.test(content))) {
+                        console.log('✅ Go言語コードを検出');
+                        if (modifiedFiles.size === 0) {
+                            modifiedFiles.add('estimated_go_file.go');
+                            console.log('📁 推定Go ファイルを追加');
+                        }
+                        
+                        // 改行数をベースに行数を推定
+                        const estimatedLines = Math.min((content.match(/\n/g) || []).length, 50);
+                        totalLines += estimatedLines;
+                        console.log(`📊 推定行数: ${estimatedLines}行`);
+                        
+                        const types = this.classifyModificationType(content);
+                        types.forEach(type => modificationTypes.add(type));
+                    }
+                }
+            } else {
+                console.log('⚠️ llm_response.raw_content が見つかりません');
+            }
+        });
+
+        stats.files = modifiedFiles.size;
+        stats.lines = totalLines;
+        stats.types = Array.from(modificationTypes);
+
+        console.log(`✅ 古い構造からの統計抽出完了: ${stats.files}ファイル, ${stats.lines}行, [${stats.types.join(', ')}]`);
+        return stats;
+    }
+
     extractModificationStats(interactionLog) {
         const stats = {
             files: 0,
@@ -1180,23 +1893,77 @@ export class HTMLReportService {
     }
 
     /**
-     * 修正タイプの分類
-     * @param {string} description - 修正説明
-     * @returns {string} 修正タイプ
+     * 修正タイプの分類（複数タイプ対応）
+     * @param {string} content - 修正内容またはコード
+     * @returns {Array} 修正タイプの配列
      */
-    classifyModificationType(description) {
-        if (!description) return null;
+    classifyModificationType(content) {
+        if (!content || typeof content !== 'string') {
+            return ['unknown'];
+        }
         
-        const desc = description.toLowerCase();
+        const types = new Set();
+        const lowerContent = content.toLowerCase();
+
+        // プログラミング関連キーワードの定義
+        const keywords = {
+            'conditional': ['if', 'else', 'switch', 'case', 'condition'],
+            'loop': ['for', 'while', 'foreach', 'loop'],
+            'function': ['function', 'func', 'def', 'method'],
+            'variable': ['var', 'let', 'const', 'variable'],
+            'class': ['class', 'struct', 'interface'],
+            'import': ['import', 'include', 'require', 'use'],
+            'error': ['error', 'exception', 'throw', 'catch'],
+            'api': ['api', 'endpoint', 'route', 'handler'],
+            'config': ['config', 'setting', 'parameter'],
+            'test': ['test', 'spec', 'mock', 'assert'],
+            'database': ['db', 'database', 'query', 'sql'],
+            'network': ['http', 'https', 'request', 'response'],
+            'security': ['auth', 'token', 'security', 'permission'],
+            'logging': ['log', 'debug', 'info', 'warn'],
+            'ui': ['ui', 'component', 'element', 'style']
+        };
+
+        // キーワードマッチング
+        for (const [type, words] of Object.entries(keywords)) {
+            if (words.some(word => lowerContent.includes(word))) {
+                types.add(type);
+            }
+        }
+
+        // Go言語特有のパターン
+        if (lowerContent.includes('nil') || lowerContent.includes('null')) {
+            types.add('null-check');
+        }
         
-        if (desc.includes('null') || desc.includes('npe')) return 'null-check';
-        if (desc.includes('exception') || desc.includes('error')) return 'error-handling';
-        if (desc.includes('condition') || desc.includes('if')) return 'conditional';
-        if (desc.includes('loop') || desc.includes('iteration')) return 'loop';
-        if (desc.includes('return') || desc.includes('value')) return 'return-value';
-        if (desc.includes('method') || desc.includes('function')) return 'method-call';
-        if (desc.includes('variable') || desc.includes('assignment')) return 'variable';
-        if (desc.includes('import') || desc.includes('dependency')) return 'dependency';
+        if (lowerContent.includes('return')) {
+            types.add('return-value');
+        }
+
+        return types.size > 0 ? Array.from(types) : ['generic'];
+        
+        // 依存関係/インポート
+        if (desc.includes('import') || desc.includes('dependency') || desc.includes('package') || desc.includes('library')) return 'dependency';
+        
+        // API関連
+        if (desc.includes('api') || desc.includes('endpoint') || desc.includes('request') || desc.includes('response')) return 'api';
+        
+        // データ構造
+        if (desc.includes('array') || desc.includes('list') || desc.includes('map') || desc.includes('object') || desc.includes('struct')) return 'data-structure';
+        
+        // 型関連
+        if (desc.includes('type') || desc.includes('cast') || desc.includes('convert') || desc.includes('parse')) return 'type-conversion';
+        
+        // 設定/パラメータ
+        if (desc.includes('config') || desc.includes('parameter') || desc.includes('option') || desc.includes('setting')) return 'configuration';
+        
+        // ログ/デバッグ
+        if (desc.includes('log') || desc.includes('debug') || desc.includes('print') || desc.includes('trace')) return 'logging';
+        
+        // テスト関連
+        if (desc.includes('test') || desc.includes('mock') || desc.includes('assert') || desc.includes('verify')) return 'testing';
+        
+        return 'general';
         
         return 'other';
     }
@@ -1399,7 +2166,20 @@ export class HTMLReportService {
                     plausible: 0,
                     incorrect: 0,
                     skipped: 0,
-                    total: 0
+                    total: 0,
+                    // 意味的類似度統計を追加
+                    semanticSimilarity: {
+                        averageScore: 0,
+                        totalScores: [],
+                        scoreBreakdown: {
+                            perfect: 0,      // 1.0
+                            nearPerfect: 0,  // 0.9-0.99
+                            high: 0,         // 0.7-0.89
+                            medium: 0,       // 0.5-0.69
+                            low: 0,          // 0.2-0.49
+                            veryLow: 0       // 0.0-0.19
+                        }
+                    }
                 };
             }
             breakdown.byProject[projectName].total++;
@@ -1419,42 +2199,136 @@ export class HTMLReportService {
                         project: projectName
                     });
                 }
-            } else if (pair.finalModification && pair.finalModification.llmEvaluation && !pair.finalModification.llmEvaluation.error) {
-                const evaluation = pair.finalModification.llmEvaluation;
-                const assessment = evaluation.overall_assessment;
+            } else {
+                // 評価結果の抽出（複数のデータ構造に対応）
+                let correctnessLevel = null;
+                let evaluation = null;
+                let reasoning = 'N/A';
+                let hasValidEvaluation = false;
                 
-                switch (assessment) {
-                    case 'CORRECT':
-                        breakdown.byProject[projectName].correct++;
-                        if (breakdown.evaluationSamples.correct.length < 3) {
-                            breakdown.evaluationSamples.correct.push({
-                                entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
-                                project: projectName,
-                                reasoning: evaluation.reasoning || 'N/A'
-                            });
-                        }
-                        break;
-                    case 'PLAUSIBLE_BUT_DIFFERENT':
-                        breakdown.byProject[projectName].plausible++;
-                        if (breakdown.evaluationSamples.plausible.length < 3) {
-                            breakdown.evaluationSamples.plausible.push({
-                                entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
-                                project: projectName,
-                                reasoning: evaluation.reasoning || 'N/A'
-                            });
-                        }
-                        break;
-                    case 'INCORRECT':
-                        breakdown.byProject[projectName].incorrect++;
-                        if (breakdown.evaluationSamples.incorrect.length < 3) {
-                            breakdown.evaluationSamples.incorrect.push({
-                                entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
-                                project: projectName,
-                                reasoning: evaluation.reasoning || 'N/A'
-                            });
-                        }
-                        break;
+                console.log(`🔍 [${projectName}] ${pair.datasetEntry || 'Unknown'} - 評価結果抽出開始`);
+                
+                // 1. 新しい評価システム（evaluationResult）
+                if (pair.evaluationResult) {
+                    if (pair.evaluationResult.correctnessLevel) {
+                        correctnessLevel = pair.evaluationResult.correctnessLevel;
+                        reasoning = pair.evaluationResult.reasoning || 'N/A';
+                        hasValidEvaluation = true;
+                    } else if (pair.evaluationResult.result) {
+                        correctnessLevel = pair.evaluationResult.result;
+                        reasoning = pair.evaluationResult.reasoning || 'N/A';
+                        hasValidEvaluation = true;
+                    }
+                    
+                    // 意味的類似度スコアを抽出
+                    const score = pair.evaluationResult.semantic_similarity_score;
+                    if (score !== null && score !== undefined && !isNaN(score)) {
+                        const validScore = Math.max(0, Math.min(1, parseFloat(score)));
+                        breakdown.byProject[projectName].semanticSimilarity.totalScores.push(validScore);
+                        
+                        // スコア分類別の統計
+                        const category = this.categorizeSemanticSimilarityScore(validScore);
+                        breakdown.byProject[projectName].semanticSimilarity.scoreBreakdown[category]++;
+                    }
                 }
+                
+                // 2. finalModification.llmEvaluation構造
+                if (!hasValidEvaluation && pair.finalModification && pair.finalModification.llmEvaluation && !pair.finalModification.llmEvaluation.error) {
+                    evaluation = pair.finalModification.llmEvaluation;
+                    
+                    // overall_assessmentまたはcorrectness_evaluation.semantic_equivalence_levelを使用
+                    correctnessLevel = evaluation.overall_assessment || 
+                                     evaluation.correctness_evaluation?.semantic_equivalence_level;
+                    
+                    reasoning = evaluation.reasoning || 
+                              evaluation.correctness_evaluation?.reasoning || 'N/A';
+                    
+                    hasValidEvaluation = !!correctnessLevel;
+                    
+                    // 意味的類似度スコア抽出（複数の場所をチェック）
+                    const score = evaluation.semantic_similarity_score || 
+                                evaluation.correctness_evaluation?.semantic_similarity_score;
+                    if (score !== null && score !== undefined && !isNaN(score)) {
+                        const validScore = Math.max(0, Math.min(1, parseFloat(score)));
+                        breakdown.byProject[projectName].semanticSimilarity.totalScores.push(validScore);
+                        
+                        // スコア分類別の統計
+                        const category = this.categorizeSemanticSimilarityScore(validScore);
+                        breakdown.byProject[projectName].semanticSimilarity.scoreBreakdown[category]++;
+                    }
+                }
+                
+                // 3. 評価結果がない場合
+                if (!hasValidEvaluation) {
+                    breakdown.byProject[projectName].skipped++;
+                    
+                    const reason = 'No evaluation result found';
+                    breakdown.bySkipReason[reason] = (breakdown.bySkipReason[reason] || 0) + 1;
+                    
+                    if (breakdown.evaluationSamples.skipped.length < 3) {
+                        breakdown.evaluationSamples.skipped.push({
+                            entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
+                            reason: reason,
+                            project: projectName
+                        });
+                    }
+                } else if (correctnessLevel) {
+                    switch (correctnessLevel) {
+                        case 'IDENTICAL':
+                        case 'SEMANTICALLY_EQUIVALENT':
+                        case 'CORRECT':  // 後方互換性
+                            breakdown.byProject[projectName].correct++;
+                            if (breakdown.evaluationSamples.correct.length < 3) {
+                                breakdown.evaluationSamples.correct.push({
+                                    entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
+                                    project: projectName,
+                                    reasoning: reasoning
+                                });
+                            }
+                            break;
+                        case 'PLAUSIBLE_BUT_DIFFERENT':
+                            breakdown.byProject[projectName].plausible++;
+                            if (breakdown.evaluationSamples.plausible.length < 3) {
+                                breakdown.evaluationSamples.plausible.push({
+                                    entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
+                                    project: projectName,
+                                    reasoning: reasoning
+                                });
+                            }
+                            break;
+                        case 'INCORRECT':
+                            breakdown.byProject[projectName].incorrect++;
+                            if (breakdown.evaluationSamples.incorrect.length < 3) {
+                                breakdown.evaluationSamples.incorrect.push({
+                                    entry: pair.datasetEntry || `${pair.project}/${pair.category}/${pair.pullRequest}`,
+                                    project: projectName,
+                                    reasoning: reasoning
+                                });
+                            }
+                            break;
+                        default:
+                            console.log(`⚠️ 不明な正確性レベル: ${correctnessLevel} (${pair.datasetEntry})`);
+                            breakdown.byProject[projectName].incorrect++;
+                            break;
+                    }
+                } else {
+                    console.log(`⚠️ 正確性レベルが取得できませんでした: ${pair.datasetEntry}`);
+                    breakdown.byProject[projectName].skipped++;
+                    
+                    const reason = 'No correctness level found';
+                    breakdown.bySkipReason[reason] = (breakdown.bySkipReason[reason] || 0) + 1;
+                }
+            }
+        });
+
+        // プロジェクト別の意味的類似度平均スコアを計算
+        Object.keys(breakdown.byProject).forEach(projectName => {
+            const project = breakdown.byProject[projectName];
+            const scores = project.semanticSimilarity.totalScores;
+            
+            if (scores.length > 0) {
+                const sum = scores.reduce((acc, score) => acc + score, 0);
+                project.semanticSimilarity.averageScore = parseFloat((sum / scores.length).toFixed(3));
             }
         });
 

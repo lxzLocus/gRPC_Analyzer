@@ -36,9 +36,26 @@ export class CachedDatasetRepository {
                 }
                 throw readdirError;
             }
-            return entries
-                .filter(dirent => dirent.isDirectory())
-                .map(dirent => dirent.name);
+            
+            // シンボリックリンクもディレクトリとして扱う
+            const directories = [];
+            for (const dirent of entries) {
+                if (dirent.isDirectory()) {
+                    directories.push(dirent.name);
+                } else if (dirent.isSymbolicLink()) {
+                    // シンボリックリンク先がディレクトリかチェック
+                    try {
+                        const linkPath = path.join(datasetDir, dirent.name);
+                        const stat = await fs.stat(linkPath); // シンボリックリンクをフォロー
+                        if (stat.isDirectory()) {
+                            directories.push(dirent.name);
+                        }
+                    } catch (err) {
+                        console.warn(`⚠️ シンボリックリンク先の確認失敗: ${dirent.name}`);
+                    }
+                }
+            }
+            return directories;
         } catch (error) {
             throw new Error(`プロジェクトディレクトリ取得エラー: ${error.message}`);
         }
@@ -61,9 +78,26 @@ export class CachedDatasetRepository {
                 }
                 throw readdirError;
             }
-            return entries
-                .filter(dirent => dirent.isDirectory())
-                .map(dirent => dirent.name);
+            
+            // シンボリックリンクもディレクトリとして扱う
+            const directories = [];
+            for (const dirent of entries) {
+                if (dirent.isDirectory()) {
+                    directories.push(dirent.name);
+                } else if (dirent.isSymbolicLink()) {
+                    // シンボリックリンク先がディレクトリかチェック
+                    try {
+                        const linkPath = path.join(projectPath, dirent.name);
+                        const stat = await fs.stat(linkPath); // シンボリックリンクをフォロー
+                        if (stat.isDirectory()) {
+                            directories.push(dirent.name);
+                        }
+                    } catch (err) {
+                        console.warn(`⚠️ シンボリックリンク先の確認失敗: ${dirent.name}`);
+                    }
+                }
+            }
+            return directories;
         } catch (error) {
             throw new Error(`カテゴリディレクトリ取得エラー: ${error.message}`);
         }
@@ -86,9 +120,26 @@ export class CachedDatasetRepository {
                 }
                 throw readdirError;
             }
-            return entries
-                .filter(dirent => dirent.isDirectory())
-                .map(dirent => dirent.name);
+            
+            // シンボリックリンクもディレクトリとして扱う
+            const directories = [];
+            for (const dirent of entries) {
+                if (dirent.isDirectory()) {
+                    directories.push(dirent.name);
+                } else if (dirent.isSymbolicLink()) {
+                    // シンボリックリンク先がディレクトリかチェック
+                    try {
+                        const linkPath = path.join(categoryPath, dirent.name);
+                        const stat = await fs.stat(linkPath); // シンボリックリンクをフォロー
+                        if (stat.isDirectory()) {
+                            directories.push(dirent.name);
+                        }
+                    } catch (err) {
+                        console.warn(`⚠️ シンボリックリンク先の確認失敗: ${dirent.name}`);
+                    }
+                }
+            }
+            return directories;
         } catch (error) {
             throw new Error(`プルリクエストディレクトリ取得エラー: ${error.message}`);
         }
@@ -489,6 +540,37 @@ export class CachedDatasetRepository {
             return JSON.parse(content);
         } catch (error) {
             throw new Error(`JSONファイル読み取りエラー: ${error.message}`);
+        }
+    }
+
+    /**
+     * commit_messages.jsonの読み込み
+     * @param {string} pullRequestPath - プルリクエストディレクトリのパス
+     * @returns {Promise<Object|null>} コミットメッセージデータ、または存在しない場合null
+     */
+    async getCommitMessages(pullRequestPath) {
+        try {
+            const commitMessagesPath = path.join(pullRequestPath, 'commit_messages.json');
+            
+            // ファイルの存在確認
+            if (!(await this.pathExists(commitMessagesPath))) {
+                return null;
+            }
+            
+            // ファイル読み込み
+            const content = await fs.readFile(commitMessagesPath, 'utf-8');
+            const data = JSON.parse(content);
+            
+            // 基本的な構造チェック
+            if (!data.merge_commit && !data.proto_commit) {
+                console.warn(`⚠️ commit_messages.json has unexpected structure: ${commitMessagesPath}`);
+                return null;
+            }
+            
+            return data;
+        } catch (error) {
+            console.error(`❌ Error reading commit_messages.json: ${error.message}`);
+            return null;
         }
     }
 

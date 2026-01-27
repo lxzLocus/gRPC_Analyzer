@@ -1,0 +1,125 @@
+## Role and Goal ##
+Your task is to evaluate an AI agent's output (which may include a patch or an explicit decision to make no changes) using four independent evaluation dimensions defined below.
+
+---
+## Evaluation Dimensions ##
+
+You MUST evaluate the agent's output along the following four dimensions. These dimensions are independent and MUST NOT be conflated.
+
+### 1. Accuracy (Result Equivalence) ###
+- Measures whether the agent's output matches the final human-written patch.
+- This dimension MUST be evaluated ONLY by comparing the agent output to the Ground Truth Patch.
+- A decision to make no changes MUST be scored as 0.0.
+- **CRITICAL: You MUST ALWAYS provide an 'Accuracy Score' (0.0 to 1.0) based on the following rubric.**
+
+#### Rubric for Accuracy Score (MANDATORY):
+| Score | Level | Description |
+| :--- | :--- | :--- |
+| **1.0** | **Perfect Match** | The patch is `Correct` (meets R0-R15 criteria). |
+| **0.9** | **Near Perfect** | Achieves the goal with only trivial, harmless differences not covered by R1-R15 (e.g., different log messages). |
+| **0.7-0.8**| **High Similarity** | Modifies the correct functions/files with the correct core logic, but misses a minor edge case or has a small side effect. |
+| **0.5-0.6**| **Partial Match** | Modifies the correct files/functions, but the implementation logic is flawed or incomplete. |
+| **0.2-0.4**| **Correct Locus** | Identifies the correct *location* for the fix, but the implementation logic is fundamentally wrong. |
+| **0.0-0.1**| **No Match** | Modifies the wrong files, the logic is completely unrelated, or no changes were made. |
+
+#### Rules for Strict Correctness (R0-R15):
+    - **R0: Identical Patch**: The patch is identical to the developer's patch (ignoring formatting and comments).
+    - **R1: Different fields with the same value (or alias)**: Uses different field names or aliases for the same value.
+    - **R2: Same exception but different messages**: Throws the same type of exception with a different message.
+    - **R3: Variable initialization with new rather than a default value**: Initializes a variable with `new` instead of a default value, but they are equivalent.
+    - **R4: if statement instead of a ternary operator**: Uses an `if` statement that is equivalent to a ternary operator.
+    - **R5: Unrolling a method**: Inlines the code of a method instead of calling it.
+    - **R6: Replacing a value without a side effect**: Replaces a value in a way that has no side effects.
+    - **R7: Enumerating**: Enumerates conditions differently but with logical equivalence.
+    - **R8: Unnecessary code uncleaned**: Leaves unnecessary code that was removed in the developer patch.
+    - **R9: Return earlier instead of a packaged return**: Uses an early return instead of a bulk return.
+    - **R10: More null checks**: Includes additional null checks not present in the developer patch.
+    - **R11: Additional unneeded check**: Adds a check that is already covered by the existing code context.
+    - **R12: Partial code is not included**: Fixes only a part of the bug but is identical to a sub-part of the developer patch.
+    - **R13: Less accurate comparison**: Uses a less precise but still valid comparison (e.g., float vs. double).
+    - **R14: The field but not its getter**: Directly accesses a field instead of using its getter method.
+    - **R15: Un-actionable code but not removing them**: Makes buggy code unreachable instead of deleting it.
+
+### 2. Decision Soundness ###
+- Measures whether the agent made the most reasonable decision given the information available at that time.
+- This evaluation MUST consider:
+    - The provided Code Context
+    - The presence or absence of generated stubs (e.g., pb.go files)
+    - Whether modifying the code could introduce build failures or logical errors
+- A decision to make no changes MAY score 1.0 if modifying the code would likely introduce build failures or logical errors.
+- **CRITICAL: This dimension MUST NOT use the Ground Truth Patch as a reference.**
+- Score is binary: 1.0 (sound decision) or 0.0 (unsound decision).
+
+### 3. Directional Consistency ###
+- Measures whether the agent's output is logically consistent with the direction of the human-written patch.
+- Partial, incomplete, or deferred fixes MAY score 1.0 if they do not contradict the intent of the Ground Truth Patch.
+- This dimension evaluates non-contradiction, not equivalence.
+- A decision to make no changes MAY score 1.0 if it does not contradict the human patch direction.
+- Score is binary: 1.0 (consistent) or 0.0 (contradicts direction).
+
+### 4. Validity ###
+- Measures whether the agent's output (patch or no-op decision) is syntactically and semantically valid as code.
+- **To determine validity, you MUST verify the following checklist:**
+    1.  **Syntactic Correctness**: Is the patch syntactically correct for the given programming language? (e.g., no missing brackets, correct keywords).
+    2.  **Dependency Resolution**: Does the patch reference variables, functions, or classes that are defined or imported within the provided `Code Context`?
+    3.  **Logical Soundness**: Does the patch introduce any obvious logical flaws or contradictions that would cause build failures?
+- A decision to make no changes MUST score 1.0 (valid decision).
+- Score is binary: 1.0 (valid) or 0.0 (invalid).
+
+---
+## Provided Data ##
+
+### 1. Code Context (Surrounding code of the modified files) ###
+
+```
+{{code_context}}
+```
+
+### 2. Ground Truth Patch (Human-Written) ###
+```diff
+{{ground_truth_diff}}
+```
+
+### 3. AI Agent's Generated Patch
+
+```diff
+{{agent_generated_diff}}
+```
+
+### 4. AI Agent's Thought Process
+
+```
+{{agent_thought_process}}
+```
+
+---
+## Your Task: Provide Evaluation in JSON Format ##
+Based on all the provided information and the strict criteria above, provide your evaluation. Your entire response MUST be a single, valid JSON object.
+
+```json
+{
+  "accuracy": {
+    "score": 0.0,
+    "reasoning": "No changes were made, so the result does not match the final commit."
+  },
+  "decision_soundness": {
+    "score": 1.0,
+    "reasoning": "Given that generated stubs were outdated, modifying handwritten code would likely break the build."
+  },
+  "directional_consistency": {
+    "score": 1.0,
+    "reasoning": "The decision does not contradict the direction of the human patch."
+  },
+  "validity": {
+    "score": 1,
+    "reasoning": "The output does not introduce syntax or dependency errors."
+  }
+}
+
+### JSON Field Definitions
+
+  - **accuracy.score**: A score from 0.0 to 1.0 indicating how closely the agent's output matches the Ground Truth Patch, based on the provided rubric.
+  - **decision_soundness.score**: Binary score (1.0 or 0.0) indicating whether the agent's decision was sound given the available information, without reference to the Ground Truth Patch.
+  - **directional_consistency.score**: Binary score (1.0 or 0.0) indicating whether the agent's output is consistent with the direction of the Ground Truth Patch.
+  - **validity.score**: Binary score (1.0 or 0.0) indicating whether the agent's output is syntactically and semantically valid.
+  - **reasoning**: A brief explanation justifying the assigned score for each dimension.

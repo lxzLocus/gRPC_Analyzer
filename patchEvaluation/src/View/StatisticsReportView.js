@@ -1,6 +1,14 @@
 /**
  * 統計レポートの表示を担当するViewクラス
  */
+import { 
+    AgentState,
+    getStateDisplayName, 
+    getStateEmoji,
+    isSuccessfulCompletion,
+    isErrorCompletion
+} from '../types/AgentStates.js';
+
 export class StatisticsReportView {
     /**
      * 統計レポートの表示
@@ -42,6 +50,9 @@ export class StatisticsReportView {
         console.log(`  💥 ステップ1失敗数: ${stats.aprParseFailure}`);
         console.log(`  🚀 評価パイプライン成功数（ステップ1＋LLM品質評価）: ${stats.evaluationPipelineSuccess}`);
         console.log(`  ❌ 評価パイプライン失敗数: ${stats.evaluationPipelineFailure}`);
+        
+        // FSM状態別統計を追加
+        this.showStateDistribution(stats);
     }
 
     /**
@@ -131,12 +142,184 @@ export class StatisticsReportView {
         console.log(`  🎯 最終修正情報あり: ${llmStats.withFinalMod}/${stats.matchedPairs.length} (${(llmStats.withFinalMod/stats.matchedPairs.length*100).toFixed(1)}%)`);
         console.log(`  🤖 LLM評価成功: ${llmStats.withLLMEval}/${stats.matchedPairs.length} (${(llmStats.withLLMEval/stats.matchedPairs.length*100).toFixed(1)}%)`);
         
-        console.log(`  ✅ LLM評価結果:`);
-        console.log(`    - 正確な修正: ${llmStats.correctCount}/${llmStats.withLLMEval} (${llmStats.correctRate}%)`);
-        console.log(`    - 妥当な修正: ${llmStats.plausibleCount}/${llmStats.withLLMEval} (${llmStats.plausibleRate}%)`);
+        // 4軸評価統計の表示（新形式）
+        const fourAxisStats = this.calculate4AxisStats(stats.matchedPairs);
+        if (fourAxisStats.totalEvaluated > 0) {
+            console.log(`  📊 4軸評価結果:`);
+            console.log(`    - Accuracy (平均): ${(fourAxisStats.averageAccuracy * 100).toFixed(1)}%`);
+            console.log(`    - Decision Soundness: ${fourAxisStats.decisionSoundnessPass}/${fourAxisStats.totalEvaluated} (${(fourAxisStats.decisionSoundnessPass/fourAxisStats.totalEvaluated*100).toFixed(1)}%)`);
+            console.log(`    - Directional Consistency: ${fourAxisStats.directionalConsistencyPass}/${fourAxisStats.totalEvaluated} (${(fourAxisStats.directionalConsistencyPass/fourAxisStats.totalEvaluated*100).toFixed(1)}%)`);
+            console.log(`    - Validity: ${fourAxisStats.validityPass}/${fourAxisStats.totalEvaluated} (${(fourAxisStats.validityPass/fourAxisStats.totalEvaluated*100).toFixed(1)}%)`);
+            
+            if (Object.keys(fourAxisStats.repairTypes).length > 0) {
+                console.log(`  🏷️  Repair Types (上位5件):`);
+                const sortedRepairTypes = Object.entries(fourAxisStats.repairTypes)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5);
+                sortedRepairTypes.forEach(([type, count]) => {
+                    console.log(`    - ${type}: ${count}件`);
+                });
+            }
+        }
+        // 2軸評価統計の表示（旧形式・後方互換性）
+        else {
+            console.log(`  ✅ LLM評価結果 (2軸評価):`);
+            console.log(`    - 正確な修正: ${llmStats.correctCount}/${llmStats.withLLMEval} (${llmStats.correctRate}%)`);
+            console.log(`    - 妥当な修正: ${llmStats.plausibleCount}/${llmStats.withLLMEval} (${llmStats.plausibleRate}%)`);
+        }
         
         // LLM評価スキップ統計の表示
         this.showEvaluationSkipStatistics(stats);
+
+        // Intent Fulfillment評価統計の表示
+        this.showIntentFulfillmentStatistics(stats);
+    }
+
+    /**
+     * Intent Fulfillment評価統計の表示
+     * @param {Object} stats - 統計情報
+     */
+    showIntentFulfillmentStatistics(stats) {
+        const intentStats = this.calculateIntentFulfillmentStats(stats.matchedPairs);
+        
+        if (intentStats.totalEvaluated === 0 && intentStats.totalSkipped === 0) {
+            return;
+        }
+
+        console.log(`\n🎯 Intent Fulfillment評価統計（LLM_C）:`);
+        console.log(`  📊 評価実行数: ${intentStats.totalEvaluated}`);
+        console.log(`  ⏭️  評価スキップ数: ${intentStats.totalSkipped}`);
+
+        if (intentStats.totalEvaluated > 0) {
+            console.log(`  📈 平均スコア: ${intentStats.averageScore.toFixed(3)} (${(intentStats.averageScore * 100).toFixed(1)}%)`);
+            console.log(`  📊 スコア分布:`);
+            console.log(`    🎯 優秀 (≥0.9): ${intentStats.highScore} (${(intentStats.highScore / intentStats.totalEvaluated * 100).toFixed(1)}%)`);
+            console.log(`    ✅ 良好 (0.7-0.89): ${intentStats.mediumScore} (${(intentStats.mediumScore / intentStats.totalEvaluated * 100).toFixed(1)}%)`);
+            console.log(`    ⚠️  改善必要 (0.4-0.69): ${intentStats.lowScore} (${(intentStats.lowScore / intentStats.totalEvaluated * 100).toFixed(1)}%)`);
+            console.log(`    ❌ 不十分 (<0.4): ${intentStats.veryLowScore} (${(intentStats.veryLowScore / intentStats.totalEvaluated * 100).toFixed(1)}%)`);
+        }
+    }
+
+    /**
+     * 4軸評価統計を計算
+     * @param {Array} matchedPairs - マッチングペア配列
+     * @returns {Object} 4軸評価統計
+     */
+    calculate4AxisStats(matchedPairs) {
+        const stats = {
+            totalEvaluated: 0,
+            accuracyScores: [],
+            averageAccuracy: 0,
+            decisionSoundnessPass: 0,
+            directionalConsistencyPass: 0,
+            validityPass: 0,
+            repairTypes: {}
+        };
+
+        matchedPairs.forEach(pair => {
+            const evaluation = pair.finalModification?.llmEvaluation;
+            if (!evaluation || evaluation.error) return;
+
+            // 4軸評価データがある場合
+            if (evaluation.accuracy !== undefined) {
+                stats.totalEvaluated++;
+
+                // Accuracy
+                const accuracyScore = typeof evaluation.accuracy === 'object'
+                    ? evaluation.accuracy.score
+                    : evaluation.accuracy;
+                if (typeof accuracyScore === 'number') {
+                    stats.accuracyScores.push(accuracyScore);
+                }
+
+                // Decision Soundness
+                const decisionScore = typeof evaluation.decision_soundness === 'object'
+                    ? evaluation.decision_soundness.score
+                    : evaluation.decision_soundness;
+                if (decisionScore === 1.0) {
+                    stats.decisionSoundnessPass++;
+                }
+
+                // Directional Consistency
+                const directionalScore = typeof evaluation.directional_consistency === 'object'
+                    ? evaluation.directional_consistency.score
+                    : evaluation.directional_consistency;
+                if (directionalScore === 1.0) {
+                    stats.directionalConsistencyPass++;
+                }
+
+                // Validity
+                const validityScore = typeof evaluation.validity === 'object'
+                    ? evaluation.validity.score
+                    : evaluation.validity;
+                if (validityScore === 1.0) {
+                    stats.validityPass++;
+                }
+
+                // Repair Types
+                if (evaluation.analysis_labels?.repair_types) {
+                    evaluation.analysis_labels.repair_types.forEach(type => {
+                        stats.repairTypes[type] = (stats.repairTypes[type] || 0) + 1;
+                    });
+                }
+            }
+        });
+
+        // 平均Accuracyを計算
+        if (stats.accuracyScores.length > 0) {
+            const sum = stats.accuracyScores.reduce((a, b) => a + b, 0);
+            stats.averageAccuracy = sum / stats.accuracyScores.length;
+        }
+
+        return stats;
+    }
+
+    /**
+     * Intent Fulfillment評価統計を計算
+     * @param {Array} matchedPairs - マッチングペア配列
+     * @returns {Object} Intent Fulfillment統計
+     */
+    calculateIntentFulfillmentStats(matchedPairs) {
+        const stats = {
+            totalEvaluated: 0,
+            totalSkipped: 0,
+            scores: [],
+            averageScore: 0,
+            highScore: 0,  // >= 0.9
+            mediumScore: 0,  // 0.7-0.89
+            lowScore: 0,  // 0.4-0.69
+            veryLowScore: 0  // < 0.4
+        };
+
+        matchedPairs.forEach(pair => {
+            const intentEval = pair.finalModification?.intentFulfillmentEvaluation;
+            if (!intentEval) return;
+
+            // スキップまたはエラーケース
+            if (intentEval.skipped === true || intentEval.error) {
+                stats.totalSkipped++;
+                return;
+            }
+
+            if (typeof intentEval.score === 'number') {
+                stats.totalEvaluated++;
+                stats.scores.push(intentEval.score);
+
+                // スコア分布
+                if (intentEval.score >= 0.9) stats.highScore++;
+                else if (intentEval.score >= 0.7) stats.mediumScore++;
+                else if (intentEval.score >= 0.4) stats.lowScore++;
+                else stats.veryLowScore++;
+            }
+        });
+
+        // 平均スコアを計算
+        if (stats.scores.length > 0) {
+            const sum = stats.scores.reduce((a, b) => a + b, 0);
+            stats.averageScore = sum / stats.scores.length;
+        }
+
+        return stats;
     }
 
     /**
@@ -301,6 +484,62 @@ export class StatisticsReportView {
         const llmStats = stats.calculateLLMEvaluationStats();
         if (llmStats) {
             console.log(`   LLM品質評価結果: 正確性 ${llmStats.correctRate}%, 妥当性 ${llmStats.plausibleRate}%`);
+        }
+    }
+
+    /**
+     * FSM状態分布の表示
+     * @param {Object} stats - 統計情報
+     */
+    showStateDistribution(stats) {
+        // matchedPairsから状態情報を集計
+        const stateCount = {};
+        let totalWithStatus = 0;
+        
+        if (stats.matchedPairs && stats.matchedPairs.length > 0) {
+            stats.matchedPairs.forEach(pair => {
+                const status = pair.dialogue?.status || pair.status;
+                if (status) {
+                    stateCount[status] = (stateCount[status] || 0) + 1;
+                    totalWithStatus++;
+                }
+            });
+        }
+        
+        if (totalWithStatus === 0) return;
+        
+        console.log(`\n📋 FSM状態別統計 (合計: ${totalWithStatus}件):`);
+        
+        // 状態を件数の多い順にソート
+        const sortedStates = Object.entries(stateCount)
+            .sort((a, b) => b[1] - a[1]);
+        
+        sortedStates.forEach(([state, count]) => {
+            const emoji = getStateEmoji(state);
+            const displayName = getStateDisplayName(state);
+            const percentage = (count / totalWithStatus * 100).toFixed(1);
+            
+            console.log(`  ${emoji} ${displayName.padEnd(12)} : ${count.toString().padStart(3)} 件 (${percentage}%)`);
+            
+            // 成功/失敗の追加情報
+            if (isSuccessfulCompletion(state)) {
+                console.log(`       → ✅ 正常終了`);
+            } else if (isErrorCompletion(state)) {
+                console.log(`       → ❌ エラー終了`);
+            }
+        });
+        
+        // 成功率の表示
+        const finishedCount = stateCount[AgentState.FINISHED] || 0;
+        const errorCount = stateCount[AgentState.ERROR] || 0;
+        const successRate = totalWithStatus > 0 
+            ? (finishedCount / totalWithStatus * 100).toFixed(1)
+            : 0;
+        
+        console.log(`\n  🎯 成功率: ${successRate}% (${finishedCount}/${totalWithStatus})`);
+        if (errorCount > 0) {
+            const errorRate = (errorCount / totalWithStatus * 100).toFixed(1);
+            console.log(`  ⚠️  エラー率: ${errorRate}% (${errorCount}/${totalWithStatus})`);
         }
     }
 }

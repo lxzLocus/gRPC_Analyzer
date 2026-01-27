@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APR Evaluation Viewer - レポートベース</title>
+    <!-- Diff2Html CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #ffffff;
+            padding: 0;
+            margin: 0;
+        }
+
+        .container {
+            width: 100%;
+            min-height: 100vh;
+            background: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        header.hidden {
+            transform: translateY(-100%);
+        }
+
+        .header-content {
+            text-align: center;
+            flex: 1;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+        }
+
+        header p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .toggle-sidebar-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .toggle-sidebar-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .toggle-sidebar-btn {
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+
+            #toggleText {
+                display: none;
+            }
+        }
+
+        .main-content {
+            display: flex;
+            flex: 1;
+            position: relative;
+            min-height: calc(100vh - 70px);
+        }
+
+        .sidebar {
+            background: #f8f9fa;
+            border-right: 2px solid #e9ecef;
+            padding: 20px;
+            overflow-y: auto;
+            width: 350px;
+            min-width: 350px;
+            transition: transform 0.3s ease, margin-left 0.3s ease;
+            z-index: 10;
+            position: sticky;
+            top: 70px;
+            height: calc(100vh - 70px);
+        }
+
+        .sidebar.collapsed {
+            transform: translateX(-100%);
+            margin-left: -350px;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 70px;
+                bottom: 0;
+                width: 300px;
+                min-width: 300px;
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+                height: calc(100vh - 70px);
+            }
+
+            .sidebar.collapsed {
+                transform: translateX(-100%);
+                margin-left: 0;
+            }
+        }
+
+        .sidebar h2 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: #495057;
+        }
+
+        .report-list {
+            list-style: none;
+        }
+
+        .report-item {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .report-item:hover {
+            border-color: #667eea;
+            transform: translateX(5px);
+        }
+
+        .report-item.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .report-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .report-info {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+
+        .report-stats {
+            margin-top: 8px;
+            font-size: 0.8rem;
+            display: flex;
+            gap: 10px;
+        }
+
+        .stat-badge {
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .report-item.active .stat-badge {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .content-area {
+            flex: 1;
+            padding: 30px;
+            background: #ffffff;
+            min-height: 100vh;
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+
+        @media (max-width: 768px) {
+            .content-area {
+                padding: 15px;
+            }
+        }
+
+        .pr-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .pr-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .pr-card {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .pr-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.2);
+        }
+
+        .pr-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .pr-info {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+
+        .correctness-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .badge-identical {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-equivalent {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .badge-plausible {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-incorrect {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+            margin: 2px 0;
+        }
+
+        .status-evaluated {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-skipped {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-no-mod {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-pending {
+            background: #cfe2ff;
+            color: #084298;
+        }
+
+        .status-unknown {
+            background: #f8f9fa;
+            color: #6c757d;
+        }
+
+        .detail-view {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+
+        .detail-section {
+            margin-bottom: 20px;
+        }
+
+        .detail-section h3 {
+            color: #495057;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 5px;
+        }
+
+        .detail-content {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        .detail-content p {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .json-viewer {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            max-height: 500px;
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .breadcrumb-item {
+            cursor: pointer;
+        }
+
+        .breadcrumb-item:hover {
+            color: #667eea;
+        }
+
+        .breadcrumb-separator {
+            color: #adb5bd;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        .stats-overview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.1);
+        }
+
+        .stat-card h3 {
+            color: #495057;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card .big-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+
+        .stat-card .sub-value {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .chart-bar {
+            margin: 15px 0;
+        }
+
+        .chart-bar-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 0.85rem;
+        }
+
+        .chart-bar-bg {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+        }
+
+        .chart-bar-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+
+        .bar-identical {
+            background: #28a745;
+        }
+
+        .bar-equivalent {
+            background: #17a2b8;
+        }
+
+        .bar-plausible {
+            background: #ffc107;
+        }
+
+        .bar-incorrect {
+            background: #dc3545;
+        }
+
+        .distribution-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .distribution-item {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .distribution-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .distribution-label {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        .model-list {
+            list-style: none;
+            margin-top: 10px;
+        }
+
+        .model-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .model-name {
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .model-count {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .diff-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .diff-tab {
+            padding: 12px 24px;
+            background: #f8f9fa;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            color: #495057;
+        }
+
+        .diff-tab:hover {
+            background: #e9ecef;
+        }
+
+        .diff-tab.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .diff-container {
+            display: none;
+            background: white;
+            border-radius: 8px;
+            overflow: visible;
+            margin-bottom: 20px;
+            min-height: 200px;
+        }
+
+        .diff-container.active {
+            display: block;
+        }
+
+        /* diff2htmlの内部要素にも高さ制限を解除 */
+        .diff-container .d2h-wrapper,
+        .diff-container .d2h-file-wrapper,
+        .diff-container .d2h-file-diff,
+        .diff-container .d2h-code-wrapper {
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+        }
+
+        .diff-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 2px solid #e9ecef;
+            font-weight: bold;
+        }
+
+        .diff-content {
+            max-height: 600px;
+            overflow: auto;
+        }
+
+        .diff-loading {
+            padding: 40px;
+            text-align: center;
+            color: #6c757d;
+        }
+
+        .diff-error {
+            padding: 20px;
+            background: #f8d7da;
+            color: #721c24;
+            border-radius: 8px;
+            margin: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <button class="toggle-sidebar-btn" onclick="toggleSidebar()" id="toggleBtn">
+                <span id="toggleIcon">☰</span>
+                <span id="toggleText">メニュー</span>
+            </button>
+            <div class="header-content">
+                <h1>🚀 APR Evaluation Viewer</h1>
+                <p>レポートベース - 評価結果を PR/Issue 別に閲覧</p>
+            </div>
+            <div style="width: 120px;"></div><!-- Spacer for centering -->
+        </header>
+
+        <div class="main-content">
+            <aside class="sidebar" id="sidebar">
+                <h2>📊 評価レポート</h2>
+                <ul class="report-list" id="reportList">
+                    <li class="loading">読み込み中...</li>
+                </ul>
+            </aside>
+
+            <main class="content-area" id="contentArea">
+                <div class="breadcrumb" id="breadcrumb"></div>
+                <h2 id="contentTitle">評価レポートを選択してください</h2>
+                <div id="contentBody">
+                    <p style="text-align: center; color: #6c757d; margin-top: 40px;">
+                        左のサイドバーから評価レポートを選択して、PR/Issue ごとの評価結果を閲覧できます。
+                    </p>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Diff2Html JS -->
+    <script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
+    <script src="/public/app.js"></script>
+</body>
+
+</html>

@@ -23,6 +23,64 @@ export class LLMEvaluationService {
     }
 
     /**
+     * Accuracy levelタイプから数値スコアへの変換
+     * @param {string} accuracyLevel - Accuracy level type (PERFECT_MATCH, NEAR_PERFECT, etc.)
+     * @returns {number} Numerical score (0.0-1.0)
+     */
+    _mapAccuracyLevelToScore(accuracyLevel) {
+        const mapping = {
+            'PERFECT_MATCH': 1.0,
+            'NEAR_PERFECT': 0.9,
+            'HIGH_SIMILARITY': 0.75,
+            'PARTIAL_MATCH': 0.55,
+            'CORRECT_LOCUS': 0.3,
+            'NO_MATCH': 0.0
+        };
+        
+        return mapping[accuracyLevel] !== undefined ? mapping[accuracyLevel] : 0.0;
+    }
+
+    /**
+     * 4軸評価用ヘルパーメソッド：accuracyスコアからsemantic_equivalence_levelへのマッピング
+     * @param {number} accuracyScore - Accuracy score (0.0-1.0)
+     * @returns {string} Semantic equivalence level
+     */
+    _mapAccuracyToLevel(accuracyScore) {
+        if (accuracyScore >= 0.95) return 'IDENTICAL';
+        if (accuracyScore >= 0.7) return 'SEMANTICALLY_EQUIVALENT';
+        if (accuracyScore >= 0.3) return 'PLAUSIBLE_BUT_DIFFERENT';
+        return 'INCORRECT';
+    }
+
+    /**
+     * 4軸評価から統合評価を導出
+     * @param {Object} evaluation - 4軸評価結果
+     * @returns {string} Overall assessment
+     */
+    _deriveOverallAssessment(evaluation) {
+        const accuracy = evaluation.accuracy?.score || 0;
+        const decisionSoundness = evaluation.decision_soundness?.score || 0;
+        const directionalConsistency = evaluation.directional_consistency?.score || 0;
+        const validity = evaluation.validity?.score || 0;
+        
+        // 全て合格なら最高評価
+        if (accuracy >= 0.95 && decisionSoundness === 1.0 && directionalConsistency === 1.0 && validity === 1.0) {
+            return 'IDENTICAL';
+        }
+        
+        // Accuracyベースの評価
+        if (accuracy >= 0.7 && validity === 1.0) {
+            return 'SEMANTICALLY_EQUIVALENT';
+        }
+        
+        if (accuracy >= 0.3 && validity === 1.0) {
+            return 'PLAUSIBLE_BUT_DIFFERENT';
+        }
+        
+        return 'INCORRECT';
+    }
+
+    /**
      * テンプレートの初期化
      * @param {string} templatePath - テンプレートファイルのパス
      */
@@ -69,7 +127,50 @@ export class LLMEvaluationService {
             if (responseContent.trim().startsWith('{')) {
                 const parsed = JSON.parse(responseContent);
                 
-                // 新しいテンプレート形式（plausibility_evaluation/correctness_evaluation）から変換
+                // 4軸評価形式（新形式）
+                if (parsed.accuracy !== undefined) {
+                    // Accuracy levelが文字列型の場合、数値スコアに変換
+                    let accuracyScore = 0;
+                    if (typeof parsed.accuracy === 'object') {
+                        if (parsed.accuracy.level !== undefined) {
+                            // 新形式：タイプベース
+                            accuracyScore = this._mapAccuracyLevelToScore(parsed.accuracy.level);
+                        } else if (parsed.accuracy.score !== undefined) {
+                            // 旧形式：数値スコア
+                            accuracyScore = parsed.accuracy.score;
+                        }
+                    }
+                    
+                    return {
+                        // 4軸評価スコア（数値化）
+                        accuracy: {
+                            level: parsed.accuracy.level || null,
+                            score: accuracyScore,
+                            reasoning: parsed.accuracy.reasoning
+                        },
+                        decision_soundness: parsed.decision_soundness,
+                        directional_consistency: parsed.directional_consistency,
+                        validity: parsed.validity,
+                        
+                        // 分析ラベル
+                        analysis_labels: parsed.analysis_labels,
+                        
+                        // 統合評価
+                        overall_assessment: parsed.overall_assessment || this._deriveOverallAssessment({
+                            accuracy: { score: accuracyScore },
+                            decision_soundness: parsed.decision_soundness,
+                            directional_consistency: parsed.directional_consistency,
+                            validity: parsed.validity
+                        }),
+                        
+                        // 後方互換性のための変換
+                        is_correct: accuracyScore >= 0.7,
+                        is_plausible: (parsed.validity?.score || 0) === 1.0,
+                        semantic_equivalence_level: this._mapAccuracyToLevel(accuracyScore)
+                    };
+                }
+                
+                // 2軸評価形式（旧形式・後方互換性）
                 if (parsed.plausibility_evaluation && parsed.correctness_evaluation) {
                     return {
                         overall_assessment: parsed.correctness_evaluation.semantic_equivalence_level || "UNKNOWN",
@@ -82,7 +183,7 @@ export class LLMEvaluationService {
                     };
                 }
                 
-                // 旧形式の場合はそのまま返す
+                // その他の形式はそのまま返す
                 return parsed;
             }
             
@@ -259,6 +360,191 @@ export class LLMEvaluationService {
             return {
                 success: false,
                 error: result.error
+            };
+        }
+    }
+
+    /**
+     * Intent Fulfillment評価（LLM_C）
+     * コミットメッセージに記載された意図をエージェントが満たしているかを評価
+     * @param {Object} context - 評価コンテキスト
+     * @param {Object} context.commitMessage - コミットメッセージ情報
+     * @param {string} context.agentGeneratedDiff - エージェント生成diff
+     * @param {string} context.agentThoughtProcess - エージェントの思考過程
+     * @param {boolean} context.agentMadeChanges - エージェントが変更を行ったか
+     * @returns {Promise<Object>} Intent Fulfillment評価結果
+     */
+    async evaluateIntentFulfillment(context) {
+        const {
+            commitMessage,
+            agentGeneratedDiff,
+            agentThoughtProcess,
+            agentMadeChanges = true
+        } = context;
+
+        if (!commitMessage) {
+            return {
+                success: false,
+                error: "コミットメッセージが提供されていません",
+                result: { skipped: "no_commit_message" }
+            };
+        }
+
+        try {
+            // Intent Fulfillmentテンプレートの初期化
+            const projectRoot = '/app';
+            const intentTemplatePath = path.join(projectRoot, "prompt", "01_intentFulfillmentPrompt.txt");
+            const templateString = await fs.readFile(intentTemplatePath, 'utf-8');
+            
+            // テンプレート文字列を直接渡してインスタンス化
+            const intentTemplateRenderer = new TemplateRenderer(templateString);
+
+            // LLMクライアントの初期化確認
+            if (!this.llmClient) {
+                const config = new Config();
+                await this.initializeLLMClient(config);
+            }
+
+            // テンプレートコンテキストの準備
+            const templateContext = {
+                commit_subject: commitMessage.subject || '',
+                commit_body: commitMessage.body || '',
+                agent_made_changes: agentMadeChanges,
+                agent_generated_diff: agentGeneratedDiff || '',
+                agent_reasoning: agentMadeChanges ? '' : 'No changes were made by the agent',
+                agent_thought_process: agentThoughtProcess || ''
+            };
+
+            // テンプレートレンダリング
+            const renderedPrompt = intentTemplateRenderer.render(templateContext);
+
+            // LLMリクエストを作成
+            const config = new Config();
+            const llmRequest = createLLMRequest([
+                { role: 'user', content: renderedPrompt }
+            ], {
+                temperature: config.getConfigValue('llm.temperature', 0.1),
+                maxTokens: config.getConfigValue('llm.maxTokens', 2000)
+            });
+
+            // LLMクライアントでの評価実行
+            const llmResponse = await this.llmClient.generateContent(llmRequest);
+
+            if (llmResponse && llmResponse.content) {
+                // レスポンスのパース
+                const intentEvaluation = this.parseIntentFulfillmentResponse(llmResponse.content);
+
+                return {
+                    success: true,
+                    error: null,
+                    result: {
+                        ...intentEvaluation,
+                        templateUsed: true,
+                        promptLength: renderedPrompt.length,
+                        llmMetadata: {
+                            provider: this.llmClient.getProviderName(),
+                            model: llmResponse.model || 'unknown',
+                            usage: llmResponse.usage || null,
+                            timestamp: new Date().toISOString()
+                        }
+                    }
+                };
+            } else {
+                return {
+                    success: false,
+                    error: "LLM response failed",
+                    result: { error: "LLM response failed" }
+                };
+            }
+
+        } catch (error) {
+            const errorAnalysis = this.errorHandler.analyzeLLMError(error);
+            this.errorHandler.logErrorDetails(errorAnalysis);
+
+            return {
+                success: false,
+                error: errorAnalysis.message,
+                result: {
+                    error: errorAnalysis.message,
+                    templateUsed: false,
+                    errorAnalysis: errorAnalysis
+                }
+            };
+        }
+    }
+
+    /**
+     * Intent Fulfillment levelを数値スコアにマッピング
+     * @param {string} level - IntentFulfillmentLevel
+     * @returns {number} 数値スコア (0.0-1.0)
+     */
+    _mapIntentFulfillmentLevelToScore(level) {
+        const mapping = {
+            'FULLY_IMPLEMENTED': 1.0,
+            'SUBSTANTIALLY_IMPLEMENTED': 0.8,
+            'PARTIALLY_IMPLEMENTED': 0.5,
+            'DIRECTIONALLY_CORRECT': 0.3,
+            'NOT_ADDRESSED': 0.0
+        };
+        return mapping[level] ?? null;
+    }
+
+    /**
+     * Intent Fulfillmentレスポンスのパース
+     * @param {string} responseContent - LLMからのレスポンス内容
+     * @returns {Object} パースされた評価結果
+     */
+    parseIntentFulfillmentResponse(responseContent) {
+        try {
+            // JSON形式の場合
+            if (responseContent.trim().startsWith('{')) {
+                const parsed = JSON.parse(responseContent);
+
+                // intent_fulfillmentネストがある場合は展開
+                if (parsed.intent_fulfillment) {
+                    const intentData = parsed.intent_fulfillment;
+                    
+                    // 新形式（level）の場合は数値スコアに変換
+                    let score = intentData.score;
+                    if (intentData.level !== undefined) {
+                        score = this._mapIntentFulfillmentLevelToScore(intentData.level);
+                    }
+                    
+                    return {
+                        score: score,
+                        level: intentData.level,
+                        reasoning: intentData.reasoning,
+                        commit_intent_summary: intentData.commit_intent_summary,
+                        agent_output_summary: intentData.agent_output_summary,
+                        alignment_analysis: intentData.alignment_analysis
+                    };
+                }
+
+                // 既にフラット構造の場合
+                let score = parsed.score;
+                if (parsed.level !== undefined) {
+                    score = this._mapIntentFulfillmentLevelToScore(parsed.level);
+                }
+                
+                return {
+                    score: score,
+                    level: parsed.level,
+                    reasoning: parsed.reasoning,
+                    commit_intent_summary: parsed.commit_intent_summary,
+                    agent_output_summary: parsed.agent_output_summary,
+                    alignment_analysis: parsed.alignment_analysis
+                };
+            }
+
+            // テキスト形式の場合のエラー
+            return {
+                error: "Response parsing failed",
+                parse_error: "Expected JSON format"
+            };
+        } catch (error) {
+            return {
+                error: "Response parsing error",
+                parse_error: error.message
             };
         }
     }

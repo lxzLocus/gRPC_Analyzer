@@ -2,6 +2,29 @@
 
 LLMとの対話でAPRのログをパースし、premergeとmergeの差分を取得するモジュールです。また、LLMを使用したパッチ品質の自動評価機能と、視覚的で分かりやすいHTMLレポート生成機能も提供します。
 
+## ⚠️ 重要: 独立コンテナ環境での動作
+
+このモジュール (`/app/patchEvaluation`) は**独立したコンテナで動作**するため、以下の制約があります：
+
+### 🚫 親ディレクトリへの依存禁止
+- `/app/src` からのインポートは**禁止**
+- `/app/patchEvaluation` 配下のモジュールのみ使用可能
+- 共通定数（例: APRStatus）は `/app/patchEvaluation/src/types.js` に複製して使用
+
+### ✅ 正しい参照方法
+```javascript
+// ❌ 不可: 親ディレクトリからのインポート
+import { APRStatus } from '../../src/modules/Logger.js';
+
+// ✅ 可: patchEvaluation内の定義を使用
+import { APRStatus } from './src/types.js';
+```
+
+### 📝 定数の同期
+APRシステム本体 (`/app/src/modules/Logger.ts`) と patchEvaluation (`/app/patchEvaluation/src/types.js`) でAPRStatus定数を**手動で同期**する必要があります。
+
+---
+
 ## 🆕 新機能: HTMLレポート生成システム
 
 ### 概要

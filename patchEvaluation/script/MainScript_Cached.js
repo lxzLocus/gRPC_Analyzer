@@ -13,9 +13,8 @@ dotenvConfig({ path: '/app/.env' });
 if (import.meta.url === `file://${process.argv[1]}`) {
     // コマンドライン引数の解析
     function parseArgs() {
-        
-        const args = process.argv.slice(2);
         const parsed = {};
+        const args = process.argv.slice(2);       
         const positional = [];
         
         console.log('🔧 Raw args:', args);
@@ -64,15 +63,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     
     // データセット選択（利用可能なデータセット）
     const availableDatasets = [
-        path.join(projectRoot, "dataset", "test_fewChanged"),         // 小規模テストデータセット（利用可能）
+        path.join(projectRoot, "dataset", "incorrect_few"),         // 小規模テストデータセット（利用可能）
         path.join(projectRoot, "dataset", "filtered_fewChanged"),     // 少数変更ファイル（アンマウント）
         path.join(projectRoot, "dataset", "filtered_confirmed"),     // 確認済み（アンマウント）
         path.join(projectRoot, "dataset", "filtered_commit"),        // コミット履歴（アンマウント）
         path.join(projectRoot, "dataset", "filtered_protoChanged"),   // プロトコル変更（アンマウント）
+        path.join(projectRoot, "tmp")            // 一時データセット（アンマウント） 
     ];
     
     // 現在選択されているデータセット（コマンドライン引数または デフォルト）
-    const selectedDataset = commandLineArgs.datasetPath || availableDatasets[1];
+    const selectedDataset = commandLineArgs.datasetPath || availableDatasets[2];
     const aprOutputPath = commandLineArgs.aprLogRootPath || commandLineArgs.aprOutputPath || path.join(projectRoot, "apr-logs");
 
     // キャッシュオプションの解析
