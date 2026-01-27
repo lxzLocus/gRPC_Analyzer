@@ -1,4 +1,6 @@
 /*
+npx tsx /app/src/utils/generatePrompt.ts
+
 Docs
 
 プロンプトに埋め込むための，txtファイルを出力するプログラム
@@ -48,34 +50,31 @@ import {mergeStructures, findAllAndMergeProjectRoots} from '../modules/editFileP
 
 /*config*/
 const datasetDir = '/app/dataset/filtered_confirmed';
+const PARALLEL_LIMIT = 10; // 同時実行数の上限
 
 /* __MAIN__ */
-// main処理をasync関数でラップ
-async function main() {
-    const projectDirs = fs.readdirSync(datasetDir).filter(dir => fs.statSync(path.join(datasetDir, dir)).isDirectory());
 
-    // forEach を for...of に変更
-    for (const projectName of projectDirs) {
-        const projectPath = path.join(datasetDir, projectName);
-        let categoryDirs = [];
-        try {
-            categoryDirs = fs.readdirSync(projectPath).filter(dir => fs.statSync(path.join(projectPath, dir)).isDirectory());
-        } catch (err: any) {
-            console.error(`❌ Error reading category directories in ${projectPath}:`, err.message);
-            continue; // 次のプロジェクトへ
-        }
-        
-        // forEach を for...of に変更
-        for (const category of categoryDirs) {
-            const categoryPath = path.join(projectPath, category);
+/**
+ * バッチ処理で並列実行を制御
+ * @param items 処理対象の配列
+ * @param batchSize バッチサイズ（同時実行数）
+ * @param processFn 各アイテムを処理する関数
+ */
+async function processBatch<T>(items: T[], batchSize: number, processFn: (item: T) => Promise<void>) {
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        await Promise.all(batch.map(item => processFn(item).catch(err => {
+            console.error(`Error processing item:`, err);
+        })));
+    }
+}
 
-            const titleDirs = fs.readdirSync(categoryPath).filter(dir => fs.statSync(path.join(categoryPath, dir)).isDirectory());
-
-            // forEach を for...of に変更
-            for (const pullRequestTitle of titleDirs) {
-                const pullRequestPath = path.join(categoryPath, pullRequestTitle);
-
-                console.log(`Processing: ${projectName}/${pullRequestTitle}`);
+/**
+ * 単一のプルリクエストを処理
+ */
+async function processPullRequest(projectName: string, category: string, pullRequestTitle: string, pullRequestPath: string) {
+    try {
+        console.log(`Processing: ${projectName}/${category}/${pullRequestTitle}`);
 
                 //"premerge_"で始まるサブディレクトリを取得
                 const premergePath = fs.readdirSync(pullRequestPath)
@@ -99,7 +98,7 @@ async function main() {
 
                 if (!premergePath) {
                     console.error('Premerge path not found, skipping processing');
-                    continue;
+                    return; // continueではなくreturnに変更
                 }
 
                 // 全protoファイルを取得
@@ -199,11 +198,13 @@ async function main() {
                 
                 const protoFilePath = path.join(pullRequestPath, '01_proto.txt');
 
-                // 既存のファイルがあれば削除
-                if (fs.existsSync(protoFilePath)) {
-                    fs.unlinkSync(protoFilePath);
+                // ファイルを書き込み（既存ファイルは自動上書き）
+                try {
+                    fs.writeFileSync(protoFilePath, JSON.stringify(protoOutput, null, 2), 'utf8');
+                } catch (err) {
+                    console.error(`Error writing ${protoFilePath}:`, err);
+                    return; // continueではなくreturnに変更
                 }
-                fs.writeFileSync(protoFilePath, JSON.stringify(protoOutput, null, 2), 'utf8');
                 console.log(`Generated optimized proto file list: ${relevantProtoFiles.length} full content files, ${otherProtoFilePaths.length} path-only files`);
 
                 // ========================================================================
@@ -213,39 +214,26 @@ async function main() {
                 try {
                     if (!premergePath || !mergePath) {
                         console.error('Premerge or merge path not found for proto file changes');
-                        continue;
+                        return; // continueではなくreturnに変更
                     }
                     const diffResults = await getFilesDiff(premergePath, mergePath, 'proto');
                     const protoFileChangesPath = path.join(pullRequestPath, '02_protoFileChanges.txt');
-                    if (diffResults.length > 0) {
-                        // 既存のファイルがあれば削除
-                        if (fs.existsSync(protoFileChangesPath)) {
-                            fs.unlinkSync(protoFileChangesPath);
-                        }
-                        // 新しいファイルを作成
-                        for (const result of diffResults) {
-                            try {
-                                fs.appendFileSync(protoFileChangesPath, result.diff + '\n', 'utf8');
-                            } catch (error) {
-                                console.error(`Error appending to file: ${protoFileChangesPath}`, error);
+                    
+                    try {
+                        if (diffResults.length > 0) {
+                            // 新しいファイルを作成（既存は上書き）
+                            let allDiffs = '';
+                            for (const result of diffResults) {
+                                allDiffs += result.diff + '\n';
                             }
-                        }
-                    } else {
-
-                        // 既存のファイルがあれば削除
-                        if (fs.existsSync(protoFileChangesPath)) {
-                            fs.unlinkSync(protoFileChangesPath);
-                        }
-                        // 空配列を書き込む（変更がないことを明示）
-                        
-                        try {
+                            fs.writeFileSync(protoFileChangesPath, allDiffs, 'utf8');
+                        } else {
+                            // 空配列を書き込む（変更がないことを明示）
                             fs.writeFileSync(protoFileChangesPath, '[]', 'utf8');
-                        } catch (error) {
-                            console.error(`Error writing to file: ${protoFileChangesPath}`, error);
+                            console.log('No proto file changes detected, empty array written.');
                         }
-                        
-
-                        console.log('No proto file changes detected, empty array written.');
+                    } catch (error) {
+                        console.error(`Error writing ${protoFileChangesPath}:`, error);
                     }
                 } catch (error: any) {
                     console.error(`Error processing proto file changes: ${error.message}`);
@@ -258,18 +246,20 @@ async function main() {
 
                 if (!premergePath || !mergePath) {
                     console.error('Premerge or merge path not found for file changes');
-                    continue;
+                    return; // continueではなくreturnに変更
                 }
             
                 const changedFiles = await getChangedFiles(premergePath, mergePath, '');
                 console.log('Changed Files:', changedFiles); // デバッグ用
                 const fileChangesPath = path.join(pullRequestPath, '03_fileChanges.txt');
 
-                // 既存のファイルがあれば削除
-                if (fs.existsSync(fileChangesPath)) {
-                    fs.unlinkSync(fileChangesPath);
+                // ファイルを書き込み（既存は上書き）
+                try {
+                    fs.writeFileSync(fileChangesPath, JSON.stringify(changedFiles, null, 2), 'utf8');
+                } catch (err) {
+                    console.error(`Error writing ${fileChangesPath}:`, err);
+                    return; // continueではなくreturnに変更
                 }
-                fs.writeFileSync(fileChangesPath, JSON.stringify(changedFiles, null, 2), 'utf8');
 
                 // ========================================================================
                 // 02a_stubFileChanges.txt の処理（gRPC生成ファイルのdiff）
@@ -279,7 +269,7 @@ async function main() {
                 try {
                     if (!premergePath || !mergePath) {
                         console.error('Premerge or merge path not found for stub file changes');
-                        continue;
+                        return; // continueではなくreturnに変更
                     }
                     
                     // gRPC生成ファイルのパターン
@@ -303,22 +293,18 @@ async function main() {
                         // getDiffsForSpecificFilesを使用
                         const stubDiffResults = await getDiffsForSpecificFiles(changedStubFiles, premergePath, mergePath);
                         
-                        if (fs.existsSync(stubFileChangesPath)) {
-                            fs.unlinkSync(stubFileChangesPath);
-                        }
-                        
                         if (stubDiffResults.length > 0) {
+                            // 全ての差分を一度に結合してから書き込み（既存は上書き）
+                            let allStubDiffs = '';
                             for (const result of stubDiffResults) {
-                                fs.appendFileSync(stubFileChangesPath, result.diff + '\n', 'utf8');
+                                allStubDiffs += result.diff + '\n';
                             }
+                            fs.writeFileSync(stubFileChangesPath, allStubDiffs, 'utf8');
                             console.log(`Generated stub file changes: ${stubDiffResults.length} diffs`);
                         } else {
                             fs.writeFileSync(stubFileChangesPath, '# No stub file changes detected', 'utf8');
                         }
                     } else {
-                        if (fs.existsSync(stubFileChangesPath)) {
-                            fs.unlinkSync(stubFileChangesPath);
-                        }
                         fs.writeFileSync(stubFileChangesPath, '# No stub files were modified in this commit', 'utf8');
                         console.log('No stub files modified, placeholder written.');
                     }
@@ -466,11 +452,13 @@ async function main() {
 
                 // ステップE: 最終的な構造をファイルに書き込む
                 const structureFilePath = path.join(pullRequestPath, '04_surroundedFilePath.txt');
-                if (fs.existsSync(structureFilePath)) {
-                    fs.unlinkSync(structureFilePath);
+                try {
+                    fs.writeFileSync(structureFilePath, JSON.stringify(masterOutput, null, 2), 'utf8');
+                    console.log(`Generated final data at: ${structureFilePath}`);
+                } catch (err) {
+                    console.error(`Error writing ${structureFilePath}:`, err);
+                    return; // continueではなくreturnに変更
                 }
-                fs.writeFileSync(structureFilePath, JSON.stringify(masterOutput, null, 2), 'utf8');
-                console.log(`Generated final data at: ${structureFilePath}`);
 
                 // ========================================================================
                 // 05_suspectedFiles.txt の処理
@@ -569,14 +557,13 @@ async function main() {
                     const rank = index + 1;
 
                     // --- ヘッダー部分 ---
-                    // 全てのファイルに共通で出力
-                    //outputLines.push(`Rank: ${rank}`);
-                    //outputLines.push(`Score: ${file.score}`);
-                    //outputLines.push(`File: ${file.filePath}`);
+                    // outputLines.push(`Rank: ${rank}`);
+                    // outputLines.push(`Score: ${file.score}`);
+                    // outputLines.push(`File: ${file.filePath}`);
 
                     // --- 内容部分 ---
-                    // 上位3位までのファイルのみ、変更前の内容を出力
-                    if (rank <= 3 && premergePath) {
+                    // 全てのファイルの変更前の内容を出力（上位3位の制限を撤廃）
+                    if (premergePath) {
                         const premergeFilePath = path.join(premergePath, file.filePath);
                         if (fs.existsSync(premergeFilePath)) {
                             try {
@@ -584,6 +571,7 @@ async function main() {
                                 // unix diff ライクなヘッダー（相対パスのみ、先頭スラッシュなし）
                                 outputLines.push(`--- ${file.filePath}`);
                                 outputLines.push(content);
+                                outputLines.push(''); // ファイル間の区切り
                             } catch (e: any) {
                                 console.error(`Error reading file content for ${premergeFilePath}:`, e.message);
                                 outputLines.push(`<< Error reading file content >>`);
@@ -592,16 +580,13 @@ async function main() {
                             outputLines.push(`<< File content not found in premerge directory >>`);
                         }
                     }
-
-                    // 各エントリ間にセパレータを挿入
-                    //outputLines.push('---');
                 });
 
                 // 全ての行を結合して最終的なテキストを作成
                 let finalOutputText = outputLines.join('\n');
 
-                // 手書きファイルが存在しない場合の説明メッセージ
-                if (handwrittenFiles.length === 0) {
+                // 手書きファイルが存在しない場合、またはoutputLinesが空の場合の説明メッセージ
+                if (handwrittenFiles.length === 0 || outputLines.length === 0) {
                     finalOutputText = `No handwritten files found. Only auto-generated files were modified.
 
 In this pull request, only .proto files and their auto-generated files (.pb.go, etc.) 
@@ -618,10 +603,57 @@ File categorization of changes:
                 const suspectedFilesPath = path.join(pullRequestPath, '05_suspectedFiles.txt');
                 fs.writeFileSync(suspectedFilesPath, finalOutputText, 'utf8');
                 console.log(`Generated final suspected files list at: ${suspectedFilesPath}`);
+                
+                // デバッグ情報: 出力サイズを記録
+                if (finalOutputText.length < 100) {
+                    console.warn(`⚠️ Small suspected files output (${finalOutputText.length} bytes) for ${projectName}/${category}/${pullRequestTitle}`);
+                }
 
-            }
+    } catch (error: any) {
+        console.error(`❌ Error processing ${pullRequestPath}:`, error.message);
+    }
+}
+
+// main処理をasync関数でラップ
+async function main() {
+    const projectDirs = fs.readdirSync(datasetDir).filter(dir => fs.statSync(path.join(datasetDir, dir)).isDirectory());
+
+    // プロジェクト単位で処理
+    for (const projectName of projectDirs) {
+        const projectPath = path.join(datasetDir, projectName);
+        let categoryDirs = [];
+        try {
+            categoryDirs = fs.readdirSync(projectPath).filter(dir => fs.statSync(path.join(projectPath, dir)).isDirectory());
+        } catch (err: any) {
+            console.error(`❌ Error reading category directories in ${projectPath}:`, err.message);
+            continue;
+        }
+        
+        // カテゴリ単位で処理
+        for (const category of categoryDirs) {
+            const categoryPath = path.join(projectPath, category);
+
+            const titleDirs = fs.readdirSync(categoryPath).filter(dir => fs.statSync(path.join(categoryPath, dir)).isDirectory());
+
+            // プルリクエストのリストを作成
+            const prTasks = titleDirs.map(pullRequestTitle => ({
+                projectName,
+                category,
+                pullRequestTitle,
+                pullRequestPath: path.join(categoryPath, pullRequestTitle)
+            }));
+
+            // 並列処理（バッチ処理で同時実行数を制御）
+            console.log(`\n📦 Processing ${prTasks.length} pull requests in ${projectName}/${category} (parallel limit: ${PARALLEL_LIMIT})`);
+            await processBatch(prTasks, PARALLEL_LIMIT, async (task) => {
+                await processPullRequest(task.projectName, task.category, task.pullRequestTitle, task.pullRequestPath);
+            });
+
+            console.log(`✅ Completed processing ${projectName}/${category}\n`);
         }
     }
+    
+    console.log('\n🎉 All processing completed successfully!');
 }
             
                 
