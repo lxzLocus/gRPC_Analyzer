@@ -52,7 +52,8 @@ class MessageHandler {
         requiredFilepaths: string[],
         modifiedDiff: string,
         commentText: string,
-        has_fin_tag: boolean
+        has_fin_tag: boolean,
+        has_no_changes_needed: boolean
     } {
         const sections = {
             thought: null as string | null,
@@ -60,8 +61,16 @@ class MessageHandler {
             requiredFilepaths: [] as string[],
             modifiedDiff: '',
             commentText: '',
-            has_fin_tag: false
+            has_fin_tag: false,
+            has_no_changes_needed: false
         };
+
+        // 事前チェック: %_No_Changes_Needed_% タグを優先検出
+        if (messages.includes('%_No_Changes_Needed_%')) {
+            sections.has_no_changes_needed = true;
+            console.log('✅ Found %_No_Changes_Needed_% tag (priority detection)');
+            return sections;
+        }
 
         const lines = messages.split('\n');
         let currentTag: string | null = null;
@@ -77,7 +86,13 @@ class MessageHandler {
             const tagMatch = trimmed.match(/^%_(.+?)_%$/);
 
             if (tagMatch) {
-                currentTag = tagMatch[1].toLowerCase().replace(/ /g, '_'); // e.g., "Reply Required" -> "reply_required"
+                const tagName = tagMatch[1];
+                currentTag = tagName.toLowerCase().replace(/ /g, '_'); // e.g., "Reply Required" -> "reply_required"
+                // %_Verification_% や %_Verification_Report_% は無視
+                if (currentTag === 'verification' || currentTag === 'verification_report') {
+                    currentTag = null;
+                    continue;
+                }
                 if (currentTag === 'modified' || currentTag === 'comment' || currentTag === 'thought' || currentTag === 'plan') {
                     // バッファを使用するタグ
                 } else {
@@ -86,6 +101,9 @@ class MessageHandler {
                 continue;
             } else if (trimmed === '%%_Fin_%%') {
                 sections.has_fin_tag = true;
+                break;
+            } else if (trimmed === '%_No_Changes_Needed_%' || trimmed.includes('%_No_Changes_Needed_%')) {
+                sections.has_no_changes_needed = true;
                 break;
             }
 
@@ -356,7 +374,8 @@ async function main() {
                 reply_required: parsed_response.requiredFilepaths.map(path => ({ type: "FILE_CONTENT", path })),
                 modified_diff: parsed_response.modifiedDiff || null,
                 commentText: parsed_response.commentText || null,
-                has_fin_tag: parsed_response.has_fin_tag
+                has_fin_tag: parsed_response.has_fin_tag,
+                has_no_changes_needed: parsed_response.has_no_changes_needed
             },
             usage: usage,
             llm_metadata: {
@@ -374,6 +393,12 @@ async function main() {
         if (parsed_response.has_fin_tag) {
             console.log("Found '%%_Fin_%%' tag. Finalizing process.");
             system_action_log = { type: "TERMINATING", details: "%%_Fin_%% tag detected." };
+            status = APRStatus.FINISHED;
+            conversation_active = false;
+
+        } else if (parsed_response.has_no_changes_needed) {
+            console.log("Found '%_No_Changes_Needed_%' tag. Finalizing process.");
+            system_action_log = { type: "TERMINATING", details: "%_No_Changes_Needed_% tag detected. No modifications required." };
             status = APRStatus.FINISHED;
             conversation_active = false;
 

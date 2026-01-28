@@ -207,6 +207,11 @@ class MessageHandler {
                     currentTag = 'modified';
                 } else if (tagName === 'Comment') {
                     currentTag = 'comment';
+                } else if (tagName === 'Verification' || tagName === 'Verification_Report') {
+                    // %_Verification_% と %_Verification_Report_% は無視（reply_requiredとして扱わない）
+                    currentTag = null;
+                    console.log(`🏷️ Ignoring verification tag: ${tagName}`);
+                    continue;
                 } else {
                     // 従来形式のサポート（小文字変換）
                     currentTag = tagName.toLowerCase().replace(/ /g, '_');
