@@ -1620,8 +1620,10 @@ class LLMFlowController {
             // エラーがあればLLMにエラーを報告
             this.state = State.SendErrorToLLM;
         } else {
-            // 成功したらLLMに結果を報告
-            this.state = State.SendResultToLLM;
+            // 修正適用成功 → FSMをVERIFYINGに遷移させて検証プロンプトへ
+            console.log('✅ Diff applied successfully, transitioning to VERIFYING state');
+            await this.agentStateService.transition(AgentState.VERIFYING, 'diff_applied_successfully');
+            this.state = State.SendVerificationPrompt;
         }
     }
 
