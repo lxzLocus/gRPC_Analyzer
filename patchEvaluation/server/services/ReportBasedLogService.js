@@ -33,12 +33,13 @@ class ReportBasedLogService {
                         const content = await fs.readFile(filePath, 'utf-8');
                         const data = JSON.parse(content);
 
-                        // 全ての正確性レベルのPR数を合計
+                        // 最終カテゴリーレベルのPR数を合計（新形式: finalCategoryLevels）
+                        const finalCategoryLevels = data.finalCategoryLevels || data.correctnessLevels;
                         const totalPRs =
-                            (data.correctnessLevels?.identical?.length || 0) +
-                            (data.correctnessLevels?.semanticallyEquivalent?.length || 0) +
-                            (data.correctnessLevels?.plausibleButDifferent?.length || 0) +
-                            (data.correctnessLevels?.incorrect?.length || 0);
+                            (finalCategoryLevels?.CORRECT?.length || 0) +
+                            (finalCategoryLevels?.PLAUSIBLE?.length || 0) +
+                            (finalCategoryLevels?.INCORRECT?.length || 0) +
+                            (finalCategoryLevels?.SKIPPED?.length || 0);
 
                         reports.push({
                             sessionId,
@@ -47,11 +48,11 @@ class ReportBasedLogService {
                             modified: stats.mtime,
                             size: stats.size,
                             totalPRs,
-                            correctnessBreakdown: {
-                                identical: data.correctnessLevels?.identical?.length || 0,
-                                semanticallyEquivalent: data.correctnessLevels?.semanticallyEquivalent?.length || 0,
-                                plausibleButDifferent: data.correctnessLevels?.plausibleButDifferent?.length || 0,
-                                incorrect: data.correctnessLevels?.incorrect?.length || 0
+                            finalCategoryBreakdown: {
+                                CORRECT: finalCategoryLevels?.CORRECT?.length || 0,
+                                PLAUSIBLE: finalCategoryLevels?.PLAUSIBLE?.length || 0,
+                                INCORRECT: finalCategoryLevels?.INCORRECT?.length || 0,
+                                SKIPPED: finalCategoryLevels?.SKIPPED?.length || 0
                             }
                         });
                     } catch (parseError) {
@@ -79,22 +80,22 @@ class ReportBasedLogService {
 
             const prs = [];
 
-            // 全ての正確性レベルからPRを収集（skippedも含む）
-            const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect', 'skipped'];
+            // 最終カテゴリーレベルからPRを収集（新形式: finalCategoryLevels）
+            const finalCategoryLevels = data.finalCategoryLevels || data.correctnessLevels;
+            const categories = ['CORRECT', 'PLAUSIBLE', 'INCORRECT', 'SKIPPED'];
 
-            for (const level of levels) {
-                const entries = data.correctnessLevels?.[level] || [];
+            for (const category of categories) {
+                const entries = finalCategoryLevels?.[category] || [];
 
                 entries.forEach(entry => {
                     prs.push({
                         prName: entry.pullRequestName || entry.datasetEntry,
                         projectName: entry.projectName,
                         datasetEntry: entry.datasetEntry,
-                        correctnessLevel: entry.correctnessLevel || level.toUpperCase(),
+                        finalCategory: entry.finalCategory || category.toUpperCase(),
                         status: entry.status,
                         modifiedFiles: entry.modifiedFiles,
                         modifiedLines: entry.modifiedLines,
-                        semanticSimilarityScore: entry.semanticSimilarityScore,
                         aprProvider: entry.aprProvider,
                         aprModel: entry.aprModel,
                         // APRログの終了ステータス
@@ -124,11 +125,12 @@ class ReportBasedLogService {
             const content = await fs.readFile(filePath, 'utf-8');
             const data = JSON.parse(content);
 
-            // 全ての正確性レベルからPRを検索（skippedも含む）
-            const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect', 'skipped'];
+            // 最終カテゴリーレベルからPRを検索（新形式: finalCategoryLevels）
+            const finalCategoryLevels = data.finalCategoryLevels || data.correctnessLevels;
+            const categories = ['CORRECT', 'PLAUSIBLE', 'INCORRECT', 'SKIPPED'];
 
-            for (const level of levels) {
-                const entries = data.correctnessLevels?.[level] || [];
+            for (const category of categories) {
+                const entries = finalCategoryLevels?.[category] || [];
                 const entry = entries.find(e => e.datasetEntry === datasetEntry);
 
                 if (entry) {
@@ -159,21 +161,19 @@ class ReportBasedLogService {
                     directionalConsistency: { scores: [], average: 0 },
                     validity: { scores: [], average: 0 }
                 },
-                correctnessBreakdown: {
-                    identical: 0,
-                    semanticallyEquivalent: 0,
-                    plausibleButDifferent: 0,
-                    incorrect: 0
+                finalCategoryBreakdown: {
+                    CORRECT: 0,
+                    PLAUSIBLE: 0,
+                    INCORRECT: 0
                 },
                 latestReport: null
             };
 
             for (const report of reports) {
                 stats.totalPRs += report.totalPRs;
-                stats.correctnessBreakdown.identical += report.correctnessBreakdown.identical;
-                stats.correctnessBreakdown.semanticallyEquivalent += report.correctnessBreakdown.semanticallyEquivalent;
-                stats.correctnessBreakdown.plausibleButDifferent += report.correctnessBreakdown.plausibleButDifferent;
-                stats.correctnessBreakdown.incorrect += report.correctnessBreakdown.incorrect;
+                stats.finalCategoryBreakdown.CORRECT += report.finalCategoryBreakdown.CORRECT;
+                stats.finalCategoryBreakdown.PLAUSIBLE += report.finalCategoryBreakdown.PLAUSIBLE;
+                stats.finalCategoryBreakdown.INCORRECT += report.finalCategoryBreakdown.INCORRECT;
             }
 
             if (reports.length > 0) {
@@ -200,22 +200,16 @@ class ReportBasedLogService {
             const stats = {
                 sessionId,
                 timestamp: data.timestamp,
-                correctnessDistribution: {
-                    identical: data.correctnessLevels?.identical?.length || 0,
-                    semanticallyEquivalent: data.correctnessLevels?.semanticallyEquivalent?.length || 0,
-                    plausibleButDifferent: data.correctnessLevels?.plausibleButDifferent?.length || 0,
-                    incorrect: data.correctnessLevels?.incorrect?.length || 0,
-                    skipped: data.correctnessLevels?.skipped?.length || 0
+                // 最終カテゴリー分布（新形式: finalCategoryLevels）
+                finalCategoryLevels: data.finalCategoryLevels || data.correctnessLevels,
+                finalCategoryDistribution: {
+                    CORRECT: (data.finalCategoryLevels?.CORRECT?.length || data.correctnessLevels?.identical?.length || 0),
+                    PLAUSIBLE: (data.finalCategoryLevels?.PLAUSIBLE?.length || data.correctnessLevels?.plausibleButDifferent?.length || 0),
+                    INCORRECT: (data.finalCategoryLevels?.INCORRECT?.length || data.correctnessLevels?.incorrect?.length || 0),
+                    SKIPPED: (data.finalCategoryLevels?.SKIPPED?.length || data.correctnessLevels?.skipped?.length || 0)
                 },
                 totalPRs: 0,
                 successRate: 0,
-                semanticSimilarity: {
-                    scores: [],
-                    average: 0,
-                    min: null,
-                    max: null,
-                    distribution: { low: 0, medium: 0, high: 0 }
-                },
                 aprProviders: {},
                 aprModels: {},
                 modificationStats: {
@@ -237,55 +231,101 @@ class ReportBasedLogService {
                 },
                 fourAxisEvaluation: {
                     totalEvaluated: 0,
-                    accuracy: { scores: [], average: 0 },
-                    decisionSoundness: { scores: [], average: 0 },
-                    directionalConsistency: { scores: [], average: 0 },
-                    validity: { scores: [], average: 0 }
+                    accuracy: { 
+                        labelCounts: {}, 
+                        goodRatio: 0, 
+                        goodLabels: ['IDENTICAL', 'SEMANTICALLY_EQUIVALENT'] 
+                    },
+                    decisionSoundness: { 
+                        labelCounts: {}, 
+                        goodRatio: 0, 
+                        goodLabels: ['SOUND'] 
+                    },
+                    directionalConsistency: { 
+                        labelCounts: {}, 
+                        goodRatio: 0, 
+                        goodLabels: ['CONSISTENT'] 
+                    },
+                    validity: { 
+                        labelCounts: {}, 
+                        goodRatio: 0, 
+                        goodLabels: ['VALID'] 
+                    }
                 },
                 intentFulfillmentEvaluation: {
                     totalEvaluated: 0,
                     totalSkipped: 0,
                     totalError: 0,
+                    // 4段階enumによる離散カテゴリカウント
+                    levelCounts: {
+                        INTENT_FULFILLED: 0,
+                        INTENT_PARTIALLY_FULFILLED: 0,
+                        INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED: 0,
+                        INTENT_NOT_FULFILLED: 0
+                    }
+                },
+                semanticSimilarity: {
                     scores: [],
-                    averageScore: 0,
-                    highScore: 0,  // >= 0.9
-                    mediumScore: 0,  // 0.7-0.89
-                    lowScore: 0,  // 0.4-0.69
-                    veryLowScore: 0  // < 0.4
+                    average: 0,
+                    min: 0,
+                    max: 0
                 },
                 repairTypes: {},  // 修正タイプの統計
                 aprStatusDistribution: {}  // APR終了ステータスの分布
             };
 
             // 全PRを収集して統計を計算（skippedも含む）
-            const levels = ['identical', 'semanticallyEquivalent', 'plausibleButDifferent', 'incorrect', 'skipped'];
+            const finalCategoryLevels = data.finalCategoryLevels || data.correctnessLevels;
+            const categories = ['CORRECT', 'PLAUSIBLE', 'INCORRECT', 'SKIPPED'];
             const allPRs = [];
 
-            for (const level of levels) {
-                const entries = data.correctnessLevels?.[level] || [];
+            for (const category of categories) {
+                const entries = finalCategoryLevels?.[category] || [];
                 allPRs.push(...entries);
             }
 
             stats.totalPRs = allPRs.length;
-            stats.successRate = stats.totalPRs > 0
-                ? ((stats.correctnessDistribution.identical + stats.correctnessDistribution.semanticallyEquivalent) / stats.totalPRs * 100).toFixed(1)
+            
+            // 実際に評価されたPR数（SKIPPED以外 = パッチが生成されたケース）
+            const totalEvaluated = stats.finalCategoryDistribution.CORRECT + 
+                                   stats.finalCategoryDistribution.PLAUSIBLE + 
+                                   stats.finalCategoryDistribution.INCORRECT;
+            stats.totalEvaluated = totalEvaluated;
+            
+            // パーセンテージは評価済みのみを母数とする
+            stats.successRate = totalEvaluated > 0
+                ? ((stats.finalCategoryDistribution.CORRECT) / totalEvaluated * 100).toFixed(1)
                 : 0;
+
+            // 安全性チェック：fourAxisEvaluationオブジェクトが存在することを確認
+            if (!stats.fourAxisEvaluation) {
+                stats.fourAxisEvaluation = {
+                    totalEvaluated: 0,
+                    accuracy: { 
+                        labelCounts: {}, 
+                        goodRatio: 0, 
+                        goodLabels: ['IDENTICAL', 'SEMANTICALLY_EQUIVALENT'] 
+                    },
+                    decisionSoundness: { 
+                        labelCounts: {}, 
+                        goodRatio: 0, 
+                        goodLabels: ['SOUND'] 
+                    },
+                    directionalConsistency: { 
+                        labelCounts: {}, 
+                        goodRatio: 0, 
+                        goodLabels: ['CONSISTENT'] 
+                    },
+                    validity: { 
+                        labelCounts: {}, 
+                        goodRatio: 0, 
+                        goodLabels: ['VALID'] 
+                    }
+                };
+            }
 
             // 各PRの統計を収集
             allPRs.forEach(pr => {
-                // 意味的類似度
-                if (pr.semanticSimilarityScore != null) {
-                    stats.semanticSimilarity.scores.push(pr.semanticSimilarityScore);
-
-                    // 分布のカウント
-                    if (pr.semanticSimilarityScore < 0.3) {
-                        stats.semanticSimilarity.distribution.low++;
-                    } else if (pr.semanticSimilarityScore < 0.7) {
-                        stats.semanticSimilarity.distribution.medium++;
-                    } else {
-                        stats.semanticSimilarity.distribution.high++;
-                    }
-                }
 
                 // APRプロバイダーとモデル
                 if (pr.aprProvider) {
@@ -328,22 +368,40 @@ class ReportBasedLogService {
                     stats.skipBreakdown.llmEvaluationError++;
                 }
 
-                // Intent Fulfillment評価の統計
+                // Intent Fulfillment評価の統計（離散カテゴリカウントのみ、スコアは使用しない）
                 if (pr.intentFulfillmentEvaluation) {
                     const intentEval = pr.intentFulfillmentEvaluation;
 
-                    if (intentEval.status === 'evaluated' && typeof intentEval.score === 'number') {
+                    // 評価完了ケース：labelに基づくカウント
+                    // 構造が {status, data: {label, ...}} の場合と {label, ...} の場合に対応
+                    const intentLabel = intentEval.data?.label || intentEval.label || intentEval.level;
+                    if ((intentEval.status === 'evaluated' || intentLabel) && intentLabel) {
                         stats.intentFulfillmentEvaluation.totalEvaluated++;
-                        stats.intentFulfillmentEvaluation.scores.push(intentEval.score);
-
-                        // スコア分布
-                        if (intentEval.score >= 0.9) stats.intentFulfillmentEvaluation.highScore++;
-                        else if (intentEval.score >= 0.7) stats.intentFulfillmentEvaluation.mediumScore++;
-                        else if (intentEval.score >= 0.4) stats.intentFulfillmentEvaluation.lowScore++;
-                        else stats.intentFulfillmentEvaluation.veryLowScore++;
-                    } else if (intentEval.status === 'skipped') {
+                        
+                        // 離散カテゴリごとのカウント（4段階enum）
+                        if (stats.intentFulfillmentEvaluation.levelCounts[intentLabel] !== undefined) {
+                            stats.intentFulfillmentEvaluation.levelCounts[intentLabel]++;
+                        } else {
+                            // 旧5段階形式から新4段階形式へのマッピング
+                            const labelMapping = {
+                                'FULLY_FULFILLED': 'INTENT_FULFILLED',
+                                'SUBSTANTIALLY_FULFILLED': 'INTENT_FULFILLED',
+                                'PARTIALLY_FULFILLED': 'INTENT_PARTIALLY_FULFILLED',
+                                'MINIMALLY_FULFILLED': 'INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED',
+                                'NOT_FULFILLED': 'INTENT_NOT_FULFILLED'
+                            };
+                            const mappedLabel = labelMapping[intentLabel];
+                            if (mappedLabel && stats.intentFulfillmentEvaluation.levelCounts[mappedLabel] !== undefined) {
+                                stats.intentFulfillmentEvaluation.levelCounts[mappedLabel]++;
+                            }
+                        }
+                    } 
+                    // スキップケース
+                    else if (intentEval.status === 'skipped') {
                         stats.intentFulfillmentEvaluation.totalSkipped++;
-                    } else if (intentEval.status === 'error') {
+                    } 
+                    // エラーケース
+                    else if (intentEval.status === 'error') {
                         stats.intentFulfillmentEvaluation.totalError++;
                     }
                 }
@@ -353,18 +411,56 @@ class ReportBasedLogService {
                     const fourAxis = pr.fourAxisEvaluation;
                     stats.fourAxisEvaluation.totalEvaluated++;
 
-                    // 各軸のスコアを収集
-                    if (fourAxis.accuracy?.score != null) {
-                        stats.fourAxisEvaluation.accuracy.scores.push(fourAxis.accuracy.score);
+                    // 安全性チェック：fourAxisEvaluationオブジェクトが正しく初期化されているか確認
+                    if (!stats.fourAxisEvaluation.accuracy) {
+                        stats.fourAxisEvaluation.accuracy = { 
+                            labelCounts: {}, 
+                            goodRatio: 0, 
+                            goodLabels: ['IDENTICAL', 'SEMANTICALLY_EQUIVALENT'] 
+                        };
                     }
-                    if (fourAxis.decision_soundness?.score != null) {
-                        stats.fourAxisEvaluation.decisionSoundness.scores.push(fourAxis.decision_soundness.score);
+                    if (!stats.fourAxisEvaluation.decisionSoundness) {
+                        stats.fourAxisEvaluation.decisionSoundness = { 
+                            labelCounts: {}, 
+                            goodRatio: 0, 
+                            goodLabels: ['SOUND'] 
+                        };
                     }
-                    if (fourAxis.directional_consistency?.score != null) {
-                        stats.fourAxisEvaluation.directionalConsistency.scores.push(fourAxis.directional_consistency.score);
+                    if (!stats.fourAxisEvaluation.directionalConsistency) {
+                        stats.fourAxisEvaluation.directionalConsistency = { 
+                            labelCounts: {}, 
+                            goodRatio: 0, 
+                            goodLabels: ['CONSISTENT'] 
+                        };
                     }
-                    if (fourAxis.validity?.score != null) {
-                        stats.fourAxisEvaluation.validity.scores.push(fourAxis.validity.score);
+                    if (!stats.fourAxisEvaluation.validity) {
+                        stats.fourAxisEvaluation.validity = { 
+                            labelCounts: {}, 
+                            goodRatio: 0, 
+                            goodLabels: ['VALID'] 
+                        };
+                    }
+
+                    // 各軸のラベルをカウント
+                    if (fourAxis.accuracy?.label) {
+                        const label = fourAxis.accuracy.label;
+                        stats.fourAxisEvaluation.accuracy.labelCounts[label] = 
+                            (stats.fourAxisEvaluation.accuracy.labelCounts[label] || 0) + 1;
+                    }
+                    if (fourAxis.decision_soundness?.label) {
+                        const label = fourAxis.decision_soundness.label;
+                        stats.fourAxisEvaluation.decisionSoundness.labelCounts[label] = 
+                            (stats.fourAxisEvaluation.decisionSoundness.labelCounts[label] || 0) + 1;
+                    }
+                    if (fourAxis.directional_consistency?.label) {
+                        const label = fourAxis.directional_consistency.label;
+                        stats.fourAxisEvaluation.directionalConsistency.labelCounts[label] = 
+                            (stats.fourAxisEvaluation.directionalConsistency.labelCounts[label] || 0) + 1;
+                    }
+                    if (fourAxis.validity?.label) {
+                        const label = fourAxis.validity.label;
+                        stats.fourAxisEvaluation.validity.labelCounts[label] = 
+                            (stats.fourAxisEvaluation.validity.labelCounts[label] || 0) + 1;
                     }
                 }
 
@@ -381,25 +477,31 @@ class ReportBasedLogService {
                 }
             });
 
-            // Intent Fulfillment評価の平均スコア計算
-            if (stats.intentFulfillmentEvaluation.scores.length > 0) {
-                const sum = stats.intentFulfillmentEvaluation.scores.reduce((a, b) => a + b, 0);
-                stats.intentFulfillmentEvaluation.averageScore = (sum / stats.intentFulfillmentEvaluation.scores.length).toFixed(3);
-            }
+            // Intent Fulfillment評価：比率計算（連続スコアは使用しない）
+            // 各レベルの件数を総評価数で割った比率のみを使用
+            // averageScoreは計算しない（説明困難な統計的スコアを避けるため）
 
-            // 4軸評価の平均スコア計算
-            const calculateAverage = (scores) => {
-                if (scores.length === 0) return 0;
-                return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(3);
+            // 4軸評価の「良いラベル」の割合を計算
+            const calculateGoodRatio = (axisData) => {
+                if (!axisData || !axisData.labelCounts || !axisData.goodLabels) return 0;
+                
+                const totalCount = Object.values(axisData.labelCounts).reduce((sum, count) => sum + count, 0);
+                if (totalCount === 0) return 0;
+                
+                const goodCount = axisData.goodLabels.reduce((sum, label) => {
+                    return sum + (axisData.labelCounts[label] || 0);
+                }, 0);
+                
+                return ((goodCount / totalCount) * 100).toFixed(1);
             };
 
-            stats.fourAxisEvaluation.accuracy.average = calculateAverage(stats.fourAxisEvaluation.accuracy.scores);
-            stats.fourAxisEvaluation.decisionSoundness.average = calculateAverage(stats.fourAxisEvaluation.decisionSoundness.scores);
-            stats.fourAxisEvaluation.directionalConsistency.average = calculateAverage(stats.fourAxisEvaluation.directionalConsistency.scores);
-            stats.fourAxisEvaluation.validity.average = calculateAverage(stats.fourAxisEvaluation.validity.scores);
+            stats.fourAxisEvaluation.accuracy.goodRatio = calculateGoodRatio(stats.fourAxisEvaluation.accuracy);
+            stats.fourAxisEvaluation.decisionSoundness.goodRatio = calculateGoodRatio(stats.fourAxisEvaluation.decisionSoundness);
+            stats.fourAxisEvaluation.directionalConsistency.goodRatio = calculateGoodRatio(stats.fourAxisEvaluation.directionalConsistency);
+            stats.fourAxisEvaluation.validity.goodRatio = calculateGoodRatio(stats.fourAxisEvaluation.validity);
 
-            // 意味的類似度の統計計算
-            if (stats.semanticSimilarity.scores.length > 0) {
+            // 意味的類似度の統計計算（安全性チェック追加）
+            if (stats.semanticSimilarity && stats.semanticSimilarity.scores && stats.semanticSimilarity.scores.length > 0) {
                 const scores = stats.semanticSimilarity.scores;
                 stats.semanticSimilarity.average = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(3);
                 stats.semanticSimilarity.min = Math.min(...scores).toFixed(3);

@@ -16,6 +16,7 @@ dotenvConfig({ path: '/app/.env' });
  * @param {Object} options - 実行オプション（HTMLレポート生成設定等）
  * @param {boolean} options.useCache - キャッシュ使用の有無 (default: true)
  * @param {boolean} options.clearCacheFirst - 実行前にキャッシュをクリアするか (default: false)
+ * @param {number} options.concurrency - 並列処理数 (default: null 自動設定)
  * @returns {Promise<Object>} 解析結果の統計情報
  */
 export async function cachedDatasetLoop(datasetDir, aprOutputPath, options = {}) {
@@ -23,17 +24,19 @@ export async function cachedDatasetLoop(datasetDir, aprOutputPath, options = {})
     const {
         useCache = true,
         clearCacheFirst = false,
+        concurrency = null,
         ...otherOptions
     } = options;
 
-    // キャッシュ機能付きコントローラーを作成
-    const controller = new CachedDatasetAnalysisController(null, useCache);
+    // キャッシュ機能付きコントローラーを作成（並列処理対応）
+    const controller = new CachedDatasetAnalysisController(null, useCache, concurrency);
     
     // キャッシュオプションを統合
     const fullOptions = {
         ...otherOptions,
         useCache,
-        clearCacheFirst
+        clearCacheFirst,
+        concurrency
     };
     
     const stats = await controller.executeAnalysis(datasetDir, aprOutputPath, fullOptions);

@@ -201,18 +201,27 @@ export class ConsoleView {
         
         // 4軸評価形式（新形式）
         if (evaluationResult?.accuracy !== undefined) {
-            const accuracyScore = typeof evaluationResult.accuracy === 'object' 
-                ? evaluationResult.accuracy.score 
-                : evaluationResult.accuracy;
-            const decisionScore = typeof evaluationResult.decision_soundness === 'object'
-                ? evaluationResult.decision_soundness.score
-                : (evaluationResult.decision_soundness || 0);
-            const directionalScore = typeof evaluationResult.directional_consistency === 'object'
-                ? evaluationResult.directional_consistency.score
-                : (evaluationResult.directional_consistency || 0);
-            const validityScore = typeof evaluationResult.validity === 'object'
-                ? evaluationResult.validity.score
-                : (evaluationResult.validity || 0);
+            // accuracy_score を優先的に使用（ラベル形式とスコア形式の両方に対応）
+            const accuracyScore = evaluationResult.accuracy_score !== undefined
+                ? evaluationResult.accuracy_score
+                : (typeof evaluationResult.accuracy === 'object' 
+                    ? (evaluationResult.accuracy.score || 0)
+                    : (evaluationResult.accuracy || 0));
+            const decisionScore = evaluationResult.decision_soundness_score !== undefined
+                ? evaluationResult.decision_soundness_score
+                : (typeof evaluationResult.decision_soundness === 'object'
+                    ? (evaluationResult.decision_soundness.score || 0)
+                    : (evaluationResult.decision_soundness || 0));
+            const directionalScore = evaluationResult.directional_consistency_score !== undefined
+                ? evaluationResult.directional_consistency_score
+                : (typeof evaluationResult.directional_consistency === 'object'
+                    ? (evaluationResult.directional_consistency.score || 0)
+                    : (evaluationResult.directional_consistency || 0));
+            const validityScore = evaluationResult.validity_score !== undefined
+                ? evaluationResult.validity_score
+                : (typeof evaluationResult.validity === 'object'
+                    ? (evaluationResult.validity.score || 0)
+                    : (evaluationResult.validity || 0));
             
             console.log(`    📊 4軸評価結果:`);
             console.log(`      - Accuracy: ${(accuracyScore * 100).toFixed(1)}%`);

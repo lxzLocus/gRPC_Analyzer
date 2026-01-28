@@ -1,6 +1,21 @@
 /**
  * キャッシュ機能付きMainScriptエントリーポイント
  * オリジナルのMainScript.jsにキャッシュ機能を統合
+ * 
+ * 
+ * # デフォルト（自動設定）
+node script/MainScript_Cached.js dataset/incorrect_few
+
+# 並列数8を指定
+node script/MainScript_Cached.js dataset/incorrect_few --concurrency=8
+
+# キャッシュ + 並列処理
+node script/MainScript_Cached.js dataset/filtered_confirmed \
+  --cache=true \
+  --concurrency=8
+
+
+  node script/MainScript_Cached.js dataset/filtered_confirmed --cache=true --concurrency=3
  */
 import { config as dotenvConfig } from 'dotenv';
 import path from 'path';
@@ -79,6 +94,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const useCache = commandLineArgs.cache !== 'false' && commandLineArgs.noCache !== 'true'; // デフォルト: true
     const clearCacheFirst = commandLineArgs.clearCache === 'true' || commandLineArgs.clearCacheFirst === 'true';
     
+    // 並列処理オプションの解析
+    const concurrency = parseInt(commandLineArgs.concurrency) || 
+                       parseInt(commandLineArgs.parallel) || 
+                       null; // デフォルト: null（自動設定）
+    
     // レポート生成オプションの解析
     const generateDetailReports = commandLineArgs.detailReports === 'true' || 
                                   commandLineArgs.generateDetailReports === 'true' ||
@@ -122,6 +142,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (clearCacheFirst) {
         console.log('🔧 実行前キャッシュクリア: 有効');
     }
+    if (concurrency) {
+        console.log('🔧 並列処理数:', concurrency);
+    } else {
+        console.log('🔧 並列処理数: 自動設定（CPU数に基づく）');
+    }
 
     // HTMLレポート生成オプション + キャッシュオプション
     const reportOptions = {
@@ -131,13 +156,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         generateDetailedAnalysis,           // 詳細分析レポート生成
         maxDetailReports,                   // 詳細レポート生成数
         useCache,                          // キャッシュ使用
-        clearCacheFirst                    // 実行前キャッシュクリア
+        clearCacheFirst,                   // 実行前キャッシュクリア
+        concurrency                        // 並列処理数
 
     };
 
     console.log('🚀 データセット分析を開始（キャッシュ機能付き）');
     console.log(`📂 選択されたデータセット: ${selectedDataset}`);
     console.log(`📁 APRログパス: ${aprOutputPath}`);
+    console.log(`⚡ 並列処理: ${concurrency ? `${concurrency}並列` : '自動設定'}`);
     console.log(`📊 HTMLレポート生成: ${reportOptions.generateHTMLReport ? '有効' : '無効'}`);
     console.log(`❌ エラーレポート生成: ${reportOptions.generateErrorReport ? '有効' : '無効'}`);
     console.log(`📝 詳細レポート生成: ${reportOptions.generateDetailReports ? '有効' : '無効'}${reportOptions.generateDetailReports ? ` (最大${reportOptions.maxDetailReports}件)` : ''}`);

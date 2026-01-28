@@ -19,6 +19,7 @@ export function createLLMRequest(messages, options = {}) {
         maxTokens: options.maxTokens || undefined,
         temperature: options.temperature || undefined,
         timeout: options.timeout || undefined,
+        responseFormat: options.responseFormat || undefined, // JSON mode support
         // Gemini思考制御パラメータ
         reasoningEffort: options.reasoningEffort || undefined,
         thinkingBudget: options.thinkingBudget || undefined,

@@ -110,14 +110,15 @@ function renderReports(reports) {
 
     listEl.innerHTML = reports.map(report => {
         const date = new Date(report.modified).toLocaleString('ja-JP');
+        const breakdown = report.finalCategoryBreakdown || {};
         return `
             <li class="report-item" data-session-id="${report.sessionId}" onclick="selectReport('${report.sessionId}')">
                 <div class="report-name">📄 ${report.sessionId}</div>
                 <div class="report-info">${date}</div>
                 <div class="report-stats">
                     <span class="stat-badge">📊 ${report.totalPRs} PR</span>
-                    <span class="stat-badge">✅ ${report.correctnessBreakdown.identical}</span>
-                    <span class="stat-badge">⚠️ ${report.correctnessBreakdown.plausibleButDifferent}</span>
+                    <span class="stat-badge">✅ ${breakdown.CORRECT || 0}</span>
+                    <span class="stat-badge">⚠️ ${breakdown.PLAUSIBLE || 0}</span>
                 </div>
             </li>
         `;
@@ -179,7 +180,10 @@ function renderReportStatistics(stats) {
     const contentBody = document.getElementById('contentBody');
 
     const total = stats.totalPRs;
-    const correctness = stats.correctnessDistribution;
+    const correctness = stats.finalCategoryDistribution || {};
+    
+    // 実際に評価されたPR数（SKIPPED以外 = パッチが生成されたケース）
+    const totalEvaluated = stats.totalEvaluated || ((correctness.CORRECT || 0) + (correctness.PLAUSIBLE || 0) + (correctness.INCORRECT || 0));
 
     // 処理フロー統計を生成（APR終了ステータス分布を含む）
     const processingStatsHtml = renderProcessingFlowStats(stats);
@@ -196,18 +200,17 @@ function renderReportStatistics(stats) {
         <div class="stats-overview">
             <div class="stat-card">
                 <h3>📊 総PR/Issue数</h3>
-                <div class="big-value">${total}</div>
-                <div class="sub-value">パッチ生成（LLM_B評価）: ${stats.fourAxisEvaluation?.totalEvaluated || 0}</div>
-                <div class="sub-value">No Changes Needed判定（LLM_C評価可能）: ${stats.intentFulfillmentEvaluation?.totalEvaluated || 0}</div>
+                <div class="big-value">${total}件</div>
+                <div class="sub-value">評価対象（SKIPPED除外）: ${totalEvaluated}件</div>
+                <div class="sub-value">Intent評価対象: ${stats.intentFulfillmentEvaluation?.totalEvaluated || 0}件</div>
             </div>
             
             <div class="stat-card">
-                <h3>✅ パッチ生成成功率</h3>
+                <h3>✅ 正解率（CORRECT/評価対象）</h3>
                 <div class="big-value">${stats.successRate}%</div>
                 <div class="sub-value">
-                    パッチ生成: ${stats.fourAxisEvaluation?.totalEvaluated || 0}件<br>
-                    完全一致: ${stats.correctnessDistribution?.identical || 0}件 / 
-                    意味的等価: ${stats.correctnessDistribution?.semanticallyEquivalent || 0}件
+                    評価対象: ${totalEvaluated}件（全${total}件 - SKIPPED ${correctness.SKIPPED || 0}件）<br>
+                    正解（CORRECT）: ${stats.finalCategoryDistribution?.CORRECT || 0}件
                 </div>
             </div>
             
@@ -220,44 +223,109 @@ function renderReportStatistics(stats) {
 
         ${stats.fourAxisEvaluation && stats.fourAxisEvaluation.totalEvaluated > 0 ? `
         <div class="stat-card" style="margin-bottom: 20px;">
-            <h3>📊 4軸評価 (LLM_B) - パッチが生成されたPRのみ</h3>
+            <h3>📊 4軸評価 (LLM_B) - パッチ結果ベース評価</h3>
             <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">
-                評価対象: ${stats.fourAxisEvaluation.totalEvaluated}件（APRが修正を生成したケースのみ）<br>
-                <span style="color: #495057;">※Accuracy, Decision Soundness, Directional Consistency, Validityの4軸で評価</span>
+                <strong>評価対象:</strong> ${stats.fourAxisEvaluation.totalEvaluated}件/${total}件（パッチ生成ケースのみ）<br>
+                <span style="color: #495057;">🎯 <strong>評価内容:</strong> 生成されたパッチとGround Truthを比較し、コードレベルで評価</span><br>
+                <span style="font-size: 0.85em; color: #6c757d;">※Accuracy（正確性）、Decision Soundness（判断妥当性）、<strong>Directional Consistency（方向性の非矛盾チェック）</strong>、Validity（有効性）</span>
             </p>
             
             <div class="distribution-grid" style="margin-bottom: 20px;">
                 <div class="distribution-item">
-                    <div class="distribution-value">${stats.fourAxisEvaluation.accuracy.average}</div>
+                    <div class="distribution-value">${stats.fourAxisEvaluation.accuracy.goodRatio ?? ((stats.fourAxisEvaluation.accuracy.average ?? 0) * 100).toFixed(1)}%</div>
                     <div class="distribution-label">🎯 Accuracy (正確性)</div>
                     <div style="font-size: 0.8em; color: #6c757d; margin-top: 5px;">Ground Truthとの一致度</div>
+                    <div style="font-size: 0.75em; color: #999; margin-top: 3px;">${stats.fourAxisEvaluation.accuracy.labelCounts ? '(IDENTICAL + SEMANTICALLY_EQUIVALENT)' : '(旧形式: 平均スコア)'}</div>
                 </div>
                 <div class="distribution-item">
-                    <div class="distribution-value">${stats.fourAxisEvaluation.decisionSoundness.average}</div>
+                    <div class="distribution-value">${stats.fourAxisEvaluation.decisionSoundness.goodRatio ?? ((stats.fourAxisEvaluation.decisionSoundness.average ?? 0) * 100).toFixed(1)}%</div>
                     <div class="distribution-label">🧠 Decision Soundness</div>
                     <div style="font-size: 0.8em; color: #6c757d; margin-top: 5px;">判断の妥当性</div>
+                    <div style="font-size: 0.75em; color: #999; margin-top: 3px;">${stats.fourAxisEvaluation.decisionSoundness.labelCounts ? '(SOUND)' : '(旧形式: 平均スコア)'}</div>
                 </div>
                 <div class="distribution-item">
-                    <div class="distribution-value">${stats.fourAxisEvaluation.directionalConsistency.average}</div>
+                    <div class="distribution-value">${stats.fourAxisEvaluation.directionalConsistency.goodRatio ?? ((stats.fourAxisEvaluation.directionalConsistency.average ?? 0) * 100).toFixed(1)}%</div>
                     <div class="distribution-label">🧭 Directional Consistency</div>
-                    <div style="font-size: 0.8em; color: #6c757d; margin-top: 5px;">方向性の一貫性</div>
-                    <div style="font-size: 0.75em; color: #999; margin-top: 3px; font-style: italic;">※パッチ生成PRのみ評価</div>
+                    <div style="font-size: 0.8em; color: #6c757d; margin-top: 5px;">人間修正と非矛盾か</div>
+                    <div style="font-size: 0.75em; color: #999; margin-top: 3px;">${stats.fourAxisEvaluation.directionalConsistency.labelCounts ? '(CONSISTENT)' : '(旧形式: 平均スコア)'}</div>
                 </div>
                 <div class="distribution-item">
-                    <div class="distribution-value">${stats.fourAxisEvaluation.validity.average}</div>
+                    <div class="distribution-value">${stats.fourAxisEvaluation.validity.goodRatio ?? ((stats.fourAxisEvaluation.validity.average ?? 0) * 100).toFixed(1)}%</div>
                     <div class="distribution-label">✅ Validity (有効性)</div>
                     <div style="font-size: 0.8em; color: #6c757d; margin-top: 5px;">構文・ビルドの正当性</div>
+                    <div style="font-size: 0.75em; color: #999; margin-top: 3px;">${stats.fourAxisEvaluation.validity.labelCounts ? '(VALID)' : '(旧形式: 平均スコア)'}</div>
                 </div>
             </div>
             
-            ${stats.fourAxisEvaluation.accuracy.scores.length > 0 ? `
+            ${stats.fourAxisEvaluation.accuracy.labelCounts && Object.keys(stats.fourAxisEvaluation.accuracy.labelCounts).length > 0 ? `
             <div style="margin-top: 15px;">
-                <h4 style="margin-bottom: 10px; color: #495057;">📈 スコア詳細</h4>
+                <h4 style="margin-bottom: 10px; color: #495057;">📊 ラベル分布詳細</h4>
+                
+                <div class="chart-bar">
+                    <div class="chart-bar-label">
+                        <span>🎯 Accuracy <span style="font-size: 0.85em; color: #6c757d;">（Ground Truthとの一致度）</span></span>
+                        <span><strong>${stats.fourAxisEvaluation.accuracy.goodRatio}%</strong> (${Object.values(stats.fourAxisEvaluation.accuracy.labelCounts).reduce((a, b) => a + b, 0)}件)</span>
+                    </div>
+                    <div class="chart-bar-bg">
+                        <div class="chart-bar-fill bar-identical" style="width: ${stats.fourAxisEvaluation.accuracy.goodRatio}%"></div>
+                    </div>
+                    <div style="font-size: 0.8em; color: #6c757d; margin-left: 10px; margin-top: 5px;">
+                        ${Object.entries(stats.fourAxisEvaluation.accuracy.labelCounts).map(([label, count]) => `${label}: ${count}件`).join(', ')}
+                    </div>
+                </div>
+                
+                <div class="chart-bar">
+                    <div class="chart-bar-label">
+                        <span>🧠 Decision Soundness <span style="font-size: 0.85em; color: #6c757d;">（判断の妥当性）</span></span>
+                        <span><strong>${stats.fourAxisEvaluation.decisionSoundness.goodRatio}%</strong> (${Object.values(stats.fourAxisEvaluation.decisionSoundness.labelCounts).reduce((a, b) => a + b, 0)}件)</span>
+                    </div>
+                    <div class="chart-bar-bg">
+                        <div class="chart-bar-fill bar-equivalent" style="width: ${stats.fourAxisEvaluation.decisionSoundness.goodRatio}%"></div>
+                    </div>
+                    <div style="font-size: 0.8em; color: #6c757d; margin-left: 10px; margin-top: 5px;">
+                        ${Object.entries(stats.fourAxisEvaluation.decisionSoundness.labelCounts).map(([label, count]) => `${label}: ${count}件`).join(', ')}
+                    </div>
+                </div>
+                
+                <div class="chart-bar">
+                    <div class="chart-bar-label">
+                        <span>🧭 Directional Consistency <span style="font-size: 0.85em; color: #6c757d;">（人間修正と非矛盾か）</span></span>
+                        <span><strong>${stats.fourAxisEvaluation.directionalConsistency.goodRatio}%</strong> (${Object.values(stats.fourAxisEvaluation.directionalConsistency.labelCounts).reduce((a, b) => a + b, 0)}件)</span>
+                    </div>
+                    <div class="chart-bar-bg">
+                        <div class="chart-bar-fill bar-plausible" style="width: ${stats.fourAxisEvaluation.directionalConsistency.goodRatio}%"></div>
+                    </div>
+                    <div style="font-size: 0.8em; color: #6c757d; margin-left: 10px; margin-top: 5px;">
+                        ${Object.entries(stats.fourAxisEvaluation.directionalConsistency.labelCounts).map(([label, count]) => `${label}: ${count}件`).join(', ')}
+                    </div>
+                </div>
+                
+                <div class="chart-bar">
+                    <div class="chart-bar-label">
+                        <span>✅ Validity <span style="font-size: 0.85em; color: #6c757d;">（構文・ビルドの正当性）</span></span>
+                        <span><strong>${stats.fourAxisEvaluation.validity.goodRatio}%</strong> (${Object.values(stats.fourAxisEvaluation.validity.labelCounts).reduce((a, b) => a + b, 0)}件)</span>
+                    </div>
+                    <div class="chart-bar-bg">
+                        <div class="chart-bar-fill" style="width: ${stats.fourAxisEvaluation.validity.goodRatio}%; background: #28a745;"></div>
+                    </div>
+                    <div style="font-size: 0.8em; color: #6c757d; margin-left: 10px; margin-top: 5px;">
+                        ${Object.entries(stats.fourAxisEvaluation.validity.labelCounts).map(([label, count]) => `${label}: ${count}件`).join(', ')}
+                    </div>
+                </div>
+            </div>
+            ` : (stats.fourAxisEvaluation.accuracy.scores && stats.fourAxisEvaluation.accuracy.scores.length > 0) ? `
+            <div style="margin-top: 15px;">
+                <h4 style="margin-bottom: 10px; color: #495057;">📈 スコア詳細（旧形式）</h4>
+                <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin-bottom: 10px; border-radius: 4px;">
+                    <p style="margin: 0; font-size: 0.85em; color: #856404;">
+                        このデータは旧形式で保存されています。新しい評価を実行すると、ラベルベースの詳細が表示されます。
+                    </p>
+                </div>
                 
                 <div class="chart-bar">
                     <div class="chart-bar-label">
                         <span>🎯 Accuracy</span>
-                        <span><strong>${stats.fourAxisEvaluation.accuracy.average}</strong> (評価件数: ${stats.fourAxisEvaluation.accuracy.scores.length})</span>
+                        <span><strong>${(stats.fourAxisEvaluation.accuracy.average * 100).toFixed(1)}%</strong> (平均スコア)</span>
                     </div>
                     <div class="chart-bar-bg">
                         <div class="chart-bar-fill bar-identical" style="width: ${stats.fourAxisEvaluation.accuracy.average * 100}%"></div>
@@ -267,7 +335,7 @@ function renderReportStatistics(stats) {
                 <div class="chart-bar">
                     <div class="chart-bar-label">
                         <span>🧠 Decision Soundness</span>
-                        <span><strong>${stats.fourAxisEvaluation.decisionSoundness.average}</strong> (評価件数: ${stats.fourAxisEvaluation.decisionSoundness.scores.length})</span>
+                        <span><strong>${(stats.fourAxisEvaluation.decisionSoundness.average * 100).toFixed(1)}%</strong> (平均スコア)</span>
                     </div>
                     <div class="chart-bar-bg">
                         <div class="chart-bar-fill bar-equivalent" style="width: ${stats.fourAxisEvaluation.decisionSoundness.average * 100}%"></div>
@@ -277,7 +345,7 @@ function renderReportStatistics(stats) {
                 <div class="chart-bar">
                     <div class="chart-bar-label">
                         <span>🧭 Directional Consistency</span>
-                        <span><strong>${stats.fourAxisEvaluation.directionalConsistency.average}</strong> (評価件数: ${stats.fourAxisEvaluation.directionalConsistency.scores.length})</span>
+                        <span><strong>${(stats.fourAxisEvaluation.directionalConsistency.average * 100).toFixed(1)}%</strong> (平均スコア)</span>
                     </div>
                     <div class="chart-bar-bg">
                         <div class="chart-bar-fill bar-plausible" style="width: ${stats.fourAxisEvaluation.directionalConsistency.average * 100}%"></div>
@@ -287,7 +355,7 @@ function renderReportStatistics(stats) {
                 <div class="chart-bar">
                     <div class="chart-bar-label">
                         <span>✅ Validity</span>
-                        <span><strong>${stats.fourAxisEvaluation.validity.average}</strong> (評価件数: ${stats.fourAxisEvaluation.validity.scores.length})</span>
+                        <span><strong>${(stats.fourAxisEvaluation.validity.average * 100).toFixed(1)}%</strong> (平均スコア)</span>
                     </div>
                     <div class="chart-bar-bg">
                         <div class="chart-bar-fill" style="width: ${stats.fourAxisEvaluation.validity.average * 100}%; background: #28a745;"></div>
@@ -299,187 +367,166 @@ function renderReportStatistics(stats) {
         ` : ''}
 
         <div class="stat-card" style="margin-bottom: 20px;">
-            <h3>🎯 正確性レベル分布</h3>
+            <h3>🎯 最終カテゴリー分布（4軸評価からの判定）</h3>
+            <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">
+                <strong>対象:</strong> 全${total}件中、評価対象${totalEvaluated}件（SKIPPED ${correctness.SKIPPED || 0}件を除く）<br>
+                <span style="font-size: 0.85em; color: #6c757d;">※Accuracyレベルに基づく3段階分類（CORRECT/PLAUSIBLE/INCORRECT）+ SKIPPED</span>
+            </p>
+            
+            ${correctness.CORRECT === 0 && correctness.PLAUSIBLE === 0 && correctness.INCORRECT === 0 && correctness.SKIPPED === total ? `
+            <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin-bottom: 15px; border-radius: 4px;">
+                <p style="margin: 0; font-size: 0.9em; color: #856404;">
+                    <strong>⚠️ 4軸評価（LLM_B）が実施されていません</strong><br>
+                    <span style="font-size: 0.85em; margin-top: 5px; display: block;">
+                    このデータセットでは4軸評価が未実施のため、CORRECT/PLAUSIBLE/INCORRECTの分類ができません。<br>
+                    Intent Fulfillment評価（LLM_C）は実施済みです。下部のIntent Fulfillment評価セクションをご確認ください。
+                    </span>
+                </p>
+            </div>
+            ` : ''}
             
             <div class="chart-bar">
                 <div class="chart-bar-label">
-                    <span>✅ 完全一致（Accuracy ≥ 0.95）</span>
-                    <span><strong>${correctness.identical}</strong> (${(correctness.identical / total * 100).toFixed(1)}%)</span>
+                    <span>✅ 正解（CORRECT）</span>
+                    <span><strong>${correctness.CORRECT}件/${totalEvaluated}件</strong> (${totalEvaluated > 0 ? (correctness.CORRECT / totalEvaluated * 100).toFixed(1) : 0}%)</span>
                 </div>
                 <div class="chart-bar-bg">
-                    <div class="chart-bar-fill bar-identical" style="width: ${correctness.identical / total * 100}%"></div>
+                    <div class="chart-bar-fill bar-identical" style="width: ${totalEvaluated > 0 ? correctness.CORRECT / totalEvaluated * 100 : 0}%"></div>
                 </div>
             </div>
             
             <div class="chart-bar">
                 <div class="chart-bar-label">
-                    <span>✅ 意味的等価（0.7 ≤ Accuracy < 0.95）</span>
-                    <span><strong>${correctness.semanticallyEquivalent}</strong> (${(correctness.semanticallyEquivalent / total * 100).toFixed(1)}%)</span>
+                    <span>⚠️ 妥当（PLAUSIBLE）</span>
+                    <span><strong>${correctness.PLAUSIBLE}件/${totalEvaluated}件</strong> (${totalEvaluated > 0 ? (correctness.PLAUSIBLE / totalEvaluated * 100).toFixed(1) : 0}%)</span>
                 </div>
                 <div class="chart-bar-bg">
-                    <div class="chart-bar-fill bar-equivalent" style="width: ${correctness.semanticallyEquivalent / total * 100}%"></div>
+                    <div class="chart-bar-fill bar-plausible" style="width: ${totalEvaluated > 0 ? correctness.PLAUSIBLE / totalEvaluated * 100 : 0}%"></div>
                 </div>
             </div>
             
             <div class="chart-bar">
                 <div class="chart-bar-label">
-                    <span>⚠️ 妥当だが異なる（0.3 ≤ Accuracy < 0.7）</span>
-                    <span><strong>${correctness.plausibleButDifferent}</strong> (${(correctness.plausibleButDifferent / total * 100).toFixed(1)}%)</span>
+                    <span>❌ 不正解（INCORRECT）</span>
+                    <span><strong>${correctness.INCORRECT}件/${totalEvaluated}件</strong> (${totalEvaluated > 0 ? (correctness.INCORRECT / totalEvaluated * 100).toFixed(1) : 0}%)</span>
                 </div>
                 <div class="chart-bar-bg">
-                    <div class="chart-bar-fill bar-plausible" style="width: ${correctness.plausibleButDifferent / total * 100}%"></div>
+                    <div class="chart-bar-fill bar-incorrect" style="width: ${totalEvaluated > 0 ? correctness.INCORRECT / totalEvaluated * 100 : 0}%"></div>
                 </div>
             </div>
             
-            <div class="chart-bar">
-                <div class="chart-bar-label">
-                    <span>❌ 不正解（Accuracy < 0.3）</span>
-                    <span><strong>${correctness.incorrect}</strong> (${(correctness.incorrect / total * 100).toFixed(1)}%)</span>
-                </div>
-                <div class="chart-bar-bg">
-                    <div class="chart-bar-fill bar-incorrect" style="width: ${correctness.incorrect / total * 100}%"></div>
-                </div>
-            </div>
-            
-            ${correctness.skipped > 0 ? `
+            ${correctness.SKIPPED > 0 ? `
             <div class="chart-bar">
                 <div class="chart-bar-label">
                     <span>⏭️ スキップ/エラー</span>
-                    <span><strong>${correctness.skipped}</strong> (${(correctness.skipped / total * 100).toFixed(1)}%)</span>
+                    <span><strong>${correctness.SKIPPED}件/${total}件</strong> (${(correctness.SKIPPED / total * 100).toFixed(1)}%)</span>
                 </div>
                 <div class="chart-bar-bg">
-                    <div class="chart-bar-fill" style="width: ${correctness.skipped / total * 100}%; background: #6c757d;"></div>
+                    <div class="chart-bar-fill" style="width: ${correctness.SKIPPED / total * 100}%; background: #6c757d;"></div>
                 </div>
             </div>
             ` : ''}
             
             <div style="background-color: #f8f9fa; border-radius: 4px; padding: 15px; margin-top: 20px; font-size: 0.85em;">
-                <h4 style="margin: 0 0 10px 0; color: #495057; font-size: 0.95em;">📋 スコア基準 (Accuracy評価)</h4>
+                <h4 style="margin: 0 0 10px 0; color: #495057; font-size: 0.95em;">📋 カテゴリー判定基準</h4>
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead>
                         <tr style="background-color: #e9ecef;">
-                            <th style="padding: 8px; text-align: left; border: 1px solid #dee2e6;">Score</th>
-                            <th style="padding: 8px; text-align: left; border: 1px solid #dee2e6;">Level</th>
-                            <th style="padding: 8px; text-align: left; border: 1px solid #dee2e6;">Description</th>
+                            <th style="padding: 8px; text-align: left; border: 1px solid #dee2e6;">カテゴリー</th>
+                            <th style="padding: 8px; text-align: left; border: 1px solid #dee2e6;">説明</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>1.0</strong></td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">Perfect Match</td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">R0-R15基準を満たす完全一致</td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>✅ CORRECT</strong></td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">Ground Truthと機能的に等価な修正（Accuracy: IDENTICAL, SEMANTICALLY_EQUIVALENT）</td>
                         </tr>
                         <tr style="background-color: #f8f9fa;">
-                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>0.9</strong></td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">Near Perfect</td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">些細な無害な差異のみ</td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>⚠️ PLAUSIBLE</strong></td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">妥当だが異なるアプローチ（Accuracy: PARTIALLY_CORRECT, CORRECT_LOCUS）</td>
                         </tr>
                         <tr>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>0.7-0.8</strong></td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">High Similarity</td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">コア部分正しいが微細な欠落</td>
-                        </tr>
-                        <tr style="background-color: #f8f9fa;">
-                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>0.5-0.6</strong></td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">Partial Match</td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">正しいが実装に欠陥あり</td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>0.2-0.4</strong></td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">Correct Locus</td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">場所は正しいが実装が根本的に誤り</td>
-                        </tr>
-                        <tr style="background-color: #f8f9fa;">
-                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>0.0-0.1</strong></td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">No Match</td>
-                            <td style="padding: 8px; border: 1px solid #dee2e6;">間違った場所・無関係・変更なし</td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>❌ INCORRECT</strong></td>
+                            <td style="padding: 8px; border: 1px solid #dee2e6;">不正解な修正（Accuracy: WRONG_APPROACH, NO_MATCH）</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
-        ${stats.semanticSimilarity.scores.length > 0 ? `
+        ${stats.intentFulfillmentEvaluation ? `
         <div class="stat-card" style="margin-bottom: 20px;">
-            <h3>📊 意味的類似度分布</h3>
-            <div class="distribution-grid">
-                <div class="distribution-item">
-                    <div class="distribution-value">${stats.semanticSimilarity.distribution.low}</div>
-                    <div class="distribution-label">🔴 低 (< 0.3)</div>
-                </div>
-                <div class="distribution-item">
-                    <div class="distribution-value">${stats.semanticSimilarity.distribution.medium}</div>
-                    <div class="distribution-label">🟡 中 (0.3-0.7)</div>
-                </div>
-                <div class="distribution-item">
-                    <div class="distribution-value">${stats.semanticSimilarity.distribution.high}</div>
-                    <div class="distribution-label">🟢 高 (> 0.7)</div>
-                </div>
-            </div>
-        </div>
-        ` : ''}
-
-        ${stats.intentFulfillmentEvaluation && stats.intentFulfillmentEvaluation.totalEvaluated > 0 ? `
-        <div class="stat-card" style="margin-bottom: 20px;">
-            <h3>🎯 Intent Fulfillment評価 (LLM_C) - コミット意図との整合性</h3>
+            <h3>🎯 Intent Fulfillment評価 (LLM_C) - 意図達成度評価</h3>
             <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">
-                評価対象: ${stats.intentFulfillmentEvaluation.totalEvaluated}件（全ケース対象：パッチ生成の有無に関わらず、コミットメッセージの意図を満たしているかを評価）<br>
-                <span style="color: #495057;">※パッチ生成ケースは実装の妥当性、No Changes Neededケースは判断の妥当性を評価</span>
+                <strong>評価対象:</strong> ${stats.intentFulfillmentEvaluation.totalEvaluated}件/${total}件（<strong>全ケース：パッチ生成＋No-op判定</strong>）<br>
+                <span style="color: #495057;">🎯 <strong>評価内容:</strong> コミットメッセージ（自然言語）に基づき、<strong>最終判断の妥当性</strong>を評価</span><br>
+                <span style="font-size: 0.85em; color: #6c757d;">※パッチ生成ケース＝実装が意図を満たすか / No-op判定ケース＝修正不要の判断が妥当か</span><br>
+                <span style="font-size: 0.8em; color: #999; margin-top: 5px; display: block; font-style: italic;">📝 <strong>Directional Consistencyとの違い:</strong> DCは「人間コードとの非矛盾」、IFは「自然言語意図の達成度」</span>
             </p>
-            <div class="distribution-grid">
-                <div class="distribution-item">
-                    <div class="distribution-value">${stats.intentFulfillmentEvaluation.totalEvaluated}</div>
-                    <div class="distribution-label">✅ 評価完了</div>
-                </div>
-                <div class="distribution-item">
-                    <div class="distribution-value">${stats.intentFulfillmentEvaluation.totalSkipped}</div>
-                    <div class="distribution-label">⏭️ 評価対象外</div>
-                </div>
-                <div class="distribution-item">
-                    <div class="distribution-value">${stats.intentFulfillmentEvaluation.averageScore}</div>
-                    <div class="distribution-label">📊 平均スコア</div>
-                </div>
+            
+            <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
+                <p style="margin: 0; font-size: 0.85em; color: #856404;">
+                    <strong>📊 評価方式:</strong> 離散カテゴリ（5段階enum）による件数カウントのみ。スコアはラベルから自動決定。
+                </p>
             </div>
+            
+            ${stats.intentFulfillmentEvaluation.totalEvaluated > 0 ? `
             
             <div class="chart-bar" style="margin-top: 15px;">
                 <div class="chart-bar-label">
-                    <span>🎯 高スコア (≥0.9) <span style="font-size: 0.85em; color: #6c757d;">- 意図を完全に実装</span></span>
-                    <span><strong>${stats.intentFulfillmentEvaluation.highScore}</strong> (${((stats.intentFulfillmentEvaluation.highScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
+                    <span>🟢 INTENT_FULFILLED <span style="font-size: 0.85em; color: #6c757d;">- 意図を満たしている</span></span>
+                    <span><strong>${stats.intentFulfillmentEvaluation.levelCounts?.INTENT_FULFILLED || 0}件/${stats.intentFulfillmentEvaluation.totalEvaluated}件</strong> (${(((stats.intentFulfillmentEvaluation.levelCounts?.INTENT_FULFILLED || 0) / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
                 </div>
                 <div class="chart-bar-bg">
-                    <div class="chart-bar-fill bar-identical" style="width: ${(stats.intentFulfillmentEvaluation.highScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
+                    <div class="chart-bar-fill bar-identical" style="width: ${((stats.intentFulfillmentEvaluation.levelCounts?.INTENT_FULFILLED || 0) / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
                 </div>
             </div>
             
             <div class="chart-bar">
                 <div class="chart-bar-label">
-                    <span>✅ 中スコア (0.7-0.89) <span style="font-size: 0.85em; color: #6c757d;">- 概ね実装（軽微な不足）</span></span>
-                    <span><strong>${stats.intentFulfillmentEvaluation.mediumScore}</strong> (${((stats.intentFulfillmentEvaluation.mediumScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
+                    <span>🟡 INTENT_PARTIALLY_FULFILLED <span style="font-size: 0.85em; color: #6c757d;">- 意図を部分的に満たす</span></span>
+                    <span><strong>${stats.intentFulfillmentEvaluation.levelCounts?.INTENT_PARTIALLY_FULFILLED || 0}件/${stats.intentFulfillmentEvaluation.totalEvaluated}件</strong> (${(((stats.intentFulfillmentEvaluation.levelCounts?.INTENT_PARTIALLY_FULFILLED || 0) / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
                 </div>
                 <div class="chart-bar-bg">
-                    <div class="chart-bar-fill bar-equivalent" style="width: ${(stats.intentFulfillmentEvaluation.mediumScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
+                    <div class="chart-bar-fill bar-plausible" style="width: ${((stats.intentFulfillmentEvaluation.levelCounts?.INTENT_PARTIALLY_FULFILLED || 0) / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
                 </div>
             </div>
             
             <div class="chart-bar">
                 <div class="chart-bar-label">
-                    <span>⚠️ 低スコア (0.4-0.69) <span style="font-size: 0.85em; color: #6c757d;">- 部分的に実装</span></span>
-                    <span><strong>${stats.intentFulfillmentEvaluation.lowScore}</strong> (${((stats.intentFulfillmentEvaluation.lowScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
+                    <span>🟠 INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED <span style="font-size: 0.85em; color: #6c757d;">- 意図を理解したが未達成</span></span>
+                    <span><strong>${stats.intentFulfillmentEvaluation.levelCounts?. INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED || 0}件/${stats.intentFulfillmentEvaluation.totalEvaluated}件</strong> (${(((stats.intentFulfillmentEvaluation.levelCounts?.INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED || 0) / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
                 </div>
                 <div class="chart-bar-bg">
-                    <div class="chart-bar-fill bar-plausible" style="width: ${(stats.intentFulfillmentEvaluation.lowScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
+                    <div class="chart-bar-fill" style="background-color: #fd7e14; width: ${((stats.intentFulfillmentEvaluation.levelCounts?.INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED || 0) / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
                 </div>
             </div>
             
             <div class="chart-bar">
                 <div class="chart-bar-label">
-                    <span>❌ 極低スコア (<0.4) <span style="font-size: 0.85em; color: #6c757d;">- 方向性正しいが不完全/意図に未対応</span></span>
-                    <span><strong>${stats.intentFulfillmentEvaluation.veryLowScore}</strong> (${((stats.intentFulfillmentEvaluation.veryLowScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
+                    <span>🔴 INTENT_NOT_FULFILLED <span style="font-size: 0.85em; color: #6c757d;">- 意図を満たさない</span></span>
+                    <span><strong>${stats.intentFulfillmentEvaluation.levelCounts?.INTENT_NOT_FULFILLED || 0}件/${stats.intentFulfillmentEvaluation.totalEvaluated}件</strong> (${(((stats.intentFulfillmentEvaluation.levelCounts?.INTENT_NOT_FULFILLED || 0) / stats.intentFulfillmentEvaluation.totalEvaluated) * 100).toFixed(1)}%)</span>
                 </div>
                 <div class="chart-bar-bg">
-                    <div class="chart-bar-fill bar-incorrect" style="width: ${(stats.intentFulfillmentEvaluation.veryLowScore / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
+                    <div class="chart-bar-fill bar-incorrect" style="width: ${((stats.intentFulfillmentEvaluation.levelCounts?.INTENT_NOT_FULFILLED || 0) / stats.intentFulfillmentEvaluation.totalEvaluated) * 100}%"></div>
                 </div>
             </div>
+            
+            <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 4px;">
+                <p style="margin: 0; font-size: 0.85em; color: #6c757d;">
+                    <strong>📋 評価対象外:</strong> スキップ ${stats.intentFulfillmentEvaluation.totalSkipped}件、エラー ${stats.intentFulfillmentEvaluation.totalError}件
+                </p>
+            </div>
+            ` : `
+            <div style="background-color: #f0f0f0; border-left: 4px solid #999; padding: 15px; margin-top: 15px; border-radius: 4px;">
+                <p style="margin: 0; font-size: 0.9em; color: #495057;">
+                    <strong>ℹ️ まだIntent Fulfillment評価が実行されていません</strong><br>
+                    <span style="font-size: 0.85em; color: #6c757d; margin-top: 5px; display: block;">
+                    評価を実行すると、4段階の離散カテゴリ（INTENT_FULFILLED / INTENT_PARTIALLY_FULFILLED / INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED / INTENT_NOT_FULFILLED）による統計が表示されます。
+                    </span>
+                </p>
+            </div>
+            `}
         </div>
         ` : ''}
         
@@ -571,7 +618,7 @@ function renderPRs(prs) {
         state.prFilters = {
             status: 'all',
             aprStatus: 'all',
-            correctness: 'all',
+            finalCategory: 'all',
             intentFulfillment: 'all',
             sortBy: 'default'
         };
@@ -581,7 +628,7 @@ function renderPRs(prs) {
     let filteredPRs = prs.filter(pr => {
         if (state.prFilters.status !== 'all' && pr.status !== state.prFilters.status) return false;
         if (state.prFilters.aprStatus !== 'all' && pr.aprStatus !== state.prFilters.aprStatus) return false;
-        if (state.prFilters.correctness !== 'all' && pr.correctnessLevel !== state.prFilters.correctness) return false;
+        if (state.prFilters.finalCategory !== 'all' && pr.finalCategory !== state.prFilters.finalCategory) return false;
         
         // Intent Fulfillmentフィルター
         if (state.prFilters.intentFulfillment !== 'all') {
@@ -649,14 +696,13 @@ function renderPRs(prs) {
                 </div>
                 
                 <div>
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">正確性レベル:</label>
-                    <select id="filter-correctness" class="filter-select" onchange="updatePRFilters()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ced4da;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">最終カテゴリー:</label>
+                    <select id="filter-final-category" class="filter-select" onchange="updatePRFilters()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ced4da;">
                         <option value="all">すべて</option>
-                        <option value="IDENTICAL">✅ 完全一致 (≥0.95) - ${prs.filter(p => p.correctnessLevel === 'IDENTICAL').length}件</option>
-                        <option value="SEMANTICALLY_EQUIVALENT">✅ 意味的等価 (0.7-0.94) - ${prs.filter(p => p.correctnessLevel === 'SEMANTICALLY_EQUIVALENT').length}件</option>
-                        <option value="PLAUSIBLE_BUT_DIFFERENT">⚠️ 妥当だが異なる (0.3-0.69) - ${prs.filter(p => p.correctnessLevel === 'PLAUSIBLE_BUT_DIFFERENT').length}件</option>
-                        <option value="INCORRECT">❌ 不正解 (<0.3) - ${prs.filter(p => p.correctnessLevel === 'INCORRECT').length}件</option>
-                        <option value="SKIPPED">⏭️ スキップ - ${prs.filter(p => p.correctnessLevel === 'SKIPPED').length}件</option>
+                        <option value="CORRECT">✅ 正解 - ${prs.filter(p => p.finalCategory === 'CORRECT').length}件</option>
+                        <option value="PLAUSIBLE">⚠️ 妥当 - ${prs.filter(p => p.finalCategory === 'PLAUSIBLE').length}件</option>
+                        <option value="INCORRECT">❌ 不正解 - ${prs.filter(p => p.finalCategory === 'INCORRECT').length}件</option>
+                        <option value="SKIPPED">⏭️ スキップ - ${prs.filter(p => p.finalCategory === 'SKIPPED').length}件</option>
                     </select>
                 </div>
                 
@@ -690,8 +736,8 @@ function renderPRs(prs) {
         
         <div class="pr-grid">
             ${filteredPRs.map(pr => {
-        const badgeClass = getCorrectnessClass(pr.correctnessLevel);
-        const badgeText = getCorrectnessText(pr.correctnessLevel);
+        const badgeClass = getFinalCategoryClass(pr.finalCategory);
+        const badgeText = getFinalCategoryText(pr.finalCategory);
 
         // 評価ステータスバッジ
         let statusBadge = '';
@@ -743,7 +789,7 @@ function renderPRs(prs) {
     // フィルター状態を復元
     document.getElementById('filter-status').value = state.prFilters.status;
     document.getElementById('filter-apr-status').value = state.prFilters.aprStatus;
-    document.getElementById('filter-correctness').value = state.prFilters.correctness;
+    document.getElementById('filter-final-category').value = state.prFilters.finalCategory;
     document.getElementById('filter-intent-fulfillment').value = state.prFilters.intentFulfillment;
     document.getElementById('sort-by').value = state.prFilters.sortBy;
 
@@ -756,7 +802,7 @@ function updatePRFilters() {
     state.prFilters = {
         status: document.getElementById('filter-status').value,
         aprStatus: document.getElementById('filter-apr-status').value,
-        correctness: document.getElementById('filter-correctness').value,
+        finalCategory: document.getElementById('filter-final-category').value,
         intentFulfillment: document.getElementById('filter-intent-fulfillment').value,
         sortBy: document.getElementById('sort-by').value
     };
@@ -821,8 +867,8 @@ async function loadPRDetail(sessionId, datasetEntry) {
 async function renderPRDetail(detail, sessionId, datasetEntry, aprLogData = null) {
     const contentBody = document.getElementById('contentBody');
 
-    const badgeClass = getCorrectnessClass(detail.correctnessLevel);
-    const badgeText = getCorrectnessText(detail.correctnessLevel);
+    const badgeClass = getFinalCategoryClass(detail.finalCategory);
+    const badgeText = getFinalCategoryText(detail.finalCategory);
 
     // Diff情報を非同期で取得（デフォルト5行）
     let diffsHtml = '';
@@ -1678,6 +1724,29 @@ function resetView() {
 }
 
 // ユーティリティ関数
+function getFinalCategoryClass(category) {
+    const map = {
+        'CORRECT': 'badge-identical',
+        'PLAUSIBLE': 'badge-plausible',
+        'INCORRECT': 'badge-incorrect',
+        'SKIPPED': 'badge-plausible',
+        'ERROR': 'badge-incorrect'
+    };
+    return map[category] || 'badge-plausible';
+}
+
+function getFinalCategoryText(category) {
+    const map = {
+        'CORRECT': '✅ 正解',
+        'PLAUSIBLE': '⚠️ 妥当',
+        'INCORRECT': '❌ 不正解',
+        'SKIPPED': '⏭️ 評価スキップ',
+        'ERROR': '❌ エラー'
+    };
+    return map[category] || category;
+}
+
+// 後方互換性のための旧関数（使用されなくなったが、念のため残す）
 function getCorrectnessClass(level) {
     const map = {
         'IDENTICAL': 'badge-identical',

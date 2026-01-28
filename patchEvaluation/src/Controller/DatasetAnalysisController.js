@@ -546,6 +546,17 @@ export class DatasetAnalysisController {
                 
                 // 評価パイプライン成功（ステップ1+2完了）
                 this.stats.incrementEvaluationPipelineSuccess();
+
+                // 離散評価軸の統計更新
+                if (evaluationResult.result?.final_category) {
+                    this.stats.incrementFinalCategory(evaluationResult.result.final_category);
+                }
+                if (evaluationResult.result?.is_success !== undefined) {
+                    this.stats.incrementSuccessCount(evaluationResult.result.is_success);
+                }
+                if (evaluationResult.result?.accuracy?.level) {
+                    this.stats.incrementAccuracyLevel(evaluationResult.result.accuracy.level);
+                }
             } else {
                 // 詳細なエラー情報を出力
                 console.error('❌ LLM評価失敗の詳細:');
@@ -630,11 +641,44 @@ export class DatasetAnalysisController {
             const intentResult = await this.llmEvaluationService.evaluateIntentFulfillment(intentContext);
 
             if (intentResult.success) {
-                console.log(`  ✅ Intent Fulfillment評価成功: スコア=${intentResult.result.score}`);
+                // デバッグ: intentResult.resultの内容を確認  
+                console.log('🔍 [DEBUG] intentResult.result type:', typeof intentResult.result);
+                console.log('🔍 [DEBUG] intentResult.result.label:', intentResult.result?.label);
+                console.log('🔍 [DEBUG] intentResult.result.level:', intentResult.result?.level);
+                console.log('🔍 [DEBUG] intentResult.result keys:', Object.keys(intentResult.result || {}));
+                
+                const intentLevel = intentResult.result?.label || intentResult.result?.level || 'UNKNOWN';
+                console.log(`  ✅ Intent Fulfillment評価成功: レベル=${intentLevel}`);
+                
+                // デバッグ: パース結果を出力
+                if (intentLevel === 'UNKNOWN' || intentResult.result?.error) {
+                    console.warn('  ⚠️ Intent Fulfillment評価: 想定外の結果構造');
+                    console.warn('  📋 レスポンス詳細:', JSON.stringify(intentResult.result, null, 2));
+                }
+                
+                // スコア情報の表示（改善版）
+                const intentScore = intentResult.result?.score ?? 0.0;
+                const scorePercentage = (intentScore * 100).toFixed(0);
+                
+                if (intentLevel !== 'FULLY_FULFILLED') {
+                    console.log(`  ❌ Intent Fulfillment スコア: ${intentScore.toFixed(2)} (${scorePercentage}%)`);
+                    if (intentResult.result?.reasoning) {
+                        console.log(`     理由: ${intentResult.result.reasoning.substring(0, 200)}${intentResult.result.reasoning.length > 200 ? '...' : ''}`);
+                    }
+                } else {
+                    console.log(`  ✅ Intent Fulfillment スコア: ${intentScore.toFixed(2)} (${scorePercentage}%)`);
+                }
+                
                 finalModInfo.intentFulfillmentEvaluation = intentResult.result;
+
+                // Intent Fulfillment統計更新
+                this.stats.incrementIntentFulfillment(intentLevel);
             } else {
-                console.error('  ❌ Intent Fulfillment評価失敗:', intentResult.error);
-                finalModInfo.intentFulfillmentEvaluation = { error: intentResult.error };
+                console.error('  ❌ Intent Fulfillment評価エラー:', intentResult.error);
+                if (intentResult.result) {
+                    console.error('  📋 エラー詳細:', JSON.stringify(intentResult.result, null, 2));
+                }
+                finalModInfo.intentFulfillmentEvaluation = { error: intentResult.error, details: intentResult.result };
             }
 
         } catch (error) {

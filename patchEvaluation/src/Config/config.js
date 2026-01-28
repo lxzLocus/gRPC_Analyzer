@@ -84,7 +84,7 @@ class Config {
         if (!this.externalConfig.llm) {
             this.externalConfig.llm = {
                 provider: 'openai',
-                model: 'gpt-4o',
+                model: 'gpt-5.1-chat-latest',
                 maxTokens: 4000,
                 temperature: 0.1,
                 timeout: 30000

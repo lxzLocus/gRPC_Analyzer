@@ -78,20 +78,27 @@ export class OpenAILLMClient extends LLMClient {
                 messages: request.messages
             };
             
-            // gpt-5以外の場合のみmax_completion_tokensを設定
-            if (model !== 'gpt-5' && maxTokens) {
+            // gpt-5系モデルではmax_completion_tokensをスキップ
+            const isGpt5Model = model.startsWith('gpt-5');
+            if (!isGpt5Model && maxTokens) {
                 apiParams.max_completion_tokens = maxTokens;
                 console.log(`🔢 OpenAI max_completion_tokens: ${maxTokens}`);
-            } else if (model === 'gpt-5') {
-                console.log(`ℹ️  gpt-5: max_completion_tokensパラメータはスキップされます`);
+            } else if (isGpt5Model) {
+                console.log(`ℹ️  ${model}: max_completion_tokensパラメータはスキップされます`);
             }
             
-            // gpt-5以外の場合のみtemperatureを設定
-            if (model !== 'gpt-5' && request.temperature !== undefined) {
+            // gpt-5系モデルではtemperatureをスキップ（デフォルト値1のみサポート）
+            if (!isGpt5Model && request.temperature !== undefined) {
                 apiParams.temperature = request.temperature;
                 console.log(`🌡️  OpenAI temperature: ${request.temperature}`);
-            } else if (model === 'gpt-5') {
-                console.log(`ℹ️  gpt-5: temperatureパラメータはスキップされます`);
+            } else if (isGpt5Model) {
+                console.log(`ℹ️  ${model}: temperatureパラメータはスキップされます（デフォルト1使用）`);
+            }
+            
+            // response_formatパラメータ（JSON mode）
+            if (request.responseFormat) {
+                apiParams.response_format = request.responseFormat;
+                console.log(`📋 OpenAI response_format: ${JSON.stringify(request.responseFormat)}`);
             }
 
             // タイムアウト付きのAPI呼び出し

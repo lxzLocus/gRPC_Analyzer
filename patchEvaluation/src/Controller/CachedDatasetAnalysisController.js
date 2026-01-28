@@ -1,9 +1,11 @@
 /**
  * キャッシュ機能付きDatasetAnalysisController
  * 元のDatasetAnalysisControllerにキャッシュ機能を統合
+ * 並列処理対応版
  */
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { CachedDatasetRepository } from '../Repository/CachedDatasetRepository.js';
 import { APRLogService } from '../Service/APRLogService.js';
 import LLMErrorHandler from '../Service/LLMErrorHandler.js';
@@ -15,12 +17,14 @@ import { ConsoleView } from '../View/ConsoleView.js';
 import { StatisticsReportView } from '../View/StatisticsReportView.js';
 import { HTMLReportController } from './HTMLReportController.js';
 import Config from '../Config/config.js';
+import pLimit from 'p-limit';
 
 /**
  * キャッシュ機能付きデータセット解析のメイン制御を行うControllerクラス
+ * 並列処理対応版
  */
 export class CachedDatasetAnalysisController {
-    constructor(configPath, cacheEnabled = true) {
+    constructor(configPath, cacheEnabled = true, concurrency = null) {
         // プロジェクトルートから設定ファイルのデフォルトパスを取得
         const projectRoot = '/app';
         const defaultConfigPath = configPath || path.join(projectRoot, 'config', 'config.json');
@@ -49,6 +53,23 @@ export class CachedDatasetAnalysisController {
         
         // キャッシュ設定
         this.cacheEnabled = cacheEnabled;
+        
+        // 並列処理設定
+        // デフォルト: CPU数の2倍（I/O待機が多いため）、最大16並列
+        // LLM API呼び出しがボトルネックのため、より多くの並列度が有効
+        const defaultConcurrency = Math.min(16, (os.cpus().length || 4) * 2);
+        this.concurrency = concurrency || defaultConcurrency;
+        
+        // プロジェクトレベル: 全プロジェクトを同時に処理（最大concurrency）
+        // PRレベル: 各プロジェクト内でも並列処理
+        this.projectLimit = pLimit(this.concurrency); // プロジェクトレベルも全並列
+        this.prLimit = pLimit(this.concurrency); // プルリクエストレベル
+        
+        // LLM API呼び出し専用制限（Rate Limit対策）
+        // OpenAI APIは通常、同時リクエスト数に制限があるため、少し控えめに設定
+        this.llmLimit = pLimit(Math.min(this.concurrency, 10)); // LLM API用（最大10並列）
+        
+        console.log(`⚡ 並列処理設定: ${this.concurrency}並列 (プロジェクト: ${this.concurrency}, PR: ${this.concurrency}, LLM API: ${Math.min(this.concurrency, 10)})`);
     }
 
     /**
@@ -150,10 +171,38 @@ export class CachedDatasetAnalysisController {
             // パスの取得
             const projectDirs = await this.datasetRepository.getProjectDirectories(datasetDir);
 
-            // {dataset}/{projectName}/ 
+            console.log(`📦 ${projectDirs.length}個のプロジェクトを並列処理します`);
+
+            // 事前に全PR数をカウント（並列処理による競合を防ぐ）
+            let totalPRCount = 0;
             for (const projectName of projectDirs) {
-                await this.processProject(projectName, datasetDir, aprOutputPath);
+                const projectPath = path.join(datasetDir, projectName);
+                try {
+                    const categoryDirs = await this.datasetRepository.getCategoryDirectories(projectPath);
+                    for (const category of categoryDirs) {
+                        const categoryPath = path.join(projectPath, category);
+                        try {
+                            const titleDirs = await this.datasetRepository.getPullRequestDirectories(categoryPath);
+                            totalPRCount += titleDirs.length;
+                        } catch (err) {
+                            // カウントは続行
+                        }
+                    }
+                } catch (err) {
+                    // カウントは続行
+                }
             }
+            
+            // 事前に総数を設定
+            this.stats.totalDatasetEntries = totalPRCount;
+            console.log(`📋 合計 ${totalPRCount}個のPRを処理します`);
+
+            // {dataset}/{projectName}/ を並列処理
+            await Promise.all(
+                projectDirs.map(projectName => 
+                    this.projectLimit(() => this.processProject(projectName, datasetDir, aprOutputPath))
+                )
+            );
 
             // 統計レポートの表示
             this.statisticsReportView.showStatisticsReport(this.stats);
@@ -206,9 +255,12 @@ export class CachedDatasetAnalysisController {
             // `{dataset}/{projectName}/{pullrequest or issue}`
             const categoryDirs = await this.datasetRepository.getCategoryDirectories(projectPath);
             
-            for (const category of categoryDirs) {
-                await this.processCategory(projectName, category, projectPath, datasetDir, aprOutputPath);
-            }
+            // カテゴリも並列処理
+            await Promise.all(
+                categoryDirs.map(category =>
+                    this.processCategory(projectName, category, projectPath, datasetDir, aprOutputPath)
+                )
+            );
         } catch (error) {
             this.consoleView.showCategoryReadError(projectPath, error.message);
             this.stats.addErrorEntry({
@@ -233,16 +285,21 @@ export class CachedDatasetAnalysisController {
             // `{dataset}/{projectName}/{pullrequest or issue}/{title}`
             const titleDirs = await this.datasetRepository.getPullRequestDirectories(categoryPath);
             
-            for (const pullRequestTitle of titleDirs) {
-                await this.processPullRequest(
-                    projectName, 
-                    category, 
-                    pullRequestTitle, 
-                    categoryPath, 
-                    datasetDir, 
-                    aprOutputPath
-                );
-            }
+            console.log(`  📄 ${projectName}/${category}: ${titleDirs.length}個のPRを並列処理`);
+            
+            // プルリクエストを並列処理
+            await Promise.all(
+                titleDirs.map(pullRequestTitle => 
+                    this.prLimit(() => this.processPullRequest(
+                        projectName, 
+                        category, 
+                        pullRequestTitle, 
+                        categoryPath, 
+                        datasetDir, 
+                        aprOutputPath
+                    ))
+                )
+            );
         } catch (error) {
             this.consoleView.showCategoryReadError(categoryPath, error.message);
             this.stats.addErrorEntry({
@@ -268,8 +325,7 @@ export class CachedDatasetAnalysisController {
         
         this.consoleView.showProcessingStart(pullRequestKey);
         
-        // データセットエントリー数をインクリメント
-        this.stats.incrementTotalEntries();
+        // データセットエントリー数は事前カウント済み（並列処理競合防止）
         
         try {
             // パスの構築と存在確認
@@ -303,24 +359,19 @@ export class CachedDatasetAnalysisController {
                 categoryName, 
                 pullRequestName
             );
-            
-            console.log(`🔍 APRログパス: ${aprLogRelativePath}`);
 
             const aprLogFiles = await this.datasetRepository.getAPRLogFiles(aprLogRelativePath);
-            console.log(`📄 発見されたAPRログファイル数: ${aprLogFiles.length}`);
             if (aprLogFiles.length > 0) {
-                console.log(`📄 発見されたAPRログファイル: ${aprLogFiles.join(', ')}`);
                 // APRログ発見の統計を更新
                 this.stats.incrementAprLogFound();
             }
             
             if (aprLogFiles.length === 0) {
-                console.log(`⚠️ APRログファイルが見つかりません: ${aprLogRelativePath}`);
                 this.stats.addErrorEntry({
                     project: projectName,
                     category: categoryName,
                     pullRequest: pullRequestName,
-                    error: `APRログファイルが見つかりません: ${aprLogRelativePath}`
+                    error: `APRログファイルが見つかりません`
                 });
                 return;
             }
@@ -352,22 +403,7 @@ export class CachedDatasetAnalysisController {
             this.stats.incrementAprParseSuccess();
 
             // 最終修正内容の抽出
-            console.log('🔍 extractFinalModifications呼び出し前:');
-            console.log('  - aprLogData keys:', Object.keys(aprLogData));
-            console.log('  - aprLogData.turns exists:', !!aprLogData.turns);
-            console.log('  - aprLogData.turns length:', aprLogData.turns ? aprLogData.turns.length : 'N/A');
-            if (aprLogData.turns && aprLogData.turns.length > 0) {
-                const firstTurn = aprLogData.turns[0];
-                console.log('  - First turn keys:', Object.keys(firstTurn));
-                console.log('  - modifiedDiff exists:', !!firstTurn.modifiedDiff);
-                console.log('  - modifiedDiff length:', firstTurn.modifiedDiff ? firstTurn.modifiedDiff.length : 'N/A');
-            }
-            
             const finalModsResult = this.aprLogService.extractFinalModifications(aprLogData);
-            
-            console.log('🔍 extractFinalModifications結果:');
-            console.log('  - hasModification:', finalModsResult.hasModification);
-            console.log('  - finalModInfo exists:', !!finalModsResult.finalModInfo);
             
             let finalModInfo = null;
             let groundTruthDiff = null;
@@ -388,26 +424,36 @@ export class CachedDatasetAnalysisController {
                     );
                 }
 
-                // LLM評価の実行
-                await this.executeLLMEvaluation(
-                    finalModInfo,
-                    paths,
-                    aprDiffFiles,
-                    groundTruthDiff,
-                    aprLogData
-                );
-
                 /*
-                Intent Fulfillment評価の実行（LLM_C）
+                LLM評価の並列実行
                 
-                コミットメッセージに基づく意図充足度評価
-                4軸評価とは独立した補助軸として扱う
+                LLM_B（4軸評価）とLLM_C（Intent Fulfillment評価）を同時に実行
+                Rate Limit対策でllmLimitを使用
                 */
-                await this.executeIntentFulfillmentEvaluation(
-                    finalModInfo,
-                    paths.pullRequestPath,
-                    aprLogData
-                );
+                console.log('🚀 LLM評価の並列実行開始 (LLM_B + LLM_C)');
+                console.log('   - finalModInfo.diff length:', finalModInfo.diff?.length || 0);
+                console.log('   - groundTruthDiff length:', groundTruthDiff?.length || 0);
+                
+                await Promise.all([
+                    // LLM_B: 4軸評価
+                    this.llmLimit(() => this.executeLLMEvaluation(
+                        finalModInfo,
+                        paths,
+                        aprDiffFiles,
+                        groundTruthDiff,
+                        aprLogData
+                    )),
+                    // LLM_C: Intent Fulfillment評価
+                    this.llmLimit(() => this.executeIntentFulfillmentEvaluation(
+                        finalModInfo,
+                        paths.pullRequestPath,
+                        aprLogData
+                    ))
+                ]);
+                
+                console.log('✅ LLM評価の並列実行完了');
+                console.log('   - llmEvaluation exists:', !!finalModInfo.llmEvaluation);
+                console.log('   - intentFulfillmentEvaluation exists:', !!finalModInfo.intentFulfillmentEvaluation);
 
                 // Intent Fulfillment評価結果の表示
                 if (finalModInfo.intentFulfillmentEvaluation) {
@@ -441,11 +487,11 @@ export class CachedDatasetAnalysisController {
                 エージェントが「修正不要」と判断した場合、その判断が
                 コミットメッセージの意図と整合しているかを評価する
                 */
-                await this.executeIntentFulfillmentEvaluation(
+                await this.llmLimit(() => this.executeIntentFulfillmentEvaluation(
                     finalModInfo,
                     paths.pullRequestPath,
                     aprLogData
-                );
+                ));
 
                 // Intent Fulfillment評価結果の表示
                 if (finalModInfo.intentFulfillmentEvaluation) {
@@ -753,8 +799,29 @@ export class CachedDatasetAnalysisController {
             const intentResult = await this.llmEvaluationService.evaluateIntentFulfillment(intentContext);
 
             if (intentResult.success) {
-                console.log(`  ✅ Intent Fulfillment評価成功: スコア=${intentResult.result.score}`);
+                // labelまたはlevelフィールドからIntent Fulfillmentレベルを取得
+                const intentLevel = intentResult.result?.label || intentResult.result?.level || 'UNKNOWN';
+                console.log(`  ✅ Intent Fulfillment評価成功: レベル=${intentLevel}`);
+                
+                // スコア情報の表示
+                const intentScore = intentResult.result?.score ?? 0.0;
+                const scorePercentage = (intentScore * 100).toFixed(0);
+                
+                if (intentLevel !== 'FULLY_FULFILLED') {
+                    console.log(`  ❌ Intent Fulfillment スコア: ${intentScore.toFixed(2)} (${scorePercentage}%)`);
+                    if (intentResult.result?.reasoning) {
+                        console.log(`     理由: ${intentResult.result.reasoning.substring(0, 200)}${intentResult.result.reasoning.length > 200 ? '...' : ''}`);
+                    }
+                } else {
+                    console.log(`  ✅ Intent Fulfillment スコア: ${intentScore.toFixed(2)} (${scorePercentage}%)`);
+                }
+                
                 finalModInfo.intentFulfillmentEvaluation = intentResult.result;
+                
+                // 統計カウンターを更新
+                if (this.stats && typeof this.stats.incrementIntentFulfillment === 'function') {
+                    this.stats.incrementIntentFulfillment(intentLevel);
+                }
             } else {
                 console.error('  ❌ Intent Fulfillment評価失敗:', intentResult.error);
                 finalModInfo.intentFulfillmentEvaluation = { error: intentResult.error };

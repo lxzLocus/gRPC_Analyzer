@@ -284,26 +284,25 @@
                 </div>
             </div>
 
-            <!-- 正確性レベル別詳細分析 -->
+            <!-- 最終カテゴリ別詳細分析 -->
             <div class="section">
                 <h2 class="section-title">
                     <span class="section-icon">🎯</span>
-                    正確性レベル別詳細分析
+                    最終カテゴリ別詳細分析
                 </h2>
                 
                 <div class="tab-container">
                     <div class="tab-buttons">
-                        <button class="tab-button active" onclick="showTab('identical')">🎯 完全一致</button>
-                        <button class="tab-button" onclick="showTab('semantically')">✅ 意味的同等</button>
-                        <button class="tab-button" onclick="showTab('plausible')">🟡 妥当だが異なる</button>
-                        <button class="tab-button" onclick="showTab('incorrect')">❌ 不正確</button>
+                        <button class="tab-button active" onclick="showTab('correct')">🎯 CORRECT</button>
+                        <button class="tab-button" onclick="showTab('plausible')">🟡 PLAUSIBLE</button>
+                        <button class="tab-button" onclick="showTab('incorrect')">❌ INCORRECT</button>
                         <button class="tab-button" onclick="showTab('skipped')">⏭️ スキップ</button>
                     </div>
 
-                    <!-- 完全一致タブ -->
-                    <div id="identical" class="tab-content active">
-                        <h3>🎯 完全一致（IDENTICAL）</h3>
-                        <p>Ground Truthと文字通り完全に同一の修正が生成されたケース</p>
+                    <!-- CORRECTタブ -->
+                    <div id="correct" class="tab-content active">
+                        <h3>🎯 CORRECT</h3>
+                        <p>人間の修正と同等またはそれ以上の修正が生成されたケース</p>
                         <table class="data-table">
                             <thead>
                                 <tr>
@@ -313,11 +312,10 @@
                                     <th>修正行数</th>
                                     <th>修正タイプ</th>
                                     <th>APRモデル</th>
-                                    <th>類似度スコア</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {{#each correctnessLevels.identical}}
+                                {{#each finalCategoryLevels.correct}}
                                 <tr>
                                     <td>{{projectName}}</td>
                                     <td>{{pullRequestName}}</td>
@@ -325,52 +323,16 @@
                                     <td>{{modifiedLines}}</td>
                                     <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
                                     <td>{{aprModel}}</td>
-                                    <td><span class="score-badge perfect">{{semanticSimilarityScore}}</span></td>
                                 </tr>
                                 {{/each}}
                             </tbody>
                         </table>
                     </div>
 
-                    <!-- 意味的同等タブ -->
-                    <div id="semantically" class="tab-content">
-                        <h3>✅ 意味的同等（SEMANTICALLY_EQUIVALENT）</h3>
-                        <p>異なる実装だが機能的に同等の修正が生成されたケース</p>
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>プロジェクト</th>
-                                    <th>PR名</th>
-                                    <th>修正ファイル数</th>
-                                    <th>修正行数</th>
-                                    <th>修正タイプ</th>
-                                    <th>APRモデル</th>
-                                    <th>類似度スコア</th>
-                                    <th>評価理由</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {{#each correctnessLevels.semanticallyEquivalent}}
-                                <tr>
-                                    <td>{{projectName}}</td>
-                                    <td>{{pullRequestName}}</td>
-                                    <td>{{modifiedFiles}}</td>
-                                    <td>{{modifiedLines}}</td>
-                                    <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
-                                    <td>{{aprModel}}</td>
-                                    <td><span class="score-badge near-perfect">{{semanticSimilarityScore}}</span></td>
-                                    <td title="{{evaluationReasoning}}">{{#if evaluationReasoning}}{{evaluationReasoning}}{{else}}評価理由なし{{/if}}</td>
-                                </tr>
-                                {{/each}}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- 妥当だが異なるタブ -->
                     <!-- 妥当だが異なるタブ -->
                     <div id="plausible" class="tab-content">
-                        <h3>🟡 妥当だが異なる（PLAUSIBLE_BUT_DIFFERENT）</h3>
-                        <p>構文的に正しく妥当性はあるが、Ground Truthとは異なるアプローチの修正</p>
+                        <h3>🟡 PLAUSIBLE</h3>
+                        <p>実用的だがGround Truthとは異なるアプローチの修正</p>
                         <table class="data-table">
                             <thead>
                                 <tr>
@@ -380,12 +342,11 @@
                                     <th>修正行数</th>
                                     <th>修正タイプ</th>
                                     <th>APRモデル</th>
-                                    <th>類似度スコア</th>
                                     <th>評価理由</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {{#each correctnessLevels.plausibleButDifferent}}
+                                {{#each finalCategoryLevels.plausible}}
                                 <tr>
                                     <td>{{projectName}}</td>
                                     <td>{{pullRequestName}}</td>
@@ -393,7 +354,6 @@
                                     <td>{{modifiedLines}}</td>
                                     <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
                                     <td>{{aprModel}}</td>
-                                    <td><span class="score-badge {{#gte semanticSimilarityScore 0.7}}high{{else}}{{#gte semanticSimilarityScore 0.5}}medium{{else}}low{{/gte}}{{/gte}}">{{semanticSimilarityScore}}</span></td>
                                     <td title="{{evaluationReasoning}}">{{#if evaluationReasoning}}{{evaluationReasoning}}{{else}}評価理由なし{{/if}}</td>
                                 </tr>
                                 {{/each}}
@@ -403,24 +363,7 @@
 
                     <!-- 不正確タブ -->
                     <div id="incorrect" class="tab-content">
-                        <h3>❌ 不正確（INCORRECT）</h3>
-                        <p>問題を解決していない、または有害な修正が生成されたケース</p>
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>プロジェクト</th>
-                                    <th>PR名</th>
-                                    <th>修正ファイル数</th>
-                                    <th>修正行数</th>
-                                    <th>修正タイプ</th>
-                                    <th>APRモデル</th>
-                                    <th>類似度スコア</th>
-                                    <th>評価理由</th>
-                                </tr>
-                            </thead>
-                            <tbody>                    <!-- 不正確タブ -->
-                    <div id="incorrect" class="tab-content">
-                        <h3>❌ 不正確（INCORRECT）</h3>
+                        <h3>❌ INCORRECT</h3>
                         <p>問題を解決していない、または有害な修正が生成されたケース</p>
                         <table class="data-table">
                             <thead>
@@ -435,7 +378,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {{#each correctnessLevels.incorrect}}
+                                {{#each finalCategoryLevels.incorrect}}
                                 <tr>
                                     <td>{{projectName}}</td>
                                     <td>{{pullRequestName}}</td>
@@ -443,7 +386,6 @@
                                     <td>{{modifiedLines}}</td>
                                     <td>{{#each modificationTypes}}<span class="status-badge">{{this}}</span> {{/each}}</td>
                                     <td>{{aprModel}}</td>
-                                    <td><span class="score-badge {{#gte semanticSimilarityScore 0.2}}low{{else}}very-low{{/gte}}">{{semanticSimilarityScore}}</span></td>
                                     <td title="{{evaluationReasoning}}">{{#if evaluationReasoning}}{{evaluationReasoning}}{{else}}評価理由なし{{/if}}</td>
                                 </tr>
                                 {{/each}}
@@ -465,7 +407,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {{#each correctnessLevels.skipped}}
+                                {{#each finalCategoryLevels.skipped}}
                                 <tr>
                                     <td>{{projectName}}</td>
                                     <td>{{pullRequestName}}</td>

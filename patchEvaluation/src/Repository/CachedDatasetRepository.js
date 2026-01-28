@@ -185,10 +185,7 @@ export class CachedDatasetRepository {
                     .map(dirent => path.join(pullRequestPath, dirent.name))[0];
             }
 
-            console.log(`🔍 プルリクエストパス確認:`);
-            console.log(`   pullRequestPath: ${pullRequestPath}`);
-            console.log(`   premergePath: ${premergePath}`);
-            console.log(`   mergePath: ${mergePath}`);
+            console.log(`🔍 PR: ${path.basename(pullRequestPath)} | premerge: ${premergePath ? '✓' : '✗'} | merge: ${mergePath ? '✓' : '✗'}`);
 
             return {
                 premergePath,
@@ -261,33 +258,20 @@ export class CachedDatasetRepository {
         // まず元のカテゴリでパスを構築
         const originalPath = path.join(this.aprLogRootPath, project, category, pullRequest);
         
-        console.log(`🔍 APRログパス構築:`);
-        console.log(`   project: ${project}`);
-        console.log(`   category: ${category}`);
-        console.log(`   pullRequest: ${pullRequest}`);
-        console.log(`   元のパス: ${originalPath}`);
-        
         // 元のカテゴリのパスが存在する場合はそのまま使用
         if (fsSync.existsSync(originalPath)) {
-            console.log(`   ✅ 元のカテゴリで発見: ${originalPath}`);
             return originalPath;
         }
         
         // カテゴリマッピング: issue -> pullrequest
-        let mappedCategory = category;
         if (category === 'issue') {
-            mappedCategory = 'pullrequest';
-            const mappedPath = path.join(this.aprLogRootPath, project, mappedCategory, pullRequest);
-            console.log(`   🔄 issue→pullrequest変換: ${mappedPath}`);
-            
+            const mappedPath = path.join(this.aprLogRootPath, project, 'pullrequest', pullRequest);
             if (fsSync.existsSync(mappedPath)) {
-                console.log(`   ✅ 変換後のカテゴリで発見: ${mappedPath}`);
                 return mappedPath;
             }
         }
         
         // どちらも見つからない場合は元のパスを返す（後続で類似検索が行われる）
-        console.log(`   ⚠️ どちらのカテゴリでも未発見, 元のパスを返す: ${originalPath}`);
         return originalPath;
     }
 
@@ -322,11 +306,9 @@ export class CachedDatasetRepository {
             }
 
             // 厳密一致しない場合、類似ディレクトリを検索
-            console.log(`🔍 厳密一致しないため、類似ディレクトリを検索: ${aprLogPath}`);
             const similarPath = await this.findSimilarAPRDirectory(aprLogPath);
             
             if (similarPath && await this.pathExists(similarPath)) {
-                console.log(`✅ 類似ディレクトリを発見: ${similarPath}`);
                 let entries;
                 try {
                     entries = await fs.readdir(similarPath, { withFileTypes: true });
@@ -362,8 +344,6 @@ export class CachedDatasetRepository {
             const pullRequestName = pathParts[pathParts.length - 1]; // 最後のディレクトリ名
             const parentDir = pathParts.slice(0, -1).join(path.sep); // 親ディレクトリ
             
-            console.log(`🔍 類似検索: parentDir=${parentDir}, targetName=${pullRequestName}`);
-            
             if (!(await this.pathExists(parentDir))) {
                 return null;
             }
@@ -373,7 +353,6 @@ export class CachedDatasetRepository {
                 entries = await fs.readdir(parentDir, { withFileTypes: true });
             } catch (readdirError) {
                 if (readdirError.code === 'ENAMETOOLONG') {
-                    console.warn(`⚠️ 親ディレクトリパス名が長すぎます: ${parentDir}`);
                     return null;
                 }
                 throw readdirError;
@@ -383,18 +362,14 @@ export class CachedDatasetRepository {
             // 戦略1: 完全一致（念のため）
             for (const dir of directories) {
                 if (dir.name === pullRequestName) {
-                    const exactPath = path.join(parentDir, dir.name);
-                    console.log(`✅ 完全一致ディレクトリ発見: ${dir.name}`);
-                    return exactPath;
+                    return path.join(parentDir, dir.name);
                 }
             }
             
             // 戦略2: 部分文字列マッチング（データセット名 includes APRログ名）
             for (const dir of directories) {
                 if (pullRequestName.includes(dir.name) || dir.name.includes(pullRequestName)) {
-                    const partialPath = path.join(parentDir, dir.name);
-                    console.log(`🎯 部分一致ディレクトリ発見: ${dir.name} (検索: ${pullRequestName})`);
-                    return partialPath;
+                    return path.join(parentDir, dir.name);
                 }
             }
             
@@ -404,34 +379,28 @@ export class CachedDatasetRepository {
             
             for (const dir of directories) {
                 const similarity = this.calculateSimilarity(pullRequestName, dir.name);
-                if (similarity > bestSimilarity && similarity > 0.7) { // 閾値を0.8から0.7に下げる
+                if (similarity > bestSimilarity && similarity > 0.7) {
                     bestSimilarity = similarity;
                     bestMatch = dir.name;
                 }
             }
             
             if (bestMatch) {
-                const similarPath = path.join(parentDir, bestMatch);
-                console.log(`🎯 類似度マッチディレクトリ発見: ${bestMatch} (類似度: ${bestSimilarity.toFixed(2)})`);
-                return similarPath;
+                return path.join(parentDir, bestMatch);
             }
             
             // 戦略4: 最後の手段 - プレフィックスマッチング
-            const basePrefix = pullRequestName.split('_')[0]; // 最初のセグメントを取得
-            if (basePrefix && basePrefix.length > 5) { // 短すぎるプレフィックスは避ける
+            const basePrefix = pullRequestName.split('_')[0];
+            if (basePrefix && basePrefix.length > 5) {
                 for (const dir of directories) {
                     if (dir.name.startsWith(basePrefix)) {
-                        const prefixPath = path.join(parentDir, dir.name);
-                        console.log(`🎯 プレフィックスマッチディレクトリ発見: ${dir.name} (プレフィックス: ${basePrefix})`);
-                        return prefixPath;
+                        return path.join(parentDir, dir.name);
                     }
                 }
             }
             
-            console.log(`❌ 類似ディレクトリが見つかりませんでした`);
             return null;
         } catch (error) {
-            console.error(`類似ディレクトリ検索エラー: ${error.message}`);
             return null;
         }
     }

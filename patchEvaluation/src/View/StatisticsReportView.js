@@ -217,41 +217,50 @@ export class StatisticsReportView {
         };
 
         matchedPairs.forEach(pair => {
-            const evaluation = pair.finalModification?.llmEvaluation;
+            // レポートJSONの構造に対応: pair.fourAxisEvaluation または pair.finalModification?.llmEvaluation
+            const evaluation = pair.fourAxisEvaluation || pair.finalModification?.llmEvaluation;
             if (!evaluation || evaluation.error) return;
 
             // 4軸評価データがある場合
             if (evaluation.accuracy !== undefined) {
                 stats.totalEvaluated++;
 
-                // Accuracy
-                const accuracyScore = typeof evaluation.accuracy === 'object'
-                    ? evaluation.accuracy.score
-                    : evaluation.accuracy;
+                // Accuracy - accuracy_score を優先的に使用
+                const accuracyScore = evaluation.accuracy_score !== undefined
+                    ? evaluation.accuracy_score
+                    : (typeof evaluation.accuracy === 'object'
+                        ? (evaluation.accuracy.score || 0)
+                        : evaluation.accuracy);
                 if (typeof accuracyScore === 'number') {
                     stats.accuracyScores.push(accuracyScore);
                 }
 
-                // Decision Soundness
-                const decisionScore = typeof evaluation.decision_soundness === 'object'
-                    ? evaluation.decision_soundness.score
-                    : evaluation.decision_soundness;
+                // Decision Soundness - decision_soundness_score を優先的に使用
+                const decisionScore = evaluation.decision_soundness_score !== undefined
+                    ? evaluation.decision_soundness_score
+                    : (typeof evaluation.decision_soundness === 'object'
+                        ? (evaluation.decision_soundness.score || 0)
+                        : evaluation.decision_soundness);
                 if (decisionScore === 1.0) {
                     stats.decisionSoundnessPass++;
                 }
 
-                // Directional Consistency
-                const directionalScore = typeof evaluation.directional_consistency === 'object'
-                    ? evaluation.directional_consistency.score
-                    : evaluation.directional_consistency;
+                // Directional Consistency - directional_consistency_score を優先的に使用
+                const directionalScore = evaluation.directional_consistency_score !== undefined
+                    ? evaluation.directional_consistency_score
+                    : (typeof evaluation.directional_consistency === 'object'
+                        ? (evaluation.directional_consistency.score || 0)
+                        : evaluation.directional_consistency);
                 if (directionalScore === 1.0) {
                     stats.directionalConsistencyPass++;
                 }
 
-                // Validity
-                const validityScore = typeof evaluation.validity === 'object'
-                    ? evaluation.validity.score
-                    : evaluation.validity;
+                // Validity - validity_score を優先的に使用
+                const validityScore = evaluation.validity_score !== undefined
+                    ? evaluation.validity_score
+                    : (typeof evaluation.validity === 'object'
+                        ? (evaluation.validity.score || 0)
+                        : evaluation.validity);
                 if (validityScore === 1.0) {
                     stats.validityPass++;
                 }
@@ -292,7 +301,8 @@ export class StatisticsReportView {
         };
 
         matchedPairs.forEach(pair => {
-            const intentEval = pair.finalModification?.intentFulfillmentEvaluation;
+            // レポートJSONの構造に対応: pair.intentFulfillmentEvaluation または pair.finalModification?.intentFulfillmentEvaluation
+            const intentEval = pair.intentFulfillmentEvaluation || pair.finalModification?.intentFulfillmentEvaluation;
             if (!intentEval) return;
 
             // スキップまたはエラーケース
@@ -301,14 +311,16 @@ export class StatisticsReportView {
                 return;
             }
 
-            if (typeof intentEval.score === 'number') {
+            // レポートJSONではデータがnested構造: intentEval.data.score
+            const score = intentEval.score || intentEval.data?.score;
+            if (typeof score === 'number') {
                 stats.totalEvaluated++;
-                stats.scores.push(intentEval.score);
+                stats.scores.push(score);
 
                 // スコア分布
-                if (intentEval.score >= 0.9) stats.highScore++;
-                else if (intentEval.score >= 0.7) stats.mediumScore++;
-                else if (intentEval.score >= 0.4) stats.lowScore++;
+                if (score >= 0.9) stats.highScore++;
+                else if (score >= 0.7) stats.mediumScore++;
+                else if (score >= 0.4) stats.lowScore++;
                 else stats.veryLowScore++;
             }
         });

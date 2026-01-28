@@ -12,7 +12,34 @@ export class ProcessingStats {
         this.evaluationPipelineSuccess = 0; // 評価パイプライン成功数（ステップ1+2完了）
         this.evaluationPipelineFailure = 0; // 評価パイプライン失敗数
         
-        // APR品質指標
+        // 新評価軸（離散カテゴリベース）
+        // 最終評価カテゴリ（CORRECT/PLAUSIBLE/INCORRECT）
+        this.categoryCorrect = 0;      // 人間と同等またはそれ以上
+        this.categoryPlausible = 0;     // 実用的だが人間と異なる
+        this.categoryIncorrect = 0;     // 誤修正
+        
+        // Success/Failure判定
+        this.successCount = 0;          // 成功ケース
+        this.failureCount = 0;          // 失敗ケース
+        
+        // Intent Fulfillment（5段階enum）
+        this.intentFullyFulfilled = 0;              // FULLY_FULFILLED
+        this.intentSubstantiallyFulfilled = 0;      // SUBSTANTIALLY_FULFILLED
+        this.intentPartiallyFulfilled = 0;          // PARTIALLY_FULFILLED
+        this.intentMinimallyFulfilled = 0;          // MINIMALLY_FULFILLED
+        this.intentNotFulfilled = 0;                // NOT_FULFILLED
+        
+        // Accuracy Level分布
+        this.accuracyLevelCounts = new Map([
+            ['PERFECT_MATCH', 0],
+            ['NEAR_PERFECT', 0],
+            ['HIGH_SIMILARITY', 0],
+            ['PARTIAL_MATCH', 0],
+            ['CORRECT_LOCUS', 0],
+            ['NO_MATCH', 0]
+        ]);
+        
+        // 旧評価指標（後方互換性のため残存）
         this.aprQualityGood = 0;        // LLMが「良い修正」と評価した数
         this.aprQualityBad = 0;         // LLMが「悪い修正」と評価した数
         this.aprEffectiveFixed = 0;     // 実際に問題を解決した修正数
@@ -109,6 +136,87 @@ export class ProcessingStats {
 
     incrementAprExcessiveChanges() {
         this.aprExcessiveChanges++;
+    }
+
+    /**
+     * 最終評価カテゴリの統計更新
+     * @param {string} category - CORRECT/PLAUSIBLE/INCORRECT
+     */
+    incrementFinalCategory(category) {
+        switch (category) {
+            case 'CORRECT':
+                this.categoryCorrect++;
+                break;
+            case 'PLAUSIBLE':
+                this.categoryPlausible++;
+                break;
+            case 'INCORRECT':
+                this.categoryIncorrect++;
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Success/Failure判定の統計更新
+     * @param {boolean} isSuccess - 成功判定
+     */
+    incrementSuccessCount(isSuccess) {
+        if (isSuccess === true) {
+            this.successCount++;
+        } else if (isSuccess === false) {
+            this.failureCount++;
+        }
+    }
+
+    /**
+     * Accuracy Level分布の統計更新
+     * @param {string} level - Accuracy level
+     */
+    incrementAccuracyLevel(level) {
+        if (!level) return;
+        const current = this.accuracyLevelCounts.get(level) || 0;
+        this.accuracyLevelCounts.set(level, current + 1);
+    }
+
+    /**
+     * Intent Fulfillment分布の統計更新
+     * @param {string} level - Intent Fulfillment level (新形式)
+     */
+    incrementIntentFulfillment(level) {
+        switch (level) {
+            case 'FULLY_FULFILLED':
+                this.intentFullyFulfilled++;
+                break;
+            case 'SUBSTANTIALLY_FULFILLED':
+                this.intentSubstantiallyFulfilled++;
+                break;
+            case 'PARTIALLY_FULFILLED':
+                this.intentPartiallyFulfilled++;
+                break;
+            case 'MINIMALLY_FULFILLED':
+                this.intentMinimallyFulfilled++;
+                break;
+            case 'NOT_FULFILLED':
+                this.intentNotFulfilled++;
+                break;
+            // 旧形式との後方互換性
+            case 'INTENT_FULFILLED':
+                this.intentFullyFulfilled++;
+                break;
+            case 'INTENT_PARTIALLY_FULFILLED':
+                this.intentPartiallyFulfilled++;
+                break;
+            case 'INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED':
+                this.intentMinimallyFulfilled++;
+                break;
+            case 'INTENT_NOT_FULFILLED':
+                this.intentNotFulfilled++;
+                break;
+            default:
+                break;
+        }
     }
 
     /**

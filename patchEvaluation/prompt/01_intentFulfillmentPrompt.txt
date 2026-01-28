@@ -16,25 +16,55 @@ Evaluate whether the agent's modifications (or decision to make no changes) alig
 
 ## Evaluation Criteria
 
-### Intent Fulfillment Level (Type-Based)
+### Intent Fulfillment Label (Choose ONE)
 
-Evaluate using one of the following discrete levels:
+| Label | Description | Score Equivalent |
+| :--- | :--- | :--- |
+| **INTENT_FULFILLED** | Agent output fulfills the main requirements of the described intent (minor differences allowed) | 1.0 |
+| **INTENT_PARTIALLY_FULFILLED** | Agent output partially addresses the intent; core direction is correct but additional work needed | 0.5 |
+| **INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED** | Agent clearly understood the intent but did not implement or complete the solution | 0.2 |
+| **INTENT_NOT_FULFILLED** | Agent misunderstood or ignored the intent; made irrelevant changes or incorrect no-op | 0.0 |
 
-- **FULLY_IMPLEMENTED** (1.0): Agent output completely implements the described intent
-- **SUBSTANTIALLY_IMPLEMENTED** (0.8): Agent output substantially implements the intent with minor gaps or edge cases
-- **PARTIALLY_IMPLEMENTED** (0.5): Agent output addresses part of the intent but leaves significant portions unimplemented
-- **DIRECTIONALLY_CORRECT** (0.3): Agent output shows correct understanding of intent but implementation is incomplete
-- **NOT_ADDRESSED** (0.0): Agent output does not address the intent at all
+### Label Selection Guidelines
+
+#### 🟢 INTENT_FULFILLED
+- Main requirements of the commit intent are satisfied
+- Minor differences are acceptable
+- Includes both valid patches AND justified no-op decisions
+- Examples:
+  - Implemented the required modification
+  - Correctly decided no changes were needed (already implemented)
+
+#### 🟡 INTENT_PARTIALLY_FULFILLED  
+- Only **part** of the intent is fulfilled
+- Core direction is correct
+- Additional modifications are needed
+- Examples:
+  - Fixed the main issue but missed edge cases
+  - Updated proto but didn't regenerate stubs
+
+#### 🟠 INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED
+- Agent clearly **understood** the intent
+- But did not implement or complete the solution
+- Examples:
+  - Analyzed "modification needed" but ended with no-op
+  - Started implementation but gave up midway
+
+#### 🔴 INTENT_NOT_FULFILLED
+- Agent misunderstood or ignored the intent
+- Made irrelevant changes or incorrect no-op decision
+- Examples:
+  - Completely different modification from what was described
+  - Decided no-op when changes were clearly required
 
 ### Special Cases
 
 **No Changes Needed (Agent made no modifications):**
-- Level **FULLY_IMPLEMENTED** if: The described intent is already implemented, or requires changes outside the current scope
-- Level **NOT_ADDRESSED** or **DIRECTIONALLY_CORRECT** if: The described intent clearly requires changes that the agent should have made
+- Label **INTENT_FULFILLED** if: The described intent is already implemented, or requires changes outside the current scope
+- Label **INTENT_NOT_FULFILLED** if: The described intent clearly requires changes that the agent should have made
 
 **Partial Implementation:**
-- If the commit message describes multiple changes and the agent only implemented some, use **PARTIALLY_IMPLEMENTED**
-- If most (>70%) is implemented, use **SUBSTANTIALLY_IMPLEMENTED**
+- If the commit message describes multiple changes and the agent only implemented some, use **INTENT_PARTIALLY_FULFILLED**
 
 ---
 
@@ -70,12 +100,14 @@ Agent's reasoning:
 
 ## Your Response Format
 
-Provide your evaluation in the following JSON format:
+**IMPORTANT: You MUST respond with valid JSON only. No additional text before or after the JSON.**
+
+Provide your evaluation in the following JSON format. The `label` field MUST be one of the exact enum values listed below:
 
 ```json
 {
   "intent_fulfillment": {
-    "level": "NOT_ADDRESSED",
+    "label": "INTENT_FULFILLED",
     "reasoning": "Explain whether the agent's output aligns with the commit message intent. Be specific about what was expected vs. what was delivered.",
     "commit_intent_summary": "Brief summary of what the commit message describes (1-2 sentences)",
     "agent_output_summary": "Brief summary of what the agent actually did (1-2 sentences)",
@@ -84,15 +116,11 @@ Provide your evaluation in the following JSON format:
 }
 ```
 
-### Valid IntentFulfillmentLevel Values
-```typescript
-type IntentFulfillmentLevel = 
-  | "FULLY_IMPLEMENTED"         // 1.0
-  | "SUBSTANTIALLY_IMPLEMENTED"  // 0.8
-  | "PARTIALLY_IMPLEMENTED"      // 0.5
-  | "DIRECTIONALLY_CORRECT"      // 0.3
-  | "NOT_ADDRESSED";             // 0.0
-```
+### Valid Label Values (MUST use exactly one of these):
+- `"INTENT_FULFILLED"` - Agent output fulfills the main requirements (patches or valid no-op)
+- `"INTENT_PARTIALLY_FULFILLED"` - Agent output partially addresses the intent; core direction correct
+- `"INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED"` - Agent understood intent but did not implement
+- `"INTENT_NOT_FULFILLED"` - Agent misunderstood or ignored the intent
 
 ### Response Guidelines
 
@@ -100,6 +128,8 @@ type IntentFulfillmentLevel =
 2. **Consider context**: "No Changes Needed" can be valid
 3. **Be specific**: Reference specific parts of the commit message
 4. **Separate concerns**: Don't penalize for implementation details if the intent is met
+5. **Use labels consistently**: Choose the label that best matches the degree of fulfillment
+6. **JSON only**: Do not add any text outside the JSON structure
 
 ---
 
@@ -108,32 +138,32 @@ type IntentFulfillmentLevel =
 ### Example 1: Full Implementation
 **Commit:** "Add validation for email field in user registration"
 **Agent:** Added email validation logic
-**Level:** FULLY_IMPLEMENTED
+**Label:** INTENT_FULFILLED
 **Reasoning:** "The commit describes adding email validation, and the agent implemented comprehensive email validation with regex and format checks."
 
 ### Example 2: Valid No-op
 **Commit:** "Refactor database connection pooling"
 **Agent:** No Changes Needed - "Current implementation already uses connection pooling"
-**Level:** FULLY_IMPLEMENTED
+**Label:** INTENT_FULFILLED
 **Reasoning:** "The agent correctly identified that the described intent (connection pooling) is already implemented in the codebase."
 
 ### Example 3: Misalignment
 **Commit:** "Update API endpoint to return user preferences"
 **Agent:** No Changes Needed
-**Level:** NOT_ADDRESSED
+**Label:** INTENT_NOT_FULFILLED
 **Reasoning:** "The commit clearly describes adding new functionality (returning user preferences), but the agent made no changes without valid justification."
 
 ### Example 4: Partial Implementation
 **Commit:** "Add caching for user queries and update logging"
 **Agent:** Implemented caching but did not update logging
-**Level:** PARTIALLY_IMPLEMENTED
-**Reasoning:** "The commit describes two changes. The agent implemented caching but did not address the logging update, leaving significant functionality unimplemented."
+**Label:** INTENT_PARTIALLY_FULFILLED
+**Reasoning:** "The commit describes two changes. The agent implemented caching but did not address the logging update."
 
-### Example 5: Substantial Implementation
-**Commit:** "Refactor authentication flow and add session timeout"
-**Agent:** Completely refactored authentication flow, but session timeout logic has a minor edge case issue
-**Level:** SUBSTANTIALLY_IMPLEMENTED
-**Reasoning:** "The agent implemented the major refactoring completely and added session timeout logic. Only a minor edge case remains, representing >90% completion of the described intent."
+### Example 5: Understood but Not Implemented
+**Commit:** "Fix null pointer exception in user service"
+**Agent:** No Changes Needed - "I identified the issue in UserService.java line 45, but need additional context"
+**Label:** INTENT_ACKNOWLEDGED_BUT_NOT_FULFILLED
+**Reasoning:** "The agent correctly identified the problem location but did not implement the fix."
 
 ---
 
