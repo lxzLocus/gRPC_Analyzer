@@ -1,0 +1,27 @@
+## Instructions ##
+The conversation has become long, so I have prepared a summary of our progress so far. Please review this summary to refresh your context before proceeding.
+
+---
+
+## System State ##
+{{systemState}}
+
+---
+
+## Context ##
+
+### Context Summary ###
+{{summary_of_history}} 
+
+---
+## Your Correction Goals (To maintain context) ##
+{{correctionGoals}}
+
+---
+## Previous Action's Result ##
+{{previous_action_result}}
+
+---
+## Your Next Action ##
+Based on the summary and the result of the last action, please proceed with the next step of your plan.
+(e.g., Verify the applied patch against your Correction Goals, request another file, or finalize the task.)
