@@ -4118,11 +4118,17 @@ Please respond again using only the allowed tags.`;
             /^\(none\)$/i,
             /^n\/a$/i,
             /^no\s+modifications?/i,
+            /^\(no\s+modifications?\s+required/i,
             /^all\s+changes?\s+complete/i,
             /^modifications?\s+complete/i,
             /^no\s+diff/i,
             /^empty$/i,
             /^\/\/.*transition.*verifying/i,  // Comments about transitioning
+            /all\s+code\s+is\s+correct/i,
+            /no\s+further\s+modifications?\s+(are\s+)?necessary/i,
+            /no\s+handwritten\s+files/i,
+            /only\s+auto-?generated\s+files/i,
+            /no\s+suspected\s+files/i,
         ];
 
         for (const pattern of emptyPatterns) {

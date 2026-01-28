@@ -126,7 +126,80 @@ class MessageHandler {
         sections.modifiedDiff = buffers.modified.join('\n').trim();
         sections.commentText = buffers.comment.join('\n').trim();
 
+        // Check if modifiedDiff is effectively "no changes needed"
+        if (sections.modifiedDiff && this.isDiffEffectivelyEmpty(sections.modifiedDiff)) {
+            console.log('🔍 Diff is effectively empty (LLM signaling no changes), setting has_no_changes_needed');
+            sections.has_no_changes_needed = true;
+            sections.modifiedDiff = ''; // Clear the diff to prevent processing
+        }
+
         return sections;
+    }
+
+    /**
+     * Check if a diff is effectively empty (LLM signaling "no more changes needed")
+     */
+    private isDiffEffectivelyEmpty(diff: string): boolean {
+        if (!diff || diff.trim().length === 0) {
+            return true;
+        }
+
+        const normalizedDiff = diff.toLowerCase().trim();
+        
+        // Common phrases indicating no actual diff content
+        const emptyPatterns = [
+            /^\(no\s+changes?\s+needed\)$/i,
+            /^no\s+changes?\s+needed\.?$/i,
+            /^no\s+further\s+changes?/i,
+            /^no\s+additional\s+changes?/i,
+            /^none\.?$/i,
+            /^\(none\)$/i,
+            /^n\/a$/i,
+            /^no\s+modifications?/i,
+            /^\(no\s+modifications?\s+required/i,
+            /^all\s+changes?\s+complete/i,
+            /^modifications?\s+complete/i,
+            /^no\s+diff/i,
+            /^empty$/i,
+            /all\s+code\s+is\s+correct/i,
+            /no\s+further\s+modifications?\s+(are\s+)?necessary/i,
+            /no\s+handwritten\s+files/i,
+        ];
+
+        for (const pattern of emptyPatterns) {
+            if (pattern.test(normalizedDiff)) {
+                console.log(`🔍 Diff matches empty pattern: ${pattern}`);
+                return true;
+            }
+        }
+
+        // Check if the diff has no actual diff content (no +/- lines)
+        const lines = diff.split('\n');
+        let hasActualChanges = false;
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.length === 0) continue;
+            if (trimmedLine.startsWith('//')) continue;
+            if (trimmedLine.startsWith('#')) continue;
+            if (trimmedLine.startsWith('---')) continue;
+            if (trimmedLine.startsWith('+++')) continue;
+            if (trimmedLine.startsWith('@@')) continue;
+            if (trimmedLine.startsWith('```')) continue;
+            if (trimmedLine.startsWith('diff --git')) continue;
+            
+            // Check for actual change lines
+            if (line.startsWith('+') || line.startsWith('-')) {
+                hasActualChanges = true;
+                break;
+            }
+        }
+
+        if (!hasActualChanges) {
+            console.log('🔍 Diff has no actual change lines (+/-)');
+            return true;
+        }
+
+        return false;
     }
 
 
