@@ -794,7 +794,12 @@ class LLMFlowController {
                 
             case AgentState.AWAITING_INFO:
                 // 情報待ち状態: ファイルコンテンツ取得
-                if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
+                if (parsed.has_no_changes_needed) {
+                    // LLMが追加情報なしで「修正不要」と判断した場合 → VERIFYINGへ
+                    console.log('✅ FSM: No changes needed detected in AWAITING_INFO, transitioning to VERIFYING');
+                    await this.agentStateService.transition(AgentState.VERIFYING, 'no_changes_needed_from_awaiting_info');
+                    this.state = State.SendVerificationPrompt;
+                } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
                     console.log(`📝 FSM: Requesting ${parsed.requiredFilepaths.length} files`);
                     this.state = State.SystemAnalyzeRequest;
                 } else {
@@ -817,6 +822,11 @@ class LLMFlowController {
                 if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
                     console.log('🔧 FSM: Applying patch in MODIFYING state');
                     this.state = State.SystemParseDiff;
+                } else if (parsed.has_no_changes_needed) {
+                    // LLMが修正不要（修正完了）を示した場合 → VERIFYINGへ遷移
+                    console.log('✅ FSM: No changes needed detected in MODIFYING state, transitioning to VERIFYING');
+                    await this.agentStateService.transition(AgentState.VERIFYING, 'modifications_complete');
+                    this.state = State.SendVerificationPrompt;
                 } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
                     console.log('📝 FSM: Requesting additional files before modification');
                     this.state = State.SystemAnalyzeRequest;
@@ -833,6 +843,12 @@ class LLMFlowController {
                     // VERIFYING → READY_TO_FINISH → FINISHED の自動遷移
                     await this.agentStateService.transition(AgentState.READY_TO_FINISH, 'verification_completed');
                     await this.agentStateService.transition(AgentState.FINISHED, 'auto_completion');
+                    this.state = State.End;
+                } else if (parsed.has_no_changes_needed) {
+                    // LLMが検証結果として「修正不要」を返した場合 → 完了へ遷移
+                    console.log('✅ FSM: No changes needed in VERIFYING state, transitioning to completion');
+                    await this.agentStateService.transition(AgentState.READY_TO_FINISH, 'no_changes_verified');
+                    await this.agentStateService.transition(AgentState.FINISHED, 'no_changes_completion');
                     this.state = State.End;
                 } else {
                     // 検証レポートがまだない場合は検証プロンプト送信
@@ -1512,6 +1528,14 @@ class LLMFlowController {
         if (!parsed || !parsed.modifiedDiff || parsed.modifiedDiff.length === 0) {
             this.logger.logWarning("systemApplyDiff was called without a diff. Ending flow.");
             this.state = State.End;
+            return;
+        }
+
+        // FSM Enhancement: Check if diff is essentially empty (LLM signaling "no more changes needed")
+        if (this.isDiffEffectivelyEmpty(parsed.modifiedDiff)) {
+            console.log('🔍 Diff is effectively empty (LLM signaling no more changes needed), transitioning to VERIFYING');
+            await this.agentStateService.transition(AgentState.VERIFYING, 'modifications_complete');
+            this.state = State.SendVerificationPrompt;
             return;
         }
 
@@ -4071,6 +4095,74 @@ Please respond again using only the allowed tags.`;
         
         console.log('📁 Generated default file requests:', defaultFiles);
         return defaultFiles;
+    }
+
+    /**
+     * Check if a diff is effectively empty (LLM signaling "no more changes needed")
+     * This handles cases where LLM returns %_Modified_% with phrases like "(No changes needed)"
+     */
+    private isDiffEffectivelyEmpty(diff: string): boolean {
+        if (!diff || diff.trim().length === 0) {
+            return true;
+        }
+
+        const normalizedDiff = diff.toLowerCase().trim();
+        
+        // Common phrases indicating no actual diff content
+        const emptyPatterns = [
+            /^\(no\s+changes?\s+needed\)$/i,
+            /^no\s+changes?\s+needed\.?$/i,
+            /^no\s+further\s+changes?/i,
+            /^no\s+additional\s+changes?/i,
+            /^none\.?$/i,
+            /^\(none\)$/i,
+            /^n\/a$/i,
+            /^no\s+modifications?/i,
+            /^all\s+changes?\s+complete/i,
+            /^modifications?\s+complete/i,
+            /^no\s+diff/i,
+            /^empty$/i,
+            /^\/\/.*transition.*verifying/i,  // Comments about transitioning
+        ];
+
+        for (const pattern of emptyPatterns) {
+            if (pattern.test(normalizedDiff)) {
+                console.log(`🔍 Diff matches empty pattern: ${pattern}`);
+                return true;
+            }
+        }
+
+        // Check if the diff has no actual diff content (no +/- lines except headers)
+        const lines = diff.split('\n');
+        let hasActualChanges = false;
+        for (const line of lines) {
+            // Skip empty lines, comments, and headers
+            if (line.trim().length === 0) continue;
+            if (line.startsWith('//')) continue;
+            if (line.startsWith('#')) continue;
+            if (line.startsWith('---')) continue;
+            if (line.startsWith('+++')) continue;
+            if (line.startsWith('@@')) continue;
+            
+            // Check for actual change lines
+            if (line.startsWith('+') || line.startsWith('-')) {
+                hasActualChanges = true;
+                break;
+            }
+            
+            // Context lines (starting with space) are valid diff content
+            if (line.startsWith(' ')) {
+                hasActualChanges = true;
+                break;
+            }
+        }
+
+        if (!hasActualChanges) {
+            console.log('🔍 Diff has no actual change lines (+/- or context)');
+            return true;
+        }
+
+        return false;
     }
 
     /**
