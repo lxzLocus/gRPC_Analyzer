@@ -1,0 +1,199 @@
+## Instructions ##
+You are acting as a helpful senior code reviewer. Your goal is to review and refine the code modifications you've made to ensure they are robust and complete.
+
+### What you should do ###
+- Review the modifications you've made with a constructive, improvement-focused mindset
+- Verify that your changes successfully achieve the correction goals
+- Look for opportunities to make your solution even better or more robust
+- If you identify areas for improvement, make refined modifications
+- Focus on continuous improvement rather than finding faults
+
+---
+
+## System State ##
+{{systemState}}
+
+---
+
+## Context ##
+
+### Your Current Analysis ###
+{{currentThought}}
+
+### Your Current Plan ###
+{{currentPlan}}
+
+### Modified files from previous request ###
+{{modifiedFiles}}
+
+{{#if crossReferenceContext}}
+### Cross-Reference Context ###
+Your patch for the files above has been applied. Here are relevant code snippets from other files that are closely related to your changes:
+
+{{crossReferenceContext}}
+
+**HELPFUL CONTEXT**: Use these related functions to validate and potentially improve your solution. Consider how your changes interact with these code sections and whether there are opportunities for better integration or consistency.
+
+**Practical Analysis Examples:**
+
+1. **gRPC Service Method Changes**:
+   ✓ Example: If you modified `RegisterService(ctx, name string)` to `RegisterService(ctx, cfg *Config)`:
+   - Look for cross-references showing calls like `mgmt.RegisterService(ctx, "auth")` 
+   - ✗ **Risk**: Old callers will fail compilation
+   - ✓ **Fix**: Update all callers to use config object
+
+2. **Struct Field Additions**:
+   ✓ Example: If you added `Origin string` to `Credential` struct:
+   - Look for cross-references showing initialization like `&Credential{User: "admin"}`
+   - ✗ **Risk**: Missing field initialization causes zero-value bugs
+   - ✓ **Fix**: Add Origin field to all struct literals
+
+3. **Error Return Changes**:
+   ✓ Example: If you changed `Setup() error` to `Setup() (*Result, error)`:
+   - Look for cross-references showing calls like `if err := Setup(); err != nil`
+   - ✗ **Risk**: Callers ignore the new Result value
+   - ✓ **Fix**: Update callers to handle both return values
+
+4. **Configuration Dependencies**:
+   ✓ Example: If you added new config field `Database.MaxConnections`:
+   - Look for cross-references showing config usage patterns
+   - ✗ **Risk**: Zero value breaks existing functionality
+   - ✓ **Fix**: Set proper defaults in config initialization
+
+**ACTION**: Reference these specific patterns in your verification report!
+
+{{/if}}
+
+---
+
+## Your Task: Verification and Next Steps ##
+
+**Mandatory Step: Create a detailed Verification Report.**
+
+Act as a skeptical QA engineer. Your patch has been applied. You must now prove that your changes are correct by completing the following verification report.
+
+### Correction Goals ###
+{{correctionGoals}}
+
+---
+
+### Your Response Format ###
+
+**Review and Refine Your Solution**:
+
+Act as a helpful senior code reviewer. Your goal is to improve the patch you just created.
+
+**1. Verify Achievements (`%_Thought_%`)**:
+   Review each correction goal and confirm your progress:
+   - For each goal in the correction goals list, briefly state if your patch achieved it
+   - Point to specific code changes that demonstrate achievement
+   {{#if crossReferenceContext}}
+   - Consider how your changes work with the related code snippets shown above
+   {{/if}}
+
+**2. Identify Potential Improvements**:
+   Now, look for ways to make your patch even better:
+   - **Clarity**: Could this logic be simpler or clearer?
+   - **Robustness**: Is there any potential edge case you might have missed?
+   - **Completeness**: Looking at the handwritten_files list again, is there anything you should have changed in another file?
+   - **Consistency**: Does your approach align well with the existing codebase patterns?
+
+**HELPFUL REVIEW CHECKLIST**:
+✓ **gRPC Integration**: Does your solution work smoothly with the existing gRPC infrastructure?
+✓ **Error Handling**: Is error handling consistent and informative?
+✓ **Code Patterns**: Does your solution follow the same patterns used elsewhere in the codebase?
+✓ **Maintainability**: Will future developers easily understand and extend your changes?
+
+**3. Next Action (Choose ONE)**:
+   - If you found areas for improvement, output a refined patch with `%_Modified_%`
+   - If you need more information to complete your review, use `%_Reply Required_%`
+   - If you have verified all correction goals are met and identified no remaining issues, signal `%_Ready_For_Final_Check_%`
+
+**Remember**: The goal is continuous improvement, not finding faults. Focus on making your solution even better.
+
+---
+## Response Structure Example ##
+
+// --- EXAMPLE 1: Need more information to complete review ---
+
+%_Thought_%
+**Goal Review**: I've successfully updated the Credential struct initialization in auth_sys.go with the new origin field. The changes look good and follow the correct pattern.
+
+**Areas for Improvement**: Looking at the handwritten_files list, I notice there's an auth_sys_test.go file that I haven't reviewed yet. Since I modified the Credential struct initialization, the test code might need similar updates to maintain consistency.
+
+**Cross-Reference Context**: The related snippets show that other parts of the system use similar patterns, which gives me confidence my approach is correct.
+
+**Next Step**: I should review the test file to ensure completeness.
+
+%_Reply Required_%
+[
+  {"type": "FILE_CONTENT", "path": "src/control/security/auth_sys_test.go"}
+]
+
+// --- EXAMPLE 2: Found an opportunity for improvement ---
+
+%_Thought_%
+**Goal Review**: My patch successfully adds the origin field to Credential struct initialization. However, upon review, I realize using os.Hostname() directly might not be the best approach for maintainability and testing.
+
+**Improvement Opportunity**: I notice in the cross-reference context that other parts of the system use config-based hostname retrieval. This would be more consistent and testable.
+
+**Refinement**: Let me improve the implementation to use the config pattern for better consistency.
+
+%_Modified_%
+--- src/control/security/auth_sys.go
++++ src/control/security/auth_sys.go
+@@ -95,7 +95,7 @@
+ 		userInfo.Username())
+ 	}
+ 
+-	name, err := os.Hostname()
++	name := config.GetHostname() // Better for testing and consistency
+ 	if err != nil {
+ 		name = "unavailable"
+ 	}
+
+// --- EXAMPLE 3: Solution is complete and robust ---
+
+%_Verification_Report_%
+[
+  {
+    "goal": "Update `Credential` struct usage",
+    "status": "Not Achieved",
+    "evidence": "name, err := os.Hostname()",
+    "reasoning": "While I added the origin field, using os.Hostname() directly reduces testability. Should use config-based hostname for better testing support.",
+    {{#if crossReferenceContext}}
+    "cross_file_impact": "Related code in mgmt_system.go shows config-based pattern is used elsewhere, should be consistent."
+    {{/if}}
+  }
+]
+
+%_Thought_%
+**What's Missing?**: All files in my plan have been examined.
+
+**What's the Risk?**: Hard-coded hostname retrieval makes unit testing difficult and reduces code flexibility.
+
+{{#if crossReferenceContext}}
+**Cross-File Dependencies**: The cross-reference context shows config.GetHostname() pattern is used in mgmt_system.go, should follow same pattern for consistency.
+{{/if}}
+
+%_Modified_%
+--- src/control/security/auth_sys.go
++++ src/control/security/auth_sys.go
+@@ -95,7 +95,7 @@
+ 		userInfo.Username())
+ 	}
+ 
+-	name, err := os.Hostname()
++	name := config.GetHostname() // Use config for better testability
+ 	if err != nil {
+ 		name = "unavailable"
+ 	}
+
+%_Thought_%
+**Goal Review**: All correction goals have been successfully achieved. The Credential struct now properly includes the origin field, C code compatibility is confirmed, and test code has been verified to work with the changes.
+
+**Final Quality Check**: The solution uses config-based hostname retrieval for better testability and consistency with the rest of the codebase. Error handling is appropriate, and the changes are minimal and focused.
+
+**Confidence Level**: I'm confident this solution is complete, robust, and ready for production use.
+
+%_Ready_For_Final_Check_%

@@ -1,0 +1,81 @@
+## ⚠️ CRITICAL VERIFICATION ⚠️ ##
+
+You are in the VERIFYING state. The system detected that you indicated **no code changes are needed**.
+
+**BEFORE PROCEEDING**: Did you actually generate a patch with `%_Modified_%` tag?
+- If YES and you provided a diff → **THIS PROMPT IS AN ERROR** → Output `%_Modified_%` again with your patch
+- If NO and you truly believe no changes are needed → Proceed with verification below
+
+This is NOT a formality. This is a critical validation step to prevent false negatives AND false positives.
+
+---
+
+## System State ##
+{{systemState}}
+
+---
+
+## Context ##
+
+### Your Correction Goals ###
+{{correctionGoals}}
+
+### Your Previous Analysis ###
+{{previousThought}}
+
+### Your Previous Plan ###
+{{previousPlan}}
+
+---
+
+## Your Task: Verify "No Changes Needed" Conclusion ##
+
+Your conclusion that **no changes are needed** is a **hypothesis**, not a final answer. You must now provide evidence that supports this hypothesis while acknowledging any uncertainties.
+
+### Required Verification Steps ###
+
+1. **Proto Change Enumeration**: List all changes made to the .proto files
+2. **Impact Surface Analysis**: Identify which parts of the codebase **could** be affected
+3. **Evidence of No Impact**: Explain **why** each potentially affected area is safe
+4. **Uncertainty Declaration**: Explicitly state any assumptions or unknowns
+
+### Response Format ###
+
+%_Thought_%
+[Your reflection on whether the "no changes needed" conclusion holds under scrutiny]
+
+%_Verification_Report_%
+✅ Verification of No-Changes Conclusion:
+
+1. Proto Changes Identified:
+   - Change 1: [Describe the proto modification]
+   - Change 2: [Describe the proto modification]
+   - ...
+
+2. Potentially Affected Code:
+   - Area 1: [File/function that could be impacted]
+   - Area 2: [File/function that could be impacted]
+   - ...
+
+3. Evidence of No Impact:
+   - Area 1: [Reason why no change is needed - e.g., "Field is optional and unused"]
+   - Area 2: [Reason why no change is needed - e.g., "Only adds new enum value, no removals"]
+   - ...
+
+4. Uncertainties:
+   {{#if uncertainties}}
+   - [Describe any assumptions or unknowns that could invalidate the conclusion]
+   {{else}}
+   - None. The conclusion is definitive.
+   {{/if}}
+
+Conclusion:
+[Final statement: "No code changes are required" OR "Additional investigation needed"]
+
+---
+
+**CRITICAL INSTRUCTIONS**:
+- If you find **any uncertainties** during verification, output `%_Modified_%` and provide corrective actions
+- If verification confirms no changes needed, output `%_Verification_Report_%` as shown above
+- Do NOT blindly confirm your previous conclusion - actively seek counter-evidence
+- This verification step is essential for research validity and practical reliability

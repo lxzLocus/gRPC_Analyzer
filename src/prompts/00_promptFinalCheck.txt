@@ -1,0 +1,143 @@
+## Instructions ##
+
+You have completed your modifications and are now in the final verification phase.
+
+### Your Solution Summary ###
+{{verificationSummary}}
+
+### Modified Files Status ###
+{{modifiedFilesStatus}}
+
+---
+
+## System State ##
+{{systemState}}
+
+---
+
+## Final Quality Review ##
+
+As a senior developer, perform one final quality review and create a comprehensive verification report:
+
+1. **Solution Completeness**: Verify that every correction goal has been properly addressed with concrete evidence from your code changes.
+
+2. **Code Quality**: Review all changes to ensure the solution is robust, maintainable, and well-integrated with existing patterns.
+
+3. **Edge Case Coverage**: Identify and verify that edge cases and unusual scenarios are handled appropriately.
+
+4. **Future-Proofing**: Assess whether your changes align with the codebase architecture and avoid creating technical debt.
+
+### QUALITY VALIDATION EXAMPLES ###
+
+✓ **gRPC Integration Excellence**: 
+   - Example: If you changed a service method signature, ensure the .proto file, server implementation, and client calls all work harmoniously
+   - Check: Do all components integrate smoothly without conflicts?
+
+✓ **Error Handling Excellence**:
+   - Example: If you enhanced error handling in function A, ensure all callers benefit from the improved error information
+   - Check: Are error messages clear and helpful for debugging?
+
+✓ **Interface Design Consistency**:
+   - Example: If you refined an interface method, verify ALL implementations work harmoniously with the improvements
+   - Check: Do test implementations also reflect the enhanced design?
+
+✓ **Configuration Robustness**:
+   - Example: If you added a new configuration field, ensure it has sensible defaults and proper validation
+   - Check: Are related configuration files and documentation appropriately updated?
+
+### Your Response Format ###
+
+**VERIFICATION DECISION:**
+
+🔍 **Option 1 - Found an Enhancement Opportunity (Additional Fix Needed)**:
+```
+%_Thought_%
+Upon final review, I noticed that...
+
+%_Modified_%
+--- src/mgmt/system.go
++++ src/mgmt/system.go
+@@ -45,1 +45,1 @@
+-	result, err := auth.SetupRank(config)
++	result, err := auth.SetupRank(config, hostname)
+```
+
+🔍 **Option 2 - All Goals Verified Complete**:
+```
+%_Verification_Report_%
+✅ All correction goals have been achieved:
+- Goal 1: Implemented proper error handling in auth_sys.go (lines 98-105)
+- Goal 2: Enhanced hostname validation (lines 102-104)
+- Goal 3: Updated all caller sites to handle new error responses
+
+Code Quality Assessment:
+- ✓ Follows existing patterns and conventions
+- ✓ Edge cases properly handled (empty hostname, nil config)
+- ✓ No technical debt introduced
+- ✓ Future-proof design with clear error messages
+
+The solution is ready for production.
+```
+
+---
+
+## Response Instructions ##
+
+**--- If all tasks are complete ---**
+Provide a detailed verification report:
+```
+%_Verification_Report_%
+✅ Summary of what was achieved
+✅ Evidence for each correction goal
+✅ Code quality assessment
+✅ Edge case coverage confirmation
+```
+
+**--- If you find a final issue that needs fixing ---**
+Provide your thoughts and the necessary modification:
+```
+%_Thought_%
+[Explain what issue you found during verification]
+
+%_Modified_%
+[Your final improvements here]
+```
+
+**IMPORTANT**: After providing the verification report, the system will automatically complete the task. Focus on creating a comprehensive verification report that documents what was achieved.
+
+## Response Structure Example ##
+
+**--- If all tasks are complete ---**
+```
+%_Verification_Report_%
+✅ Verification Summary:
+All correction goals have been successfully achieved. The implementation is robust, follows best practices, and is ready for production use.
+
+Detailed Achievement Evidence:
+1. [Goal 1]: [Specific implementation details and evidence]
+2. [Goal 2]: [Specific implementation details and evidence]
+
+Quality Assurance:
+- Code follows project conventions
+- Edge cases are properly handled
+- No technical debt introduced
+- Documentation is clear and complete
+```
+
+**--- If you find a final issue ---**
+```
+%_Thought_%
+Upon final review, I noticed that the error handling in auth_sys.go doesn't properly validate the hostname parameter, which could lead to empty origin fields in production...
+
+%_Modified_%
+--- src/control/security/auth_sys.go
++++ src/control/security/auth_sys.go
+@@ -98,6 +98,9 @@
+ 	name := config.GetHostname()
++	if name == "" {
++		return nil, errors.New("hostname cannot be empty for credential origin")
++	}
+ 	
+ 	cred := &Credential{
+ 		user:   userInfo.Username(),
+```
