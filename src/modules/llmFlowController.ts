@@ -10,13 +10,19 @@ import { config } from 'dotenv';
 // 環境変数の設定
 config({ path: path.join(process.cwd(), '.env') });
 
-import RestoreDiff from './restoreDiff.js';
-import Logger from './logger.js';
-import Config from './config.js';
-import MessageHandler from './messageHandler.js';
-import FileManager from './fileManager.js';
-import OpenAIClient from './openAIClient.js';
+import RestoreDiff from './RestoreDiff.js';
+import Logger, { APRStatus } from './Logger.js';
+import Config from './Config.js';
+import MessageHandler from './MessageHandler.js';
+import FileManager from './FileManager.js';
+import OpenAIClient from './OpenAIClient.js';
 import LLMRetryEnhancer from './llmRetryEnhancer.js';
+import ConversationSummarizer from './ConversationSummarizer.js';
+import { CrossReferenceAnalyzer } from './crossReferenceAnalyzer.js';
+import { AgentStateService } from '../Service/AgentStateService.js';
+import { AgentState, formatSystemState } from '../types/AgentState.js';
+import { AgentStateRepository } from '../Repository/AgentStateRepository.js';
+import { ValidationError } from '../types/ValidationError.js';
 import { 
     LLMParsed, 
     ParsedContentLog, 
@@ -38,7 +44,13 @@ import {
 class LLMFlowController {
     // 状態管理
     private state: State = State.Start;
-    private context: Context = {};
+    private context: Context = {
+        // Priority 1: 取得済み情報の追跡を初期化
+        retrievedSoFar: {
+            fileContents: new Set<string>(),
+            directoryListings: new Set<string>()
+        }
+    };
     private inputPremergeDir: string = ''; // プルリクエストのパス "/PATH/premerge_xxx"
     
     // 内部進行状況管理
@@ -68,6 +80,9 @@ class LLMFlowController {
     private openAIClient!: OpenAIClient;
     private logger: Logger = new Logger();
     private retryEnhancer: LLMRetryEnhancer;
+    private conversationSummarizer!: ConversationSummarizer;
+    private crossReferenceAnalyzer!: CrossReferenceAnalyzer;
+    private agentStateService!: AgentStateService;
 
     // 作業用データ
     private currentMessages: Array<{ role: string, content: string }> = [];
@@ -79,10 +94,46 @@ class LLMFlowController {
     private startTime: string = '';
     private totalPromptTokens: number = 0;
     private totalCompletionTokens: number = 0;
+    
+    // 対話状態管理
+    private correctionGoals: string = ''; // 修正目標を保持
+    private initialThought: string = ''; // 初回の思考内容
+    private initialPlan: string = ''; // 初回の計画内容
+    private protoFileChanges: string = ''; // プロト変更内容
+    
+    // タグ違反リトライ管理
+    private tagViolationRetryCount: number = 0;
+    private maxTagViolationRetries: number = 2; // 最大リトライ回数
+    
+    // 処理オプション
+    private enablePreVerification: boolean = true; // 事前検証を有効にするかどうか
+    
+    // エラー発生時のコンテキスト保持
+    private errorRecoveryContext: {
+        previousState: AgentState | null;
+        errorMessage: string | null;
+        errorType: string | null;
+        occurredAt: string | null;
+        modifiedFilesSnapshot: string[];
+        requestedFilesSnapshot: string[];
+    } = {
+        previousState: null,
+        errorMessage: null,
+        errorType: null,
+        occurredAt: null,
+        modifiedFilesSnapshot: [],
+        requestedFilesSnapshot: []
+    };
 
-    constructor(pullRequestPath: string) {
+    constructor(pullRequestPath: string, options?: { enablePreVerification?: boolean }) {
         this.inputPremergeDir = pullRequestPath;
         this.startTime = new Date().toISOString();
+        
+        // オプションの設定
+        if (options?.enablePreVerification !== undefined) {
+            this.enablePreVerification = options.enablePreVerification;
+        }
+        
         this.retryEnhancer = new LLMRetryEnhancer({
             maxRetries: 3,
             enableQualityCheck: true,
@@ -90,22 +141,28 @@ class LLMFlowController {
             minModifiedLines: 1,
             retryDelayMs: 1000,
             exponentialBackoff: true
-        });
+        });  // Config引数を削除
         
-        // 🔧 パス構築デバッグ - コンストラクタレベルでのパス情報を記録
-        console.log('🔧 LLMFlowController コンストラクタでのパス情報:');
-        console.log(`   受け取った pullRequestPath: ${pullRequestPath}`);
-        console.log(`   設定された inputPremergeDir: ${this.inputPremergeDir}`);
+        // デバッグログは環境変数で制御
+        const debugMode = process.env.DEBUG_MODE === 'true' || process.env.DEBUG_MODE === '1';
         
-        // デバッグ情報：環境変数の確認
-        console.log(`🔧 LLMFlowController initialized with path: ${pullRequestPath}`);
-        console.log(`� [NEW VERSION 2025-07-31] LLMFlowController loaded`);
-        console.log(`�🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
-        console.log(`🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
-        console.log(`🔑 GEMINI_API_KEY length: ${(process.env.GEMINI_API_KEY || '').length}`);
-        console.log(`🤖 LLM_PROVIDER: ${process.env.LLM_PROVIDER || 'undefined'}`);
-        console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
-        console.log(`🐛 DEBUG_MODE: ${process.env.DEBUG_MODE || 'undefined'}`);
+        if (debugMode) {
+            // 🔧 パス構築デバッグ - コンストラクタレベルでのパス情報を記録
+            console.log('🔧 LLMFlowController コンストラクタでのパス情報:');
+            console.log(`   受け取った pullRequestPath: ${pullRequestPath}`);
+            console.log(`   設定された inputPremergeDir: ${this.inputPremergeDir}`);
+            
+            // デバッグ情報：環境変数の確認
+            console.log(`🔧 LLMFlowController initialized with path: ${pullRequestPath}`);
+            console.log(`📋 Pre-verification: ${this.enablePreVerification ? 'Enabled' : 'Disabled'}`);
+            console.log(`� [NEW VERSION 2025-07-31] LLMFlowController loaded`);
+            console.log(`�🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
+            console.log(`🔑 OPENAI_API_KEY length: ${(process.env.OPENAI_API_KEY || '').length}`);
+            console.log(`🔑 GEMINI_API_KEY length: ${(process.env.GEMINI_API_KEY || '').length}`);
+            console.log(`🤖 LLM_PROVIDER: ${process.env.LLM_PROVIDER || 'undefined'}`);
+            console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
+            console.log(`🐛 DEBUG_MODE: ${process.env.DEBUG_MODE || 'undefined'}`);
+        }
     }
 
     // 型変換ヘルパー
@@ -117,7 +174,9 @@ class LLMFlowController {
                 reply_required: [],
                 modified_diff: null,
                 commentText: null,
-                has_fin_tag: false
+                has_fin_tag: false,
+                has_no_changes_needed: false,
+                no_progress_fallback: false
             };
         }
 
@@ -157,7 +216,9 @@ class LLMFlowController {
             reply_required: parsed.requiredFilepaths.map(path => ({ type: "FILE_CONTENT", path })),
             modified_diff: parsed.modifiedDiff || null,
             commentText: parsed.commentText || null,
-            has_fin_tag: parsed.has_fin_tag
+            has_fin_tag: parsed.has_fin_tag,
+            has_no_changes_needed: parsed.has_no_changes_needed,
+            no_progress_fallback: parsed.no_progress_fallback || false
         };
     }
 
@@ -167,6 +228,14 @@ class LLMFlowController {
 
     async run() {
         while (this.state !== State.End) {
+            // FSM状態チェック: FINISHED状態なら終了
+            const currentFSMState = this.agentStateService?.getCurrentState();
+            if (currentFSMState === AgentState.FINISHED) {
+                console.log('🏁 FSM: FINISHED state detected, ending main loop');
+                this.state = State.End;
+                break;
+            }
+            
             switch (this.state) {
                 case State.Start:
                     this.state = State.PrepareInitialContext;
@@ -184,7 +253,17 @@ class LLMFlowController {
 
                 case State.LLMAnalyzePlan:
                     await this.llmAnalyzePlan();
-                    this.state = State.LLMDecision;
+                    // 事前検証フラグに基づいて分岐
+                    if (this.enablePreVerification) {
+                        // 事前検証が有効な場合、事前検証ステップに進む
+                        // TODO: 実装されていない場合は直接LLMDecisionに進む
+                        console.log('📋 Pre-verification enabled, but not implemented yet - proceeding to LLMDecision');
+                        this.state = State.LLMDecision;
+                    } else {
+                        // 事前検証が無効な場合、直接LLMDecisionに進む
+                        console.log('📋 Pre-verification disabled - proceeding directly to LLMDecision');
+                        this.state = State.LLMDecision;
+                    }
                     break;
 
                 case State.LLMDecision:
@@ -197,16 +276,22 @@ class LLMFlowController {
 
                 case State.GetFileContent:
                     await this.getFileContent();
+                    // AWAITING_INFO状態を内部専用にする：即座にANALYSIS状態に戻す
+                    await this.transitionFromAwaitingInfoToAnalysis();
                     this.state = State.SendInfoToLLM;
                     break;
 
                 case State.GetDirectoryListing:
                     await this.getDirectoryListing();
+                    // AWAITING_INFO状態を内部専用にする：即座にANALYSIS状態に戻す
+                    await this.transitionFromAwaitingInfoToAnalysis();
                     this.state = State.SendInfoToLLM;
                     break;
 
                 case State.ProcessRequiredInfos:
                     await this.processRequiredInfos();
+                    // AWAITING_INFO状態を内部専用にする：即座にANALYSIS状態に戻す
+                    await this.transitionFromAwaitingInfoToAnalysis();
                     this.state = State.SendInfoToLLM;
                     break;
 
@@ -244,6 +329,24 @@ class LLMFlowController {
                     this.state = State.LLMDecision;
                     break;
 
+                case State.SendVerificationPrompt:
+                    await this.sendVerificationPrompt();
+                    this.state = State.LLMVerificationDecision;
+                    break;
+
+                case State.LLMVerificationDecision:
+                    await this.llmVerificationDecision();
+                    break;
+
+                case State.SendFinalCheckToLLM:
+                    await this.sendFinalCheckToLLM();
+                    this.state = State.LLMFinalDecision;
+                    break;
+
+                case State.LLMFinalDecision:
+                    await this.llmFinalDecision();
+                    break;
+
                 case State.SendErrorToLLM:
                     await this.sendErrorToLLM();
                     this.state = State.LLMErrorReanalyze;
@@ -277,14 +380,63 @@ class LLMFlowController {
         this.fileManager = new FileManager(this.config, this.logger);
         this.messageHandler = new MessageHandler();
         this.openAIClient = new OpenAIClient(this.config); // Configインスタンスを渡す
+        this.crossReferenceAnalyzer = new CrossReferenceAnalyzer(this.config.inputProjectDir);
+        
+        // FSM (AgentStateService) を初期化
+        const agentStateRepository = new AgentStateRepository();
+        const agentId = `llm-flow-${Date.now()}`;
+        this.agentStateService = new AgentStateService(agentId, agentStateRepository, {
+            autoSave: false,  // 自動保存は無効（パフォーマンス考慮）
+            enableTagValidation: true,
+            autoRetryOnInvalidTags: false,
+            debug: false
+        });
+        await this.agentStateService.initialize();
+        console.log('🤖 FSM initialized with state:', this.agentStateService.getCurrentState());
 
         // OpenAIClientの初期化完了を待機
         await (this.openAIClient as any).initPromise;
 
-        // 初期プロンプト生成
-        this.next_prompt_content = this.fileManager.readFirstPromptFile();
+        // 対話履歴要約機能を初期化
+        this.conversationSummarizer = new ConversationSummarizer(
+            this.config, 
+            this.openAIClient, 
+            () => this.correctionGoals // correctionGoalsのコールバック
+        );
+
+        // 初期プロンプト生成 (FSM System State込み)
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
+        this.next_prompt_content = this.fileManager.readFirstPromptFile(systemState);
         this.prompt_template_name = this.config.promptTextfile;
-        this.currentMessages = this.messageHandler.attachMessages("user", this.next_prompt_content);
+        
+        // ConversationSummarizer に初期メッセージを追加
+        this.currentMessages = await this.sendMessageWithSummarizer("user", this.next_prompt_content);
+        
+        // プロト変更内容を取得して保存（事前検証で使用）
+        try {
+            const protoChangesFilePath = path.join(this.config.inputProjectDir, '02_protoFileChanges.txt');
+            if (fs.existsSync(protoChangesFilePath)) {
+                this.protoFileChanges = fs.readFileSync(protoChangesFilePath, 'utf-8');
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not read proto file changes:', error);
+        }
+        
+        // 【新規】Ground Truthの変更ファイルリストを読み込み（No Progress改善用）
+        try {
+            const fileChangesPath = path.join(this.config.inputProjectDir, '03_fileChanges.txt');
+            if (fs.existsSync(fileChangesPath)) {
+                const fileChangesContent = fs.readFileSync(fileChangesPath, 'utf-8');
+                this.context.groundTruthChangedFiles = fileChangesContent.trim().split('\n').filter(f => f.trim());
+                console.log(`📋 Ground Truth changed files loaded: ${this.context.groundTruthChangedFiles.length} files`);
+            } else {
+                this.context.groundTruthChangedFiles = [];
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not read ground truth file changes:', error);
+            this.context.groundTruthChangedFiles = [];
+        }
     }
 
     // =============================================================================
@@ -301,6 +453,9 @@ class LLMFlowController {
         const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
         this.totalPromptTokens += usage.prompt_tokens;
         this.totalCompletionTokens += usage.completion_tokens;
+
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
 
         // ログ記録
         this.logger.addInteractionLog(
@@ -322,16 +477,46 @@ class LLMFlowController {
         );
     }
 
+    /**
+     * AWAITING_INFO状態を内部専用にするヘルパー
+     * ファイル取得完了後、即座にANALYSIS状態に戻す
+     */
+    private async transitionFromAwaitingInfoToAnalysis() {
+        const currentState = this.agentStateService.getCurrentState();
+        if (currentState === AgentState.AWAITING_INFO) {
+            console.log('🔄 FSM: AWAITING_INFO is internal-only, transitioning back to ANALYSIS');
+            await this.agentStateService.transition(AgentState.ANALYSIS, 'info_received_return_to_analysis');
+        }
+    }
+
     private async sendInfoToLLM() {
-        // 取得したファイル内容をLLMへ送信
+        // 取得したファイル内容をLLMへ送信（既にANALYSIS状態に戻っている）
         const parsed = this.context.llmParsed;
         const filesRequested = typeof this.context.fileContent === 'string' ? this.context.fileContent : '';
         const modifiedDiff = parsed?.modifiedDiff || '';
         const commentText = parsed?.commentText || '';
         const previousThought = parsed?.thought || '';
         const previousPlan = parsed?.plan || '';
-        const promptReply = this.config.readPromptReplyFile(filesRequested, modifiedDiff, commentText, previousThought, previousPlan);
-        this.currentMessages = this.messageHandler.attachMessages("user", promptReply);
+        
+        // FSM System Stateを取得（ANALYSIS状態になっている）
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
+        
+        const promptReply = this.config.readPromptReplyFile(
+            filesRequested, 
+            modifiedDiff, 
+            commentText, 
+            previousThought, 
+            previousPlan,
+            this.correctionGoals, // correctionGoals
+            systemState, // FSM System State
+            this.context.retrievedSoFar // Priority 1: 取得済み情報
+        );
+        this.currentMessages = await this.sendMessageWithSummarizer("user", promptReply);
+        
+        // トリガー層2: LLM送信直前の最終安全チェック
+        this.currentMessages = await this.conversationSummarizer.preSendCheck();
+        
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
 
@@ -340,6 +525,9 @@ class LLMFlowController {
         const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
         this.totalPromptTokens += usage.prompt_tokens;
         this.totalCompletionTokens += usage.completion_tokens;
+
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
 
         // ログ記録
         this.logger.addInteractionLog(
@@ -375,10 +563,48 @@ class LLMFlowController {
         
         // Phase 3-3: LLM応答解析のパフォーマンス監視と詳細ログ
         try {
+            const currentAgentState = this.agentStateService.getCurrentState();
             this.context.llmParsed = await this.executeWithPerformanceMonitoring(
                 'LLM_Response_Analysis',
-                async () => this.messageHandler.analyzeMessages(llm_content)
+                async () => this.messageHandler.analyzeMessages(llm_content, currentAgentState)
             );
+
+            // 初回の思考と計画を保存（事前検証で使用）
+            if (this.context.llmParsed.thought) {
+                this.initialThought = this.context.llmParsed.thought;
+            }
+            if (this.context.llmParsed.plan) {
+                this.initialPlan = this.context.llmParsed.plan;
+            }
+            if (this.context.llmParsed.correctionGoals && !this.correctionGoals) {
+                this.correctionGoals = this.context.llmParsed.correctionGoals;
+            }
+            
+            // FSM: LLM応答を検証して状態遷移
+            try {
+                const validationResult = this.agentStateService.validateLLMResponse(llm_content, {
+                    modifiedLines: this.context.llmParsed.modifiedLines
+                });
+                if (!validationResult.valid) {
+                    console.warn('⚠️ FSM: Invalid tags detected:', validationResult.invalidTags);
+                    console.log('✅ FSM: Allowed tags:', validationResult.allowedTags);
+                    // タグエラーをログに記録（リトライは上位層で処理）
+                    this.logger.logError(`FSM Tag Validation Failed: ${JSON.stringify(validationResult)}`);
+                } else {
+                    // 有効な場合は推奨される次の状態に遷移
+                    if (validationResult.suggestedNextState) {
+                        await this.agentStateService.transition(
+                            validationResult.suggestedNextState, 
+                            'llm_response_analyzed'
+                        );
+                    }
+                }
+                console.log(`🤖 FSM: State transitioned to ${this.agentStateService.getCurrentState()}`);
+            } catch (fsmError) {
+                console.error('❌ FSM validation error:', fsmError);
+                // FSMエラーは致命的ではないため、処理は続行
+            }
+
         } catch (error) {
             // 解析エラーの詳細ログ
             this.logger.logLLMParsingError(
@@ -402,10 +628,37 @@ class LLMFlowController {
         
         // Phase 3-3: 再解析時の詳細ログとパフォーマンス監視
         try {
+            const currentAgentState = this.agentStateService.getCurrentState();
             this.context.llmParsed = await this.executeWithPerformanceMonitoring(
                 'LLM_Response_Reanalysis',
-                async () => this.messageHandler.analyzeMessages(content)
+                async () => this.messageHandler.analyzeMessages(content, currentAgentState)
             );
+            
+            // FSM: 再解析時の応答検証（AWAITING_INFOは内部専用なのでここではANALYSIS状態）
+            try {
+                const validationResult = this.agentStateService.validateLLMResponse(content, {
+                    modifiedLines: this.context.llmParsed.modifiedLines
+                });
+                const currentState = this.agentStateService.getCurrentState();
+                
+                // AWAITING_INFOの場合は既にANALYSISに戻っているはず
+                if (currentState === AgentState.AWAITING_INFO) {
+                    console.warn('⚠️ FSM: Unexpected AWAITING_INFO state in reanalysis, fixing');
+                    await this.agentStateService.transition(AgentState.ANALYSIS, 'fix_awaiting_info');
+                }
+                
+                if (!validationResult.valid) {
+                    console.warn('⚠️ FSM (Reanalyze): Invalid tags detected:', validationResult.invalidTags);
+                }
+                
+                // 注意: ここでsuggestedNextStateへの遷移はしない
+                // ファイル情報取得後、llmDecision()で適切に処理される
+                
+                console.log(`🤖 FSM (Reanalyze): State = ${this.agentStateService.getCurrentState()}`);
+            } catch (fsmError) {
+                console.error('❌ FSM reanalysis validation error:', fsmError);
+            }
+            
         } catch (error) {
             this.logger.logLLMParsingError(
                 content,
@@ -420,25 +673,212 @@ class LLMFlowController {
     }
 
     private async llmDecision() {
-        // LLMの判断
-        // context.llmParsedの内容に応じて分岐
+        // FSMベースの完全な状態管理
+        // LLMの応答をFSMで検証し、状態遷移を決定
+        
         const parsed = this.context.llmParsed;
         if (!parsed) {
+            console.error('❌ No parsed LLM response');
+            this.captureErrorContext('No parsed LLM response available');
+            await this.agentStateService.transition(AgentState.ERROR, 'no_parsed_response');
             this.state = State.End;
             return;
         }
-        if (parsed.has_fin_tag) {
-            // タスク完了
+        
+        const content = this.context.llmResponse?.choices?.[0]?.message?.content || '';
+        
+        // FSM: LLM応答を検証
+        const validationResult = this.agentStateService.validateLLMResponse(content, {
+            modifiedLines: parsed.modifiedLines
+        });
+        const currentFSMState = this.agentStateService.getCurrentState();
+        
+        console.log(`🤖 FSM (Decision): Current state = ${currentFSMState}`);
+        console.log(`🤖 FSM (Decision): Detected tags = [${validationResult.detectedTags.join(', ')}]`);
+        console.log(`🤖 FSM (Decision): Valid = ${validationResult.valid}`);
+        
+        // イテレーションカウントを更新
+        this.internalProgress.iterationCount = this.currentTurn;
+        
+        // ターン数上限チェック（無限ループ防止）
+        if (this.currentTurn >= 15) {
+            console.warn('⚠️ Reached maximum turns (15), forcing termination');
+            this.captureErrorContext('Maximum turns (15) exceeded - forcing termination');
+            // ERROR状態に遷移してから、直接State.Endへ
+            // FINISHED状態へは遷移せず、処理を終了
+            const currentState = this.agentStateService.getCurrentState();
+            if (currentState !== AgentState.ERROR) {
+                await this.agentStateService.transition(AgentState.ERROR, 'max_turns_exceeded');
+            }
             this.state = State.End;
-        } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
-            // 追加情報要求
-            this.state = State.SystemAnalyzeRequest;
-        } else if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
-            // 修正案(diff)生成
-            this.state = State.SystemParseDiff;
-        } else {
-            // その他（エラーや不明な場合は終了）
-            this.state = State.End;
+            return;
+        }
+        
+        if (!validationResult.valid) {
+            // No Progress検出: LLMが意味的に行き詰まっている
+            if (validationResult.isNoProgress) {
+                console.warn('❌ No progress detected: LLM has exhausted its options');
+                await this.handleNoProgress();
+                return;
+            }
+            
+            // タグエラー: 不正なタグが検出された
+            console.warn(`⚠️ FSM: Invalid tags detected: [${validationResult.invalidTags.join(', ')}]`);
+            console.log(`✅ FSM: Allowed tags in ${currentFSMState}: [${validationResult.allowedTags.join(', ')}]`);
+            
+            // リトライ回数をチェック
+            if (this.tagViolationRetryCount < this.maxTagViolationRetries) {
+                // 軽量なcorrective retryを実行
+                this.tagViolationRetryCount++;
+                console.log(`🔄 FSM: Tag violation detected, performing corrective retry (attempt ${this.tagViolationRetryCount}/${this.maxTagViolationRetries})`);
+                
+                // FSM状態は変更せず、同じプロンプトを補助文付きで再送信
+                await this.performCorrectiveRetry(currentFSMState);
+                return;
+            }
+            
+            // リトライ上限到達：ERROR eventとして扱う
+            console.error(`❌ FSM: Tag violation retry limit reached (${this.maxTagViolationRetries})`);
+            this.logger.logError(`FSM Tag Validation Failed after ${this.maxTagViolationRetries} retries: ${JSON.stringify(validationResult)}`);
+            
+            // エラーコンテキスト保存
+            this.captureErrorContext(`Invalid tags after ${this.maxTagViolationRetries} retries: [${validationResult.invalidTags.join(', ')}]`);
+            
+            // ERROR状態への遷移（既にERROR状態の場合は遷移しない）
+            if (currentFSMState !== AgentState.ERROR) {
+                await this.agentStateService.transition(AgentState.ERROR, 'invalid_tags_detected');
+            } else {
+                console.log('⚠️ FSM: Already in ERROR state, skipping ERROR->ERROR transition');
+            }
+            
+            // ERROR eventとしてANALYSISに戻す
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
+        // タグ検証成功：リトライカウンターをリセット
+        this.tagViolationRetryCount = 0;
+        
+        // 有効なタグ: 推奨される次の状態に遷移（既に同じ状態の場合はスキップ）
+        if (validationResult.suggestedNextState) {
+            const targetState = validationResult.suggestedNextState;
+            if (targetState !== currentFSMState) {
+                console.log(`🤖 FSM: Transitioning to suggested state: ${targetState}`);
+                await this.agentStateService.transition(
+                    targetState,
+                    'llm_response_validated'
+                );
+            } else {
+                console.log(`⚠️ FSM: Already in ${currentFSMState} state, skipping transition`);
+            }
+        }
+        
+        // FSM状態に基づいて次のアクションを決定
+        const nextFSMState = this.agentStateService.getCurrentState();
+        console.log(`🤖 FSM: New state = ${nextFSMState}`);
+        
+        // FSM状態ごとの処理
+        switch (nextFSMState) {
+            case AgentState.FINISHED:
+                // 完了状態: タスク完了
+                console.log('✅ FSM: Task completed in FINISHED state');
+                
+                // タスク完了要約を生成
+                const taskSummary = await this.conversationSummarizer.onTaskComplete('PR Analysis');
+                if (taskSummary) {
+                    console.log('📊 Task completion summary generated');
+                }
+                
+                this.state = State.End;
+                break;
+                
+            case AgentState.AWAITING_INFO:
+                // 情報待ち状態: ファイルコンテンツ取得
+                if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
+                    console.log(`📝 FSM: Requesting ${parsed.requiredFilepaths.length} files`);
+                    this.state = State.SystemAnalyzeRequest;
+                } else {
+                    console.warn('⚠️ FSM: In AWAITING_INFO but no file requests, forcing default requests');
+                    if (this.context.llmParsed) {
+                        this.context.llmParsed.requiredFilepaths = this.generateDefaultFileRequests();
+                        if (this.context.llmParsed.requiredFilepaths.length > 0) {
+                            this.state = State.SystemAnalyzeRequest;
+                        } else {
+                            this.state = State.SendErrorToLLM;
+                        }
+                    } else {
+                        this.state = State.SendErrorToLLM;
+                    }
+                }
+                break;
+                
+            case AgentState.MODIFYING:
+                // 修正中状態: パッチ適用
+                if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
+                    console.log('🔧 FSM: Applying patch in MODIFYING state');
+                    this.state = State.SystemParseDiff;
+                } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
+                    console.log('📝 FSM: Requesting additional files before modification');
+                    this.state = State.SystemAnalyzeRequest;
+                } else {
+                    console.warn('⚠️ FSM: In MODIFYING but no patch or file requests');
+                    this.state = State.SendErrorToLLM;
+                }
+                break;
+                
+            case AgentState.VERIFYING:
+                // 検証中状態: 検証プロンプトを送信または検証レポート受信後完了
+                if (parsed.has_verification_report) {
+                    console.log('✅ FSM: Verification report received, transitioning to completion');
+                    // VERIFYING → READY_TO_FINISH → FINISHED の自動遷移
+                    await this.agentStateService.transition(AgentState.READY_TO_FINISH, 'verification_completed');
+                    await this.agentStateService.transition(AgentState.FINISHED, 'auto_completion');
+                    this.state = State.End;
+                } else {
+                    // 検証レポートがまだない場合は検証プロンプト送信
+                    console.log('🔍 FSM: Sending verification prompt');
+                    this.state = State.SendVerificationPrompt;
+                }
+                break;
+                
+            case AgentState.READY_TO_FINISH:
+                // 完了準備状態（内部状態）: 自動的にFINISHEDへ遷移
+                console.log('🏁 FSM: Ready to finish (internal state), transitioning to FINISHED');
+                await this.agentStateService.transition(AgentState.FINISHED, 
+                    parsed.has_no_changes_needed ? 'no_changes_needed_completion' : 'verification_completion');
+                this.state = State.End;
+                break;
+                
+            case AgentState.ERROR:
+                // エラー状態: エラープロンプト送信
+                console.log('❌ FSM: In ERROR state, sending error prompt');
+                this.state = State.SendErrorToLLM;
+                break;
+                
+            case AgentState.ANALYSIS:
+            default:
+                // 分析状態: No_Changes_Neededタグがある場合はREADY_TO_FINISHへ遷移
+                // (ANALYSISからVERIFYINGへの直接遷移は不可)
+                if (parsed.has_no_changes_needed) {
+                    console.log('✅ FSM: No changes needed detected in ANALYSIS, transitioning to VERIFYING for validation');
+                    await this.agentStateService.transition(AgentState.VERIFYING, 'no_changes_needed_to_verification');
+                    this.state = State.LLMVerificationDecision;
+                } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
+                    console.log('📝 FSM: Continuing analysis with file requests');
+                    this.state = State.SystemAnalyzeRequest;
+                } else if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
+                    console.log('🔧 FSM: Found patch in analysis, applying');
+                    this.state = State.SystemParseDiff;
+                } else {
+                    // タグも内容もない空のレスポンス → 強制的にNo Progress扱い
+                    console.warn('⚠️  FSM: Analysis produced no actionable output (no tags, no patch, no file requests)');
+                    console.warn('⚠️  Empty response detected - treating as no-changes for verification');
+                    
+                    // No Progress扱いでVERIFYINGへ
+                    await this.agentStateService.transition(AgentState.VERIFYING, 'empty_response_to_verification');
+                    this.state = State.LLMVerificationDecision;
+                }
+                break;
         }
     }
 
@@ -450,16 +890,398 @@ class LLMFlowController {
         }
         const content = this.context.llmResponse.choices[0].message.content;
         this.context.llmParsed = this.messageHandler.analyzeMessages(content);
+        
+        // correctionGoalsが初回で設定された場合、保存する
+        if (this.context.llmParsed.correctionGoals && !this.correctionGoals) {
+            this.correctionGoals = this.context.llmParsed.correctionGoals;
+            console.log('📋 Correction Goals extracted and saved from llmNextStep:', this.correctionGoals.substring(0, 200) + '...');
+        }
+
+        // ready_for_final_checkフラグのチェック
+        if (this.context.llmParsed.ready_for_final_check) {
+            console.log('✅ LLM indicated ready for final check, transitioning to final verification');
+            this.state = State.SendFinalCheckToLLM;
+            return;
+        }
     }
 
-    private async llmErrorReanalyze() {
-        // LLM: エラーに基づき再分析・計画修正
-        if (!this.context.llmResponse?.choices?.[0]?.message?.content) {
+    private async sendFinalCheckToLLM() {        // 最終確認プロンプトを送信
+        const parsed = this.context.llmParsed;
+        if (!parsed) {
             this.state = State.End;
             return;
         }
+
+        // 検証レポートのサマリーを作成
+        const verificationSummary = this.extractVerificationSummary(parsed);
+        const modifiedFilesStatus = this.context.diff || 'No files modified';
+        
+        // FSM System Stateを取得
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
+
+        const finalCheckPrompt = this.config.readPromptFinalCheckFile(
+            verificationSummary,
+            modifiedFilesStatus,
+            systemState // FSM System State
+        );
+
+        this.currentMessages = await this.sendMessageWithSummarizer("user", finalCheckPrompt);
+        const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
+        this.context.llmResponse = llm_response;
+
+        // ターン数とトークン数を更新
+        this.currentTurn++;
+        const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
+        this.totalPromptTokens += usage.prompt_tokens;
+        this.totalCompletionTokens += usage.completion_tokens;
+
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
+
+        // ログ記録
+        this.logger.addInteractionLog(
+            this.currentTurn,
+            new Date().toISOString(),
+            {
+                prompt_template: '00_promptFinalCheck.txt',
+                full_prompt_content: finalCheckPrompt
+            },
+            {
+                raw_content: llm_response?.choices?.[0]?.message?.content || '',
+                parsed_content: this.convertToLogFormat(this.context.llmParsed || null),
+                usage: usage
+            },
+            {
+                type: 'FINAL_CHECK',
+                details: 'Sending final verification prompt to LLM'
+            }
+        );
+    }
+
+    private async sendVerificationPrompt() {
+        // VERIFYING状態用の検証プロンプトを送信
+        const parsed = this.context.llmParsed;
+        if (!parsed) {
+            this.state = State.End;
+            return;
+        }
+
+        // FSM System Stateを取得
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
+
+        let verifyingPrompt: string;
+        let promptType: string;
+        
+        // 3分岐: No Progress > No Changes Needed > Modified
+        if (parsed.no_progress_fallback) {
+            // No Progress: システムが自動判定した場合（優先度最高）
+            console.log('🔍 FSM: Sending verification prompt for No Progress fallback (system-determined)');
+            
+            // No Progress専用プロンプト：なぜ進めなかったかを診断
+            const requestedFiles = parsed.requiredFilepaths.join(', ') || 'None';
+            verifyingPrompt = this.config.readPromptVerifyingNoProgressFile(
+                this.correctionGoals || '',
+                parsed.thought || '',
+                parsed.plan || '',
+                requestedFiles,
+                systemState
+            );
+            promptType = '00_promptVerifyingNoProgress.txt';
+        } else if (parsed.has_no_changes_needed) {
+            // No Changes Needed: LLMが明示的に判断した場合
+            console.log('🔍 FSM: Sending verification prompt for No Changes Needed decision (LLM-explicit)');
+            
+            // 修正不要の判断を検証するプロンプト
+            verifyingPrompt = this.config.readPromptVerifyingNoChangesFile(
+                this.correctionGoals || '',
+                parsed.thought || '',
+                parsed.plan || '',
+                systemState
+            );
+            promptType = '00_promptVerifyingNoChanges.txt';
+        } else {
+            // Modified: パッチが生成された場合
+            console.log('🔍 FSM: Sending verification prompt for Modified diff');
+            
+            const modifiedFiles = this.context.diff || '';
+            verifyingPrompt = this.config.readPromptVerifyingFile(
+                this.correctionGoals || '',
+                parsed.thought || '',
+                parsed.plan || '',
+                modifiedFiles,
+                systemState
+            );
+            promptType = '00_promptVerifying.txt';
+        }
+
+        this.currentMessages = await this.sendMessageWithSummarizer("user", verifyingPrompt);
+        const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
+        this.context.llmResponse = llm_response;
+
+        // ターン数とトークン数を更新
+        this.currentTurn++;
+        const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
+        this.totalPromptTokens += usage.prompt_tokens;
+        this.totalCompletionTokens += usage.completion_tokens;
+
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
+
+        // ログ記録
+        this.logger.addInteractionLog(
+            this.currentTurn,
+            new Date().toISOString(),
+            {
+                prompt_template: promptType,
+                full_prompt_content: verifyingPrompt
+            },
+            {
+                raw_content: llm_response?.choices?.[0]?.message?.content || '',
+                parsed_content: this.convertToLogFormat(this.context.llmParsed || null),
+                usage: usage
+            },
+            {
+                type: 'VERIFICATION',
+                details: 'Sending verification prompt to LLM'
+            }
+        );
+    }
+
+    private async llmVerificationDecision() {
+        // VERIFYING状態からの応答処理
+        if (!this.context.llmResponse?.choices?.[0]?.message?.content) {
+            console.error('❌ No LLM response for verification decision');
+            this.captureErrorContext('No LLM response for verification decision');
+            await this.agentStateService.transition(AgentState.ERROR, 'no_verification_response');
+            this.state = State.End;
+            return;
+        }
+        
+        const content = this.context.llmResponse.choices[0].message.content;
+        
+        // Priority 3: VERIFYING状態では、ANALYSIS状態で設定されたフラグを保持する
+        const previousHasNoChangesNeeded = this.context.llmParsed?.has_no_changes_needed || false;
+        const previousNoProgressFallback = this.context.llmParsed?.no_progress_fallback || false;
+        
+        this.context.llmParsed = this.messageHandler.analyzeMessages(content);
+        
+        // Verification Reportが生成された場合、no_progress_fallbackをクリア
+        if (this.context.llmParsed.has_verification_report && previousNoProgressFallback) {
+            console.log('🔄 Verification Report detected: clearing no_progress_fallback flag');
+            console.log('   Reason: LLM successfully generated verification, indicating progress was made');
+            // no_progress_fallbackはクリア（成功の証拠がある）
+            this.context.llmParsed.no_progress_fallback = false;
+        } else if (previousHasNoChangesNeeded || previousNoProgressFallback) {
+            // Verification Reportがない場合のみ、フラグを復元（VERIFYING状態の応答では再度タグが出ないため）
+            console.log('🔄 Preserving completion flags from previous state:');
+            console.log(`   has_no_changes_needed: ${previousHasNoChangesNeeded}`);
+            console.log(`   no_progress_fallback: ${previousNoProgressFallback}`);
+            
+            this.context.llmParsed.has_no_changes_needed = previousHasNoChangesNeeded;
+            this.context.llmParsed.no_progress_fallback = previousNoProgressFallback;
+        }
+        
+        // FSM検証
+        const validationResult = this.agentStateService.validateLLMResponse(content, {
+            modifiedLines: this.context.llmParsed.modifiedLines
+        });
+        const currentFSMState = this.agentStateService.getCurrentState();
+        
+        console.log(`🤖 FSM (VerificationDecision): Current state = ${currentFSMState}`);
+        console.log(`🤖 FSM (VerificationDecision): Detected tags = [${validationResult.detectedTags.join(', ')}]`);
+        
+        if (!validationResult.valid) {
+            console.warn(`⚠️ FSM: Invalid tags in verification decision: [${validationResult.invalidTags.join(', ')}]`);
+            this.captureErrorContext(`Invalid tags in verification decision: [${validationResult.invalidTags.join(', ')}]`);
+            await this.agentStateService.transition(AgentState.ERROR, 'invalid_verification_tags');
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
+        // 有効な応答: 推奨状態に遷移（既に同じ状態の場合はスキップ）
+        if (validationResult.suggestedNextState) {
+            const targetState = validationResult.suggestedNextState;
+            if (targetState !== currentFSMState) {
+                await this.agentStateService.transition(
+                    targetState,
+                    'verification_decision_validated'
+                );
+            } else {
+                console.log(`⚠️ FSM: Already in ${currentFSMState} state, skipping transition`);
+            }
+        }
+        
+        const nextFSMState = this.agentStateService.getCurrentState();
+        
+        // %_Verification_Report_%が検出された場合は完了へ
+        if (this.context.llmParsed.has_verification_report || nextFSMState === AgentState.READY_TO_FINISH) {
+            console.log('✅ FSM: Verification complete, transitioning to completion');
+            
+            // Priority 3: No Changes Neededフラグを維持
+            // （VERIFYING状態でhas_no_changes_neededが既に設定されている場合、それを保持）
+            // この時点でフラグはANALYSIS状態で既に設定済み
+            
+            if (nextFSMState !== AgentState.READY_TO_FINISH) {
+                await this.agentStateService.transition(AgentState.READY_TO_FINISH, 'verification_completed');
+            }
+            await this.agentStateService.transition(AgentState.FINISHED, 'auto_completion');
+            
+            // タスク完了要約
+            const taskSummary = await this.conversationSummarizer.onTaskComplete('PR Analysis');
+            if (taskSummary) {
+                console.log('📊 Task completion summary generated');
+            }
+            
+            this.state = State.End;
+        } else if (this.context.llmParsed.modifiedDiff) {
+            // 検証中に追加の修正が必要と判断された場合
+            console.log('🔄 FSM: Additional modifications needed during verification');
+            this.context.diff = this.context.llmParsed.modifiedDiff;
+            await this.agentStateService.transition(AgentState.MODIFYING, 'additional_modifications_from_verification');
+            this.state = State.SystemParseDiff;
+        } else {
+            // まだ検証が完了していない場合は再度検証プロンプト
+            console.log('🔄 FSM: Verification not complete, continuing');
+            this.state = State.LLMDecision;
+        }
+    }
+
+    private async llmFinalDecision() {
+        // FSMベースの最終判断
+        if (!this.context.llmResponse?.choices?.[0]?.message?.content) {
+            console.error('❌ No LLM response for final decision');
+            this.captureErrorContext('No LLM response for final decision');
+            await this.agentStateService.transition(AgentState.ERROR, 'no_final_response');
+            this.state = State.End;
+            return;
+        }
+        
         const content = this.context.llmResponse.choices[0].message.content;
         this.context.llmParsed = this.messageHandler.analyzeMessages(content);
+        
+        // FSM検証
+        const validationResult = this.agentStateService.validateLLMResponse(content, {
+            modifiedLines: this.context.llmParsed.modifiedLines
+        });
+        const currentFSMState = this.agentStateService.getCurrentState();
+        
+        console.log(`🤖 FSM (FinalDecision): Current state = ${currentFSMState}`);
+        console.log(`🤖 FSM (FinalDecision): Detected tags = [${validationResult.detectedTags.join(', ')}]`);
+        
+        if (!validationResult.valid) {
+            console.warn(`⚠️ FSM: Invalid tags in final decision: [${validationResult.invalidTags.join(', ')}]`);
+            this.captureErrorContext(`Invalid tags in final decision: [${validationResult.invalidTags.join(', ')}]`);
+            await this.agentStateService.transition(AgentState.ERROR, 'invalid_final_tags');
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
+        // 有効な応答: 推奨状態に遷移（既に同じ状態の場合はスキップ）
+        if (validationResult.suggestedNextState) {
+            const targetState = validationResult.suggestedNextState;
+            if (targetState !== currentFSMState) {
+                await this.agentStateService.transition(
+                    targetState,
+                    'final_decision_validated'
+                );
+            } else {
+                console.log(`⚠️ FSM: Already in ${currentFSMState} state, skipping transition`);
+            }
+        }
+        
+        const nextFSMState = this.agentStateService.getCurrentState();
+        
+        if (nextFSMState === AgentState.FINISHED) {
+            console.log('✅ FSM: Task completed with %%_Fin_%% tag in final decision');
+            
+            // タスク完了要約
+            const taskSummary = await this.conversationSummarizer.onTaskComplete('PR Analysis');
+            if (taskSummary) {
+                console.log('📊 Task completion summary generated');
+            }
+            
+            this.state = State.End;
+        } else if (this.context.llmParsed.modifiedDiff) {
+            console.log('🔄 FSM: Additional modifications in final decision, applying patch');
+            this.context.diff = this.context.llmParsed.modifiedDiff;
+            await this.agentStateService.transition(AgentState.MODIFYING, 'additional_modifications');
+            this.state = State.SystemParseDiff;
+        } else {
+            console.log(`🔄 FSM: Final decision leads to state ${nextFSMState}, continuing`);
+            this.state = State.LLMDecision;
+        }
+    }
+
+    /**
+     * 検証レポートからサマリーを抽出
+     */
+    private extractVerificationSummary(parsed: any): string {
+        // thought から検証レポートを探す
+        const thought = parsed.thought || '';
+        
+        // 検証レポートっぽい内容を抽出
+        const lines = thought.split('\n');
+        let summary = '';
+        let inVerificationSection = false;
+        
+        for (const line of lines) {
+            if (line.includes('Verification') || line.includes('verification') || 
+                line.includes('What\'s Missing') || line.includes('What\'s the Risk')) {
+                inVerificationSection = true;
+            }
+            
+            if (inVerificationSection) {
+                summary += line + '\n';
+            }
+        }
+        
+        if (!summary.trim()) {
+            summary = 'Previous verification report indicated all goals were achieved.';
+        }
+        
+        return summary.trim();
+    }
+
+    private async llmErrorReanalyze() {
+        // FSMベースのエラー再分析
+        if (!this.context.llmResponse?.choices?.[0]?.message?.content) {
+            console.error('❌ No LLM response for error reanalysis');
+            // エラーが続く場合は強制終了
+            await this.agentStateService.transition(AgentState.FINISHED, 'error_reanalysis_failed');
+            this.state = State.End;
+            return;
+        }
+        
+        const content = this.context.llmResponse.choices[0].message.content;
+        this.context.llmParsed = this.messageHandler.analyzeMessages(content);
+        
+        // FSM検証
+        const validationResult = this.agentStateService.validateLLMResponse(content, {
+            modifiedLines: this.context.llmParsed.modifiedLines
+        });
+        const currentFSMState = this.agentStateService.getCurrentState();
+        
+        console.log(`🤖 FSM (ErrorReanalyze): Current state = ${currentFSMState}`);
+        console.log(`🤖 FSM (ErrorReanalyze): Detected tags = [${validationResult.detectedTags.join(', ')}]`);
+        
+        if (!validationResult.valid) {
+            console.warn(`⚠️ FSM: Invalid tags in error reanalysis: [${validationResult.invalidTags.join(', ')}]`);
+            // エラーが続く場合は警告を出して続行
+            this.logger.logError('Multiple validation failures detected');
+        }
+        
+        // 注意: ここでsuggestedNextStateへの遷移はしない
+        // ERROR状態からの回復はANALYSIS状態への遷移のみを許可
+        
+        // ANALYSIS状態に戻して再試行（既にANALYSISの場合はスキップ）
+        if (currentFSMState !== AgentState.ANALYSIS) {
+            console.log('🔄 FSM: Returning to ANALYSIS for retry');
+            await this.agentStateService.transition(AgentState.ANALYSIS, 'error_retry');
+        } else {
+            console.log('⚠️ FSM: Already in ANALYSIS state, skipping transition');
+        }
     }
 
     // =============================================================================
@@ -525,12 +1347,39 @@ class LLMFlowController {
             if (parsed.requiredFileInfos && parsed.requiredFileInfos.length > 0) {
                 const fileContentInfos = parsed.requiredFileInfos.filter(info => info.type === 'FILE_CONTENT');
                 if (fileContentInfos.length > 0) {
+                    // パス種別の検証
+                    for (const fileInfo of fileContentInfos) {
+                        try {
+                            this.fileManager.validatePathType('FILE_CONTENT', fileInfo.path);
+                        } catch (error) {
+                            if (error instanceof ValidationError) {
+                                console.warn(`⚠️ Validation error for ${fileInfo.path}: ${error.message}`);
+                                // ValidationErrorをcorrective retry経由で処理
+                                await this.handleValidationError(error);
+                                return;
+                            }
+                            throw error;
+                        }
+                    }
+                    
                     // Phase 3-3: ファイル操作のパフォーマンス監視
                     const result = await this.executeWithPerformanceMonitoring(
                         'File_Content_Retrieval',
                         async () => this.fileManager.getFileContents(fileContentInfos)
                     );
                     this.context.fileContent = result;
+                    
+                    // Priority 1: 取得済みファイルを記録
+                    if (!this.context.retrievedSoFar) {
+                        this.context.retrievedSoFar = {
+                            fileContents: new Set<string>(),
+                            directoryListings: new Set<string>()
+                        };
+                    }
+                    fileContentInfos.forEach(info => {
+                        this.context.retrievedSoFar!.fileContents.add(info.path);
+                    });
+                    
                     return;
                 }
             }
@@ -568,8 +1417,35 @@ class LLMFlowController {
             if (parsed.requiredFileInfos && parsed.requiredFileInfos.length > 0) {
                 const directoryListingInfos = parsed.requiredFileInfos.filter(info => info.type === 'DIRECTORY_LISTING');
                 if (directoryListingInfos.length > 0) {
+                    // パス種別の検証
+                    for (const dirInfo of directoryListingInfos) {
+                        try {
+                            this.fileManager.validatePathType('DIRECTORY_LISTING', dirInfo.path);
+                        } catch (error) {
+                            if (error instanceof ValidationError) {
+                                console.warn(`⚠️ Validation error for ${dirInfo.path}: ${error.message}`);
+                                // ValidationErrorをcorrective retry経由で処理
+                                await this.handleValidationError(error);
+                                return;
+                            }
+                            throw error;
+                        }
+                    }
+                    
                     const result = await this.fileManager.getDirectoryListings(directoryListingInfos);
                     this.context.fileContent = result;
+                    
+                    // Priority 1: 取得済みディレクトリを記録
+                    if (!this.context.retrievedSoFar) {
+                        this.context.retrievedSoFar = {
+                            fileContents: new Set<string>(),
+                            directoryListings: new Set<string>()
+                        };
+                    }
+                    directoryListingInfos.forEach(info => {
+                        this.context.retrievedSoFar!.directoryListings.add(info.path);
+                    });
+                    
                     return;
                 }
             }
@@ -769,9 +1645,46 @@ class LLMFlowController {
         if (planProgress.currentStep) {
             this.logger.logInfo(`Current Step: ${planProgress.currentStep}`);
         }
+
+        // 相互参照コンテキストを生成
+        let crossReferenceContext = '';
+        try {
+            if (modifiedFiles) {
+                const modifiedFilePaths = this.extractFilePaths(modifiedFiles);
+                for (const filePath of modifiedFilePaths) {
+                    const fullPath = path.resolve(this.config.inputProjectDir, filePath);
+                    if (fs.existsSync(fullPath)) {
+                        const fileContent = fs.readFileSync(fullPath, 'utf-8');
+                        const snippets = await this.crossReferenceAnalyzer.findCrossReferences(fullPath, fileContent);
+                        if (snippets.length > 0) {
+                            crossReferenceContext += this.crossReferenceAnalyzer.formatCrossReferenceContext(snippets);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            this.logger.logError(`Failed to generate cross-reference context: ${error}`);
+            crossReferenceContext = 'Cross-reference analysis failed. Proceeding without additional context.';
+        }
         
-        const promptModified = this.config.readPromptModifiedFile(modifiedFiles, enhancedPlan, currentThought);
-        this.currentMessages = this.messageHandler.attachMessages("user", promptModified);
+        // FSM System Stateを取得
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
+        
+        const promptModified = this.config.readPromptModifiedEnhancedFile(
+            modifiedFiles, 
+            enhancedPlan, 
+            currentThought,
+            '', // filesRequested (必要に応じて設定)
+            '', // previousModifications (必要に応じて設定)
+            '', // previousThought (必要に応じて設定)
+            '', // previousPlan (必要に応じて設定)
+            this.correctionGoals, // correctionGoals
+            crossReferenceContext, // crossReferenceContext
+            systemState // FSM System State
+        );
+        
+        this.currentMessages = await this.sendMessageWithSummarizer("user", promptModified);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
 
@@ -781,12 +1694,15 @@ class LLMFlowController {
         this.totalPromptTokens += usage.prompt_tokens;
         this.totalCompletionTokens += usage.completion_tokens;
 
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
+
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
             new Date().toISOString(),
             {
-                prompt_template: '00_promptModified.txt',
+                prompt_template: '00_promptModified_enhanced.txt',
                 full_prompt_content: promptModified
             },
             {
@@ -795,17 +1711,64 @@ class LLMFlowController {
                 usage: usage
             },
             {
-                type: 'APPLYING_DIFF_AND_RECHECKING',
-                details: 'Diff applied successfully. Preparing for re-check.'
+                type: 'APPLYING_DIFF_AND_RECHECKING_ENHANCED',
+                details: 'Diff applied successfully. Preparing for enhanced re-check with cross-reference context.'
             }
         );
     }
 
     private async sendErrorToLLM() {
-        // エラー情報をLLMへ送信
-        const errorMessage = this.context.error || 'Unknown error occurred';
-        const errorPrompt = `エラーが発生しました: ${errorMessage}\n\n修正案を再検討してください。`;
-        this.currentMessages = this.messageHandler.attachMessages("user", errorPrompt);
+        // エラーコンテキストが保存されている場合はそれを使用
+        let previousState: AgentState;
+        let errorMessage: string;
+        let errorType: string;
+        
+        if (this.errorRecoveryContext.previousState) {
+            // 保存されたコンテキストを使用
+            previousState = this.errorRecoveryContext.previousState;
+            errorMessage = this.errorRecoveryContext.errorMessage || 'Unknown error';
+            errorType = this.errorRecoveryContext.errorType || 'UnknownError';
+            console.log(`🔄 Using captured error context: ${errorType} from ${previousState}`);
+        } else {
+            // フォールバック: 現在の状態を使用
+            previousState = this.agentStateService.getCurrentState();
+            const rawError = this.context.error || 'Invalid tags detected in your previous response';
+            errorMessage = typeof rawError === 'string' ? rawError : rawError.message;
+            errorType = this.determineErrorType(errorMessage);
+            console.warn(`⚠️ No captured error context, using current state: ${previousState}`);
+        }
+        
+        // FSM: まずERROR状態に遷移（previousStateがERRORでない場合）
+        const currentState = this.agentStateService.getCurrentState();
+        if (currentState !== AgentState.ERROR) {
+            console.log(`🔄 FSM: Transitioning from ${previousState} to ERROR`);
+            await this.agentStateService.transition(AgentState.ERROR, 'error_detected');
+        }
+        
+        // FSM: ERROR状態からANALYSIS状態に遷移
+        console.log(`🔄 FSM: Transitioning from ERROR to ANALYSIS for recovery`);
+        await this.agentStateService.transition(AgentState.ANALYSIS, 'error_recovery_start');
+        
+        // Error Contextの構築（指定フォーマット）
+        const errorContext = this.buildErrorContext(errorType, errorMessage, previousState);
+        
+        // Current Working Setの構築（指定フォーマット）
+        const currentWorkingSet = this.buildCurrentWorkingSet();
+        
+        // FSM System Stateを取得（ANALYSIS状態）
+        const currentAgentState = this.agentStateService.getCurrentState();
+        const systemState = formatSystemState(currentAgentState);
+        
+        // 通常プロンプトにError Contextを注入
+        // readFirstPromptFile()を使用し、Error ContextをContextセクションに追加
+        console.log('📢 Sending error recovery prompt using standard template with error context injection');
+        const errorPrompt = this.fileManager.readFirstPromptFileWithErrorContext(
+            systemState,
+            errorContext,
+            currentWorkingSet
+        );
+        
+        this.currentMessages = await this.sendMessageWithSummarizer("user", errorPrompt);
         const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
         this.context.llmResponse = llm_response;
 
@@ -815,12 +1778,15 @@ class LLMFlowController {
         this.totalPromptTokens += usage.prompt_tokens;
         this.totalCompletionTokens += usage.completion_tokens;
 
+        // トリガー層3: ターン完了時の要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
+
         // ログ記録
         this.logger.addInteractionLog(
             this.currentTurn,
             new Date().toISOString(),
             {
-                prompt_template: 'error_prompt',
+                prompt_template: '00_prompt_gem.txt (with error context)',
                 full_prompt_content: errorPrompt
             },
             {
@@ -829,10 +1795,432 @@ class LLMFlowController {
                 usage: usage
             },
             {
-                type: 'ERROR_HANDLING',
-                details: `Error sent to LLM: ${errorMessage}`
+                type: 'ERROR_RECOVERY',
+                details: `Error recovery using standard prompt with context injection. FSM state: ANALYSIS. Error type: ${errorType}, Message: ${errorMessage}`
             }
         );
+    }
+
+    /**
+     * タグ違反時の軽量なcorrective retryを実行
+     * FSM状態は変更せず、補助文付きで同じプロンプトを再送信
+     */
+    /**
+     * No Progress時の処理: LLMが行き詰まった時のフォールバック
+     * 【改善版】追加コンテキストを提供して1回リトライする
+     */
+    private async handleNoProgress(): Promise<void> {
+        console.log('🔄 No Progress: LLM has exhausted its exploration, checking for modifications...');
+        
+        const parsed = this.context.llmParsed;
+        const currentState = this.agentStateService.getCurrentState();
+        
+        // これまでに修正があったか確認
+        if (parsed?.modifiedDiff) {
+            console.log('✅ Found modifications despite no progress, applying and transitioning to VERIFYING');
+            this.context.diff = parsed.modifiedDiff;
+            
+            // MODIFYING状態へ遷移してパッチ適用
+            await this.agentStateService.transition(AgentState.MODIFYING, 'no_progress_with_modifications');
+            this.state = State.SystemParseDiff;
+        } else {
+            console.log('ℹ️  No modifications found, attempting recovery with additional context...');
+            
+            // 【改善】リトライフラグの確認
+            if (!this.context.noProgressRetried) {
+                console.log('🔄 First no-progress detection: attempting retry with enhanced context...');
+                this.context.noProgressRetried = true;
+                
+                // 追加コンテキストを提供してリトライ
+                await this.retryWithEnhancedContext();
+                return;
+            }
+            
+            // リトライ後も改善しなかった場合
+            console.log('⚠️  No improvement after retry, proceeding to no-progress verification...');
+            
+            // No Progressフラグを設定（システム判定であることを明示）
+            if (!parsed) {
+                // 空のparsedオブジェクトを作成
+                this.context.llmParsed = this.messageHandler.analyzeMessages('', this.agentStateService.getCurrentState());
+            }
+            if (this.context.llmParsed) {
+                this.context.llmParsed.no_progress_fallback = true;
+                console.log('🔄 Set no_progress_fallback flag (system-determined)');
+            }
+            
+            // 修正不要として扱う
+            // ANALYSIS状態の場合もVERIFYINGに遷移して検証を行う
+            if (currentState === AgentState.ANALYSIS) {
+                // ANALYSISからVERIFYINGへ遷移して判断を検証
+                await this.agentStateService.transition(AgentState.VERIFYING, 'no_progress_to_verification');
+                this.state = State.LLMVerificationDecision;
+            } else {
+                // MODIFYING等の場合はVERIFYINGへ遷移
+                await this.agentStateService.transition(AgentState.VERIFYING, 'no_progress_no_changes');
+                this.state = State.LLMVerificationDecision;
+            }
+        }
+    }
+    
+    /**
+     * 【新規】No Progress時の追加コンテキスト提供によるリトライ
+     */
+    private async retryWithEnhancedContext(): Promise<void> {
+        console.log('🔄 Providing enhanced context to help LLM find modification points...');
+        
+        // Ground Truthの変更ファイル情報を取得
+        const gtFiles = this.context.groundTruthChangedFiles || [];
+        const gtFileList = gtFiles.length > 0 
+            ? `\n\n**Hint**: The actual commit modified these files:\n${gtFiles.map(f => `- ${f}`).join('\n')}\n\nConsider why these files might need changes based on the commit message.`
+            : '';
+        
+        // 強化されたガイダンス
+        const enhancedGuidance = `
+**Important Reminder**: You have not made progress. Let's reconsider the task:
+
+1. **Re-read the commit message carefully**: What is the core intent? What functionality is being added, fixed, or changed?
+
+2. **Identify the modification points**: Based on the commit message, which files and functions need to be modified?
+
+3. **Don't give up too easily**: If you can't find the exact location, make a reasonable inference based on:
+   - Function names mentioned in the commit message
+   - Typical patterns in this codebase
+   - Similar changes you've seen before${gtFileList}
+
+4. **Proceed with modification**: Even if you're not 100% certain, provide your best attempt at the modification. The verification step will catch any issues.
+
+**Remember**: It's better to attempt a modification and refine it than to conclude "no changes needed" when the commit message clearly indicates changes were made.
+`;
+        
+        // 現在のメッセージに追加コンテキストを挿入
+        const enhancedMessage = {
+            role: 'user' as const,
+            content: enhancedGuidance
+        };
+        
+        this.currentMessages.push(enhancedMessage);
+        
+        // LLMを呼び出し
+        console.log('📤 Sending retry request with enhanced guidance...');
+        this.state = State.SendInfoToLLM;
+    }
+
+    private async performCorrectiveRetry(currentState: AgentState) {
+        console.log('🔄 Performing corrective retry with tag violation note');
+        
+        // タグ違反通知文
+        const tagViolationNote = `Note:
+The previous response used a tag that is not allowed in the current state.
+Please respond again using only the allowed tags.`;
+        
+        // FSM System State（補助文付き）
+        const systemState = formatSystemState(currentState, tagViolationNote);
+        
+        // currentMessagesが空の場合はsendErrorToLLMにフォールバック
+        if (!this.currentMessages || this.currentMessages.length === 0) {
+            console.warn('⚠️ currentMessages is empty, falling back to sendErrorToLLM');
+            this.captureErrorContext('Tag violation with empty message history');
+            await this.agentStateService.transition(AgentState.ERROR, 'corrective_retry_failed');
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
+        // 最後に送信したプロンプトと同じ内容を再構築
+        // （currentMessagesの最後のuserメッセージを使用）
+        const lastUserMessage = this.currentMessages[this.currentMessages.length - 1];
+        if (!lastUserMessage || lastUserMessage.role !== 'user') {
+            console.error('❌ Cannot perform corrective retry: no user message found');
+            console.warn('⚠️ Falling back to sendErrorToLLM');
+            this.captureErrorContext('Tag violation with invalid message history');
+            await this.agentStateService.transition(AgentState.ERROR, 'corrective_retry_no_user_message');
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
+        // 元のプロンプトのsystemState部分だけを置き換え
+        // （簡易実装: 直接LLMに再送信）
+        const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
+        this.context.llmResponse = llm_response;
+        
+        // LLM応答を解析（ターン数は増やさない）
+        const content = llm_response?.choices?.[0]?.message?.content || '';
+        this.context.llmParsed = this.messageHandler.analyzeMessages(content);
+        
+        // トークン数のみ更新
+        const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
+        this.totalPromptTokens += usage.prompt_tokens;
+        this.totalCompletionTokens += usage.completion_tokens;
+        
+        console.log(`✅ Corrective retry completed (retry ${this.tagViolationRetryCount}/${this.maxTagViolationRetries})`);
+        
+        // llmDecision()に戻って再検証
+        await this.llmDecision();
+    }
+
+    /**
+     * エラー発生時のコンテキストを保存
+     */
+    private captureErrorContext(errorMessage: string | Error) {
+        const currentState = this.agentStateService.getCurrentState();
+        const errorString = typeof errorMessage === 'string' ? errorMessage : errorMessage.message;
+        
+        this.errorRecoveryContext = {
+            previousState: currentState,
+            errorMessage: errorString,
+            errorType: this.determineErrorType(errorString),
+            occurredAt: new Date().toISOString(),
+            modifiedFilesSnapshot: this.extractModifiedFiles(),
+            requestedFilesSnapshot: [...this.internalProgress.contextAccumulated.sourceFiles]
+        };
+        
+        console.log(`📸 Error context captured: ${this.errorRecoveryContext.errorType} at ${currentState}`);
+    }
+
+    /**
+     * エラータイプを決定
+     */
+    private determineErrorType(errorMessage: string): string {
+        if (errorMessage.includes('tag') || errorMessage.includes('Tag')) {
+            return 'TagValidationError';
+        } else if (errorMessage.includes('patch') || errorMessage.includes('diff') || errorMessage.includes('hunk')) {
+            return 'PatchApplyError';
+        } else if (errorMessage.includes('parse') || errorMessage.includes('Parse')) {
+            return 'ResponseParseError';
+        } else if (errorMessage.includes('state') || errorMessage.includes('State')) {
+            return 'StateTransitionError';
+        } else {
+            return 'UnknownError';
+        }
+    }
+
+    /**
+     * Error Contextを構築（指定フォーマット）
+     */
+    private buildErrorContext(errorType: string, errorMessage: string, previousState: AgentState): string {
+        let errorContext = 'last_error:\n';
+        errorContext += `  type: ${errorType}\n`;
+        errorContext += `  message: "${errorMessage}"\n`;
+        // AWAITING_INFOはLLMに見せない内部状態なので、INTERNAL_FETCHと表示
+        const displayState = previousState === AgentState.AWAITING_INFO ? 'INTERNAL_FETCH' : previousState;
+        errorContext += `  previous_state: ${displayState}\n`;
+        return errorContext;
+    }
+
+    /**
+     * 現在の作業セット（これまでの処理内容）を構築（指定フォーマット）
+     */
+    private buildCurrentWorkingSet(): string {
+        let workingSet = '';
+
+        // Proto change summary
+        const protoChangeSummary = this.extractProtoChangeSummary();
+        if (protoChangeSummary) {
+            workingSet += `- proto change summary: ${protoChangeSummary}\n`;
+        }
+
+        // Last modified files
+        const modifiedFiles = this.extractModifiedFiles();
+        if (modifiedFiles.length > 0) {
+            workingSet += '- last modified files:\n';
+            modifiedFiles.forEach(file => {
+                workingSet += `  - ${file}\n`;
+            });
+        }
+
+        // Last requested files
+        const requestedFiles = this.internalProgress.contextAccumulated.sourceFiles;
+        if (requestedFiles.length > 0) {
+            workingSet += '- last requested files:\n';
+            requestedFiles.slice(-5).forEach(file => { // 最後の5ファイルのみ
+                workingSet += `  - ${file}\n`;
+            });
+        }
+
+        if (!workingSet) {
+            workingSet = '- no previous work recorded (early-stage error)\n';
+        }
+
+        return workingSet;
+    }
+
+    /**
+     * Proto変更のサマリーを抽出
+     */
+    private extractProtoChangeSummary(): string {
+        // protoFileChangesから主要な変更を抽出
+        try {
+            const protoChanges = this.protoFileChanges || '';
+            if (!protoChanges) return '';
+            
+            // 簡単なパターンマッチングで主要な変更を抽出
+            const lines = protoChanges.split('\n');
+            const additions = lines.filter(line => line.trim().startsWith('+')).slice(0, 3);
+            
+            if (additions.length > 0) {
+                return additions.map(line => line.trim().substring(1).trim()).join(', ');
+            }
+            
+            return 'proto structure changes detected';
+        } catch (error) {
+            return 'proto changes (details unavailable)';
+        }
+    }
+
+    /**
+     * 修正したファイル一覧を抽出
+     */
+    private extractModifiedFiles(): string[] {
+        const modifiedFiles: string[] = [];
+        
+        try {
+            // context.diffからファイル名を抽出
+            if (this.context.diff) {
+                const diffLines = this.context.diff.split('\n');
+                for (const line of diffLines) {
+                    if (line.startsWith('---') || line.startsWith('+++')) {
+                        const match = line.match(/[+-]{3}\s+([^\s]+)/);
+                        if (match && match[1] !== '/dev/null') {
+                            const filename = match[1].replace(/^[ab]\//, '');
+                            if (!modifiedFiles.includes(filename)) {
+                                modifiedFiles.push(filename);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // ログからも抽出
+            const logs = this.logger.getInteractionLog();
+            for (const log of logs.slice(-3)) { // 最後の3ターン
+                const parsedContent = log.llm_response?.parsed_content;
+                if (parsedContent?.modified_diff) {
+                    const diffLines = parsedContent.modified_diff.split('\n');
+                    for (const line of diffLines) {
+                        if (line.startsWith('---') || line.startsWith('+++')) {
+                            const match = line.match(/[+-]{3}\s+([^\s]+)/);
+                            if (match && match[1] !== '/dev/null') {
+                                const filename = match[1].replace(/^[ab]\//, '');
+                                if (!modifiedFiles.includes(filename)) {
+                                    modifiedFiles.push(filename);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to extract modified files:', error);
+        }
+        
+        return modifiedFiles.slice(0, 5); // 最大5ファイルまで
+    }
+
+    /**
+     * 旧buildCurrentWorkingSet（下位互換性のため保持）
+     * @deprecated Use the new buildCurrentWorkingSet() instead
+     */
+    private buildCurrentWorkingSetLegacy(): string {
+        const parsed = this.context.llmParsed;
+        let workingSet = '';
+
+        // 前回の思考内容
+        if (parsed?.thought) {
+            workingSet += `### Your Previous Thought ###\n${parsed.thought}\n\n`;
+        }
+
+        // 前回の計画
+        if (parsed?.plan) {
+            workingSet += `### Your Previous Plan ###\n`;
+            if (typeof parsed.plan === 'string') {
+                workingSet += `${parsed.plan}\n\n`;
+            } else {
+                workingSet += `${JSON.stringify(parsed.plan, null, 2)}\n\n`;
+            }
+        }
+
+        // Correction Goals
+        if (this.correctionGoals) {
+            workingSet += `### Correction Goals ###\n${this.correctionGoals}\n\n`;
+        }
+
+        // これまでに要求したファイル
+        const requestedFiles = this.internalProgress.contextAccumulated.sourceFiles;
+        if (requestedFiles.length > 0) {
+            workingSet += `### Files You Have Requested ###\n`;
+            requestedFiles.forEach(file => {
+                workingSet += `- ${file}\n`;
+            });
+            workingSet += '\n';
+        }
+
+        // これまでに生成したパッチ
+        if (this.context.diff) {
+            workingSet += `### Your Previous Modifications ###\n`;
+            workingSet += `\`\`\`diff\n${this.context.diff.substring(0, 500)}...\n\`\`\`\n\n`;
+        }
+
+        if (!workingSet) {
+            workingSet = 'No previous work recorded yet. This is an early-stage error.\n';
+        }
+
+        return workingSet;
+    }
+
+    /**
+     * LLM応答からパッチ内容を抽出してfinal_patch.diffとして保存
+     * @returns パッチ抽出に成功した場合true、失敗した場合false
+     */
+    private async extractAndSavePatch(llmContent: string): Promise<boolean> {
+        try {
+            // パッチブロックを抽出（diff形式を探す）
+            const patchPatterns = [
+                // ```diff ブロック
+                /```diff\n([\s\S]*?)```/gi,
+                // ```patch ブロック
+                /```patch\n([\s\S]*?)```/gi,
+                // --- ... +++ ... から始まるdiff形式
+                /(^--- .*?\n\+\+\+ .*?\n[\s\S]*?)(?=\n\n|\n---|$)/gm
+            ];
+
+            let extractedPatches: string[] = [];
+            
+            for (const pattern of patchPatterns) {
+                const matches = llmContent.matchAll(pattern);
+                for (const match of matches) {
+                    const patchContent = match[1] || match[0];
+                    if (patchContent && patchContent.trim().length > 0) {
+                        extractedPatches.push(patchContent.trim());
+                    }
+                }
+            }
+
+            if (extractedPatches.length === 0) {
+                console.log('⚠️  No patch content found in LLM response');
+                return false;
+            }
+
+            // 複数のパッチを結合
+            const combinedPatch = extractedPatches.join('\n\n');
+            
+            // 出力パス構築（inputPremergeDir + final_patch.diff）
+            const outputPath = path.join(this.inputPremergeDir, 'final_patch.diff');
+            
+            // ファイルに保存
+            await fs.promises.writeFile(outputPath, combinedPatch, 'utf-8');
+            
+            const patchLines = combinedPatch.split('\n').length;
+            const patchSize = Buffer.byteLength(combinedPatch, 'utf-8');
+            
+            console.log(`✅ Patch file generated: ${outputPath}`);
+            console.log(`   📊 Size: ${patchLines} lines, ${patchSize} bytes`);
+            console.log(`   📦 Extracted ${extractedPatches.length} patch block(s)`);
+            
+            return true;
+        } catch (error) {
+            console.error(`❌ Failed to extract and save patch:`, error);
+            return false;
+        }
     }
 
     // =============================================================================
@@ -844,11 +2232,75 @@ class LLMFlowController {
         const endTime = new Date().toISOString();
         const experimentId = this.generateExperimentId();
         
-        // 基本的なステータス判定
-        let status = this.context.llmParsed?.has_fin_tag ? 'FINISHED' : 'ERROR';
+        // FSM状態に基づく完了判定（優先）
+        let status: typeof APRStatus[keyof typeof APRStatus];
+        const currentFSMState = this.agentStateService.getCurrentState();
         
-        // 後処理による完了判定ロジック（安全策）
-        if (status === 'ERROR' && !this.context.llmParsed?.has_fin_tag) {
+        // 完了カテゴリの判定（Priority 3）
+        let completionType: 'patch_generated' | 'llm_no_changes' | 'system_no_progress' | 'incomplete' | 'error' = 'incomplete';
+        const hasNoChangesNeeded = this.context.llmParsed?.has_no_changes_needed || false;
+        const noProgressFallback = this.context.llmParsed?.no_progress_fallback || false;
+        
+        if (currentFSMState === AgentState.FINISHED) {
+            // FSMがFINISHED状態に到達した場合、理由を判定
+            // 優先度: LLMの明示的判断 > パッチ生成の証拠 > システム推測
+            
+            if (this.context.llmParsed?.has_no_changes_needed) {
+                // 優先度1: No Changes Needed = LLMの明示的判断（最優先）
+                status = APRStatus.NO_CHANGES_NEEDED;
+                completionType = 'llm_no_changes';
+                console.log(`✅ Status: '${APRStatus.NO_CHANGES_NEEDED}' via FSM + explicit tag (Priority 1)`);
+            } else if (this.context.llmParsed?.has_verification_report) {
+                // 優先度2: Verification Report = パッチ生成の可能性
+                // パッチファイル生成を試行：最終的な応答からパッチを抽出
+                const lastLLMContent = this.context.llmResponse?.choices?.[0]?.message?.content || '';
+                const patchExtracted = await this.extractAndSavePatch(lastLLMContent);
+                
+                if (patchExtracted) {
+                    // パッチが実際に抽出できた場合のみpatch_generated
+                    status = APRStatus.FINISHED;
+                    completionType = 'patch_generated';
+                    console.log(`✅ Status: '${APRStatus.FINISHED}' - patch extracted successfully (Priority 2a)`);
+                } else {
+                    // Verification Reportはあるがパッチコードがない場合
+                    // -> LLMがNo Changesと判断した可能性が高い
+                    status = APRStatus.NO_CHANGES_NEEDED;
+                    completionType = 'llm_no_changes';
+                    console.log(`✅ Status: '${APRStatus.NO_CHANGES_NEEDED}' - verification report without patch (Priority 2b)`);
+                }
+                
+                // 成功の証拠があるため、no_progress_fallbackフラグをクリア
+                if (this.context.llmParsed.no_progress_fallback) {
+                    console.log(`   🔄 Clearing no_progress_fallback flag due to verification flow`);
+                    this.context.llmParsed.no_progress_fallback = false;
+                }
+            } else if (this.context.llmParsed?.no_progress_fallback) {
+                // 優先度3: No Progress Fallback = システムの推測（フォールバック）
+                status = APRStatus.INCOMPLETE;
+                completionType = 'system_no_progress';
+                console.log(`✅ Status: '${APRStatus.INCOMPLETE}' via FSM + system fallback (Priority 3)`);
+            } else {
+                // フォールバック: FSMがFINISHEDだが理由不明
+                status = APRStatus.FINISHED;
+                completionType = 'patch_generated'; // デフォルトはパッチ生成とみなす
+                console.log(`✅ Status: '${APRStatus.FINISHED}' - reached FINISHED state (default to patch_generated)`);
+            }
+        } else {
+            // FSMがFINISHEDでない場合の従来ロジック（後方互換性）
+            status = this.context.llmParsed?.has_fin_tag ? APRStatus.FINISHED : APRStatus.INCOMPLETE;
+            
+            // 優先1: %_No_Changes_Needed_%タグによる完了
+            if (this.context.llmParsed?.has_no_changes_needed) {
+                status = APRStatus.NO_CHANGES_NEEDED;
+                completionType = 'llm_no_changes'; // LLM明示判断
+                console.log(`✅ Status: '${APRStatus.NO_CHANGES_NEEDED}' via explicit tag (legacy path)`);
+            }
+        }
+        
+        // 後処理による完了判定ロジック（安全策・フォールバック）- FSMが正しく動作すればこのパスは通らない
+        if (currentFSMState !== AgentState.FINISHED && status === APRStatus.INCOMPLETE && !this.context.llmParsed?.has_fin_tag) {
+            console.warn('⚠️ FSM did not reach FINISHED state, falling back to implicit completion logic');
+            
             // ログ内に一度でも%_Modified_%が存在した場合の暗黙的完了判定
             const hasModification = this.logger.getInteractionLog().some((turn: any) => 
                 turn.llm_response?.parsed_content?.modified_diff || 
@@ -856,16 +2308,66 @@ class LLMFlowController {
             );
             
             if (hasModification) {
-                status = 'FINISHED'; // 暗黙的な完了としてステータスを更新
-                console.log(`✅ Status updated to 'FINISHED' based on post-processing logic.`);
+                status = APRStatus.FINISHED; // 暗黙的な完了としてステータスを更新
+                completionType = 'patch_generated'; // パッチ生成
+                console.log(`✅ Status updated to 'Completed (Implicit)' based on fallback post-processing logic.`);
                 console.log(`   Reason: Found %_Modified_% tag without explicit %%_Fin_%% tag`);
+            }
+            // 修正不要と判断したケース（暗黙的検出・フォールバック）
+            else {
+                const interactionLog = this.logger.getInteractionLog();
+                if (interactionLog.length > 0) {
+                    const lastTurn = interactionLog[interactionLog.length - 1] as any;
+                    const replyRequired = lastTurn.llm_response?.parsed_content?.reply_required;
+                    const thought = lastTurn.llm_response?.parsed_content?.thought || '';
+                    
+                    if (replyRequired && Array.isArray(replyRequired) && replyRequired.length === 0) {
+                        const noModsKeywords = [
+                            'no code modifications',
+                            'no modifications needed',
+                            'no fixes needed',
+                            'nothing to change',
+                            'not appropriate',
+                            'preparatory only',
+                            'no changes required',
+                            'no modifications are appropriate'
+                        ];
+                        
+                        if (noModsKeywords.some(keyword => thought.toLowerCase().includes(keyword))) {
+                            status = APRStatus.NO_CHANGES_NEEDED;
+                            completionType = 'system_no_progress'; // システム自動判定（暗黙的）
+                            console.log(`✅ Status updated to '${APRStatus.NO_CHANGES_NEEDED}' based on analysis.`);
+                            console.log(`   Reason: Empty reply_required with "no modifications" reasoning (fallback detection)`);
+                        }
+                    }
+                }
             }
         }
         
-        // LLMプロバイダー情報を取得
-        const llmProvider = process.env.LLM_PROVIDER || 'openai';
+        // LLMプロバイダー情報を取得（Configクラスから）
+        const llmProvider = this.config.get('llm.provider', 'openai');
         const llmModel = this.getCurrentLLMModel();
         const llmConfig = this.getLLMConfig();
+
+        // 要約機能の統計を出力
+        let summaryTokensUsed = 0;
+        if (this.conversationSummarizer) {
+            const summaryStats = this.conversationSummarizer.getStats();
+            summaryTokensUsed = summaryStats.summaryTokensUsed || 0;
+            console.log('\n📊 Conversation Summarization Stats:');
+            console.log(`   Total Messages: ${summaryStats.totalMessages}`);
+            console.log(`   Estimated Tokens: ${summaryStats.estimatedTokens}`);
+            console.log(`   Summary Threshold: ${summaryStats.summaryThreshold}`);
+            console.log(`   Times Summarized: ${summaryStats.timesExceededThreshold}`);
+            console.log(`   Last Summary Turn: ${summaryStats.lastSummaryTurn}`);
+            console.log(`   Summary Tokens Used: ${summaryTokensUsed} tokens`);
+        }
+        
+        // 完了カテゴリ統計の出力（Priority 3）
+        console.log('\n📊 Completion Category Stats:');
+        console.log(`   Type: ${completionType}`);
+        console.log(`   LLM No Changes Needed (explicit): ${hasNoChangesNeeded}`);
+        console.log(`   System No Progress (fallback): ${noProgressFallback}`);
         
         this.logger.setExperimentMetadata(
             experimentId,
@@ -877,7 +2379,13 @@ class LLMFlowController {
             this.totalCompletionTokens,
             llmProvider,
             llmModel,
-            llmConfig
+            llmConfig,
+            summaryTokensUsed, // 要約トークン数を渡す
+            { // 完了カテゴリ統計（Priority 3）
+                type: completionType,
+                has_no_changes_needed: hasNoChangesNeeded,
+                no_progress_fallback: noProgressFallback
+            }
         );
 
         // 終了処理: ログを /app/log/PROJECT_NAME/PULLREQUEST/PULLREQUEST_NAME/DATE_TIME.log へ保存
@@ -1103,11 +2611,43 @@ class LLMFlowController {
 
     /**
      * 既に処理済みのファイルパスを取得（循環参照防止）
+     * 
+     * 重要: 要約によってファイル内容が会話履歴から消えても、LLMは
+     * 実際の会話履歴にあるファイルのみを「見た」と認識する。
+     * そのため、internalProgressではなく実際の会話履歴から取得する。
      */
     private getProcessedFilePaths(): Set<string> {
         const processed = new Set<string>();
         
-        // 内部進行状況から既に処理済みのファイルを取得
+        // 実際の会話履歴から提供済みファイルを抽出
+        // これによりLLMが実際にアクセス可能なファイルのみをトラッキング
+        const currentMessages = this.conversationSummarizer.getCurrentMessages();
+        
+        for (const msg of currentMessages) {
+            if (msg.role === 'user') {
+                // ファイル提供を示すパターンを検索
+                // パターン1: "## File: path/to/file.go"
+                const fileHeaderMatches = msg.content.matchAll(/^## File: (.+)$/gm);
+                for (const match of fileHeaderMatches) {
+                    processed.add(match[1].trim());
+                }
+                
+                // パターン2: "Reading file: path/to/file.go"
+                const readingMatches = msg.content.matchAll(/Reading file: (.+)$/gm);
+                for (const match of readingMatches) {
+                    processed.add(match[1].trim());
+                }
+                
+                // パターン3: "📄 File: path/to/file.go"
+                const emojiMatches = msg.content.matchAll(/📄 File: (.+)$/gm);
+                for (const match of emojiMatches) {
+                    processed.add(match[1].trim());
+                }
+            }
+        }
+        
+        // フォールバック: internalProgressも参照（要約前のファイルを保持）
+        // ただし、これは二次的な情報源として扱う
         this.internalProgress.contextAccumulated.sourceFiles.forEach(f => processed.add(f));
         this.internalProgress.contextAccumulated.configFiles.forEach(f => processed.add(f));
         this.internalProgress.contextAccumulated.protoFiles.forEach(f => processed.add(f));
@@ -1255,10 +2795,19 @@ class LLMFlowController {
             return State.End;
         }
 
-        // 重複ファイルのみの場合は警告してスキップ
+        // 重複ファイルのみの場合はLLMに通知してパッチ生成を促す
         if (analysisResult.newFiles.length === 0 && analysisResult.duplicateFiles.length > 0) {
-            this.logger.logWarning(`All ${analysisResult.duplicateFiles.length} files already processed, skipping to avoid circular references`);
-            return State.End;
+            this.logger.logWarning(`All ${analysisResult.duplicateFiles.length} files already processed, informing LLM to proceed with current context`);
+            
+            // エラーコンテキストに記録（エラープロンプトで使用）
+            this.errorRecoveryContext.errorMessage = 
+                `The files you requested (${analysisResult.duplicateFiles.map(f => f.path).join(', ')}) have already been provided earlier in the conversation. ` +
+                `Please use the information from those files to generate your patch, or request different files if you need additional context.`;
+            this.errorRecoveryContext.errorType = 'DUPLICATE_FILE_REQUEST';
+            this.errorRecoveryContext.occurredAt = new Date().toISOString();
+            
+            // エラープロンプトで対応を促す
+            return State.SendErrorToLLM;
         }
 
         // 効率的な処理ルート決定
@@ -2333,6 +3882,15 @@ class LLMFlowController {
     }
 
     /**
+     * ConversationSummarizer を使用してメッセージを送信
+     */
+    private async sendMessageWithSummarizer(role: string, content: string): Promise<Array<{ role: string, content: string }>> {
+        // ConversationSummarizer にメッセージを追加(自動要約チェック付き)
+        this.currentMessages = await this.conversationSummarizer.addMessage(role, content);
+        return this.currentMessages;
+    }
+
+    /**
      * 品質チェック付きLLM実行メソッド
      * modified: 0 lines などの不完全応答を検出してリトライする
      */
@@ -2344,6 +3902,9 @@ class LLMFlowController {
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
                 console.log(`🚀 LLM Request (attempt ${attempt + 1}/3) for ${context}`);
+                
+                // トリガー層2: LLM送信直前の最終安全チェック
+                this.currentMessages = await this.conversationSummarizer.preSendCheck();
                 
                 // プロンプトの強化（リトライ時）
                 if (attempt > 0 && bestMetrics) {
@@ -2365,8 +3926,11 @@ class LLMFlowController {
 
                 const content = llm_response.choices[0].message.content;
                 const parsed = this.messageHandler.analyzeMessages(content);
+
+                // アシスタントの応答をConversationSummarizerに追加
+                await this.sendMessageWithSummarizer('assistant', content);
                 
-                // 品質チェック
+                // 品質チェック（初回フェーズでは修正内容を要求しない）
                 const metrics = this.retryEnhancer.checkResponseQuality(parsed);
                 this.retryEnhancer.logQualityMetrics(metrics);
 
@@ -2377,9 +3941,15 @@ class LLMFlowController {
                     this.context.llmParsed = parsed;
                 }
 
+                // 初回フェーズ ('initial') では修正内容がなくても合格とする
+                const isInitialPhase = context === 'initial';
+                const shouldRetry = isInitialPhase 
+                    ? this.shouldRetryInitialPhase(metrics, attempt)
+                    : this.retryEnhancer.shouldRetry(metrics, attempt);
+
                 // 品質チェック合格の場合は即座に返す
-                if (!this.retryEnhancer.shouldRetry(metrics, attempt)) {
-                    console.log(`✅ Quality check passed (score: ${metrics.completionScore}%)`);
+                if (!shouldRetry) {
+                    console.log(`✅ Quality check passed (score: ${metrics.completionScore}%) - Phase: ${context}`);
                     return bestResponse;
                 }
 
@@ -2414,12 +3984,15 @@ class LLMFlowController {
      * 現在使用中のLLMモデル名を取得
      */
     private getCurrentLLMModel(): string {
-        const provider = process.env.LLM_PROVIDER || 'openai';
+        // Configクラスから設定を取得（config_openai.json等を参照）
+        const provider = this.config.get('llm.provider', 'openai');
         
         if (provider === 'openai') {
-            return process.env.OPENAI_MODEL || 'gpt-4';
+            return this.config.get('llm.model', 'gpt-4');
         } else if (provider === 'gemini') {
-            return process.env.GEMINI_MODEL || 'gemini-1.5-pro';
+            return this.config.get('gemini.model', 'gemini-1.5-pro');
+        } else if (provider === 'restapi') {
+            return this.config.get('llm.restApi.model', 'default');
         } else {
             return 'unknown';
         }
@@ -2429,21 +4002,233 @@ class LLMFlowController {
      * LLM設定情報を取得
      */
     private getLLMConfig(): any {
-        const provider = process.env.LLM_PROVIDER || 'openai';
+        const provider = this.config.get('llm.provider', 'openai');
         const config: any = {};
         
         if (provider === 'openai') {
-            config.temperature = parseFloat(process.env.OPENAI_TEMPERATURE || '0.7');
-            config.max_tokens = parseInt(process.env.OPENAI_MAX_TOKENS || '4000');
-            config.top_p = parseFloat(process.env.OPENAI_TOP_P || '1.0');
+            config.temperature = this.config.get('llm.temperature', 0.7);
+            config.max_tokens = this.config.get('llm.maxTokens', 4000);
+            config.top_p = 1.0; // デフォルト値
         } else if (provider === 'gemini') {
-            config.temperature = parseFloat(process.env.GEMINI_TEMPERATURE || '0.7');
-            config.max_tokens = parseInt(process.env.GEMINI_MAX_TOKENS || '4000');
-            config.top_p = parseFloat(process.env.GEMINI_TOP_P || '1.0');
+            config.temperature = this.config.get('gemini.temperature', 0.7);
+            config.max_tokens = this.config.get('gemini.maxTokens', 4000);
+            config.top_p = 1.0; // デフォルト値
+        } else if (provider === 'restapi') {
+            config.temperature = this.config.get('llm.restApi.temperature', 0.7);
+            config.max_tokens = this.config.get('llm.restApi.maxTokens', 4000);
         }
         
         // 空の設定オブジェクトの場合はundefinedを返す
         return Object.keys(config).length > 0 ? config : undefined;
+    }
+
+    /**
+     * デフォルトのファイル要求を生成（早期終了防止用）
+     */
+    private generateDefaultFileRequests(): string[] {
+        const defaultFiles: string[] = [];
+        
+        // プロト関連ファイルの一般的なパターンを追加
+        try {
+            const protoDir = path.join(this.config.inputProjectDir);
+            
+            // よく変更されるファイルパターンを推測
+            const commonPatterns = [
+                '**/*.proto',
+                '**/*.go',
+                '**/*.py',
+                '**/*.java',
+                '**/*.ts',
+                '**/*.js',
+                'Makefile',
+                'BUILD',
+                'build.gradle'
+            ];
+            
+            // 実際にプロジェクトディレクトリから一部のファイルを探す
+            if (fs.existsSync(protoDir)) {
+                const files = fs.readdirSync(protoDir, { recursive: false });
+                for (const file of files) {
+                    if (typeof file === 'string' && 
+                        (file.endsWith('.go') || file.endsWith('.proto') || 
+                         file.endsWith('.py') || file.endsWith('.java'))) {
+                        defaultFiles.push(file);
+                        if (defaultFiles.length >= 3) break; // 最大3ファイル
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not generate default file requests:', error);
+        }
+        
+        // 最低限1つのファイルは要求する
+        if (defaultFiles.length === 0) {
+            defaultFiles.push('main.go'); // フォールバック
+        }
+        
+        console.log('📁 Generated default file requests:', defaultFiles);
+        return defaultFiles;
+    }
+
+    /**
+     * Diffテキストからファイルパスを抽出
+     */
+    private extractFilePaths(diffText: string): string[] {
+        const filePaths: string[] = [];
+        const lines = diffText.split('\n');
+        
+        for (const line of lines) {
+            // "--- a/path/to/file" や "+++ b/path/to/file" の形式からパスを抽出
+            const match = line.match(/^(?:---|\+\+\+)\s+[ab]\/(.+)$/);
+            if (match) {
+                const filePath = match[1];
+                if (!filePaths.includes(filePath)) {
+                    filePaths.push(filePath);
+                }
+            }
+        }
+        
+        return filePaths;
+    }
+
+    /**
+     * 初回フェーズ専用の品質チェック（修正内容を要求しない）
+     */
+    private shouldRetryInitialPhase(metrics: any, attempt: number): boolean {
+        // 初回フェーズでは以下の条件で合格
+        // 1. プランまたは思考内容がある
+        // 2. ファイル要求がある、または完了タグがある
+        const hasValidContent = metrics.planLines > 0 || metrics.thoughtLines > 0;
+        const hasActionPlan = (metrics.fileRequestCount > 0) || metrics.hasCompletionTag;
+        
+        if (hasValidContent && hasActionPlan) {
+            return false; // リトライ不要
+        }
+        
+        // 最後の試行では最善の結果を受け入れる
+        if (attempt >= 2) {
+            console.log(`⚠️ Accepting result after final attempt (attempt ${attempt + 1})`);
+            return false;
+        }
+        
+        console.log(`🔄 Initial phase retry needed: hasValidContent=${hasValidContent}, hasActionPlan=${hasActionPlan}`);
+        return true; // リトライ
+    }
+
+    /**
+     * トークン使用量を取得（要約を含む）
+     */
+    public getTokenUsage(): { 
+        promptTokens: number; 
+        completionTokens: number; 
+        totalTokens: number;
+        summaryTokens?: number; 
+    } {
+        const summaryTokens = this.conversationSummarizer 
+            ? this.conversationSummarizer.getStats().summaryTokensUsed || 0
+            : 0;
+
+        return {
+            promptTokens: this.totalPromptTokens,
+            completionTokens: this.totalCompletionTokens,
+            totalTokens: this.totalPromptTokens + this.totalCompletionTokens,
+            ...(summaryTokens > 0 && { summaryTokens })
+        };
+    }
+
+    /**
+     * ValidationErrorをcorrective retry経由で処理
+     */
+    private async handleValidationError(error: ValidationError): Promise<void> {
+        console.log(`🔄 Handling ValidationError: ${error.type}`);
+        
+        // タグ違反リトライカウントを増加
+        this.tagViolationRetryCount++;
+        
+        // 上限チェック
+        if (this.tagViolationRetryCount > this.maxTagViolationRetries) {
+            console.error(`❌ Max validation retries (${this.maxTagViolationRetries}) exceeded`);
+            this.captureErrorContext(error.message);
+            await this.agentStateService.transition(AgentState.ERROR, 'validation_retry_limit_exceeded');
+            this.state = State.End;
+            return;
+        }
+        
+        console.log(`🔄 Validation retry ${this.tagViolationRetryCount}/${this.maxTagViolationRetries}`);
+        
+        // FSM状態は変更しない（現在の状態を維持）
+        const currentState = this.agentStateService.getCurrentState();
+        
+        // LLMへのフィードバックメッセージを生成
+        const feedbackMessage = error.toFeedbackMessage();
+        
+        // FSM System State（フィードバック付き）
+        const systemState = formatSystemState(currentState, feedbackMessage);
+        
+        // currentMessagesが空の場合はsendErrorToLLMにフォールバック
+        if (!this.currentMessages || this.currentMessages.length === 0) {
+            console.warn('⚠️ currentMessages is empty, falling back to sendErrorToLLM');
+            this.captureErrorContext(error.message);
+            await this.agentStateService.transition(AgentState.ERROR, 'validation_retry_no_history');
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
+        // 最後に送信したプロンプトを再構築
+        const lastUserMessage = this.currentMessages[this.currentMessages.length - 1];
+        if (!lastUserMessage || lastUserMessage.role !== 'user') {
+            console.error('❌ Cannot perform validation retry: no user message found');
+            console.warn('⚠️ Falling back to sendErrorToLLM');
+            this.captureErrorContext(error.message);
+            await this.agentStateService.transition(AgentState.ERROR, 'validation_retry_invalid_history');
+            this.state = State.SendErrorToLLM;
+            return;
+        }
+        
+        // 元のプロンプトにフィードバックを埋め込み（System State部分を更新）
+        let retryPrompt = lastUserMessage.content;
+        
+        // System State部分を新しいもので置換（System State ##...## の間を置換）
+        const systemStateRegex = /## System State ##\s*\n([\s\S]*?)(?=\n---\n|$)/;
+        if (systemStateRegex.test(retryPrompt)) {
+            retryPrompt = retryPrompt.replace(systemStateRegex, `## System State ##\n${systemState}\n\n`);
+        }
+        
+        // LLMに再送信
+        this.currentMessages = await this.sendMessageWithSummarizer("user", retryPrompt);
+        const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
+        this.context.llmResponse = llm_response;
+        
+        // ターン数とトークン数を更新
+        this.currentTurn++;
+        const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
+        this.totalPromptTokens += usage.prompt_tokens;
+        this.totalCompletionTokens += usage.completion_tokens;
+        
+        // 要約チェック
+        await this.conversationSummarizer.onTurnComplete(this.currentTurn);
+        
+        // ログ記録
+        this.logger.addInteractionLog(
+            this.currentTurn,
+            new Date().toISOString(),
+            {
+                prompt_template: 'validation_retry',
+                full_prompt_content: retryPrompt
+            },
+            {
+                raw_content: llm_response?.choices?.[0]?.message?.content || '',
+                parsed_content: this.convertToLogFormat(this.context.llmParsed || null),
+                usage: usage
+            },
+            {
+                type: 'VALIDATION_RETRY',
+                details: `Validation error: ${error.type}. Retry ${this.tagViolationRetryCount}/${this.maxTagViolationRetries}. Path: ${error.path}`
+            }
+        );
+        
+        // 次の状態へ遷移（元の処理フローに戻る）
+        this.state = State.LLMReanalyze;
     }
 }
 

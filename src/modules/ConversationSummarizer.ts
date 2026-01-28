@@ -16,8 +16,8 @@ import type {
     SummarizeResponse,
     SummarizationTriggerType
 } from './types.js';
-import Config from './config.js';  // 小文字に修正
-import OpenAIClient from './openAIClient.js';  // 小文字に修正
+import Config from './Config.js';
+import OpenAIClient from './OpenAIClient.js';
 import * as fs from 'fs';
 import * as path from 'path';
 

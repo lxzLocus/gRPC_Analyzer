@@ -3,7 +3,7 @@
  * Google Gemini APIとの通信を担当
  */
 
-import Config from './config.js';
+import Config from './Config.js';
 import { LLMClient, LLMRequest, LLMResponse } from './llmClient.js';
 
 export class GeminiLLMClient implements LLMClient {

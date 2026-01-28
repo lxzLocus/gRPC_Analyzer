@@ -14,8 +14,8 @@ import path from 'path';
 /*
 modules
 */
-import Logger from "../modules/logger.js";
-import RestoreDiff from '../modules/restoreDiff.js';
+import Logger, { APRStatus, APRStatusType } from "../modules/Logger.js";
+import RestoreDiff from '../modules/RestoreDiff.js';
 import LLMFlowController from '../modules/llmFlowController.js';
 
 //実行ファイルが置かれているパス
@@ -305,7 +305,7 @@ async function main() {
     let conversation_active = true;
     const max_turns = 15;
     let turn_count = 0;
-    let status = "ERROR"; // デフォルトの終了ステータス (AgentState互換)
+    let status: APRStatusType = APRStatus.ERROR; // デフォルトの終了ステータス (AgentState互換)
 
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
@@ -333,7 +333,7 @@ async function main() {
         const llm_response = await openAIClient.fetchOpenAPI(currentMessages);
         if (!llm_response || !llm_response.choices || llm_response.choices.length === 0) {
             console.error("Invalid response from LLM. Aborting.");
-            status = "Error: Invalid LLM response";
+            status = APRStatus.ERROR;
             break;
         }
         const llm_content = llm_response.choices[0].message.content;
@@ -374,7 +374,7 @@ async function main() {
         if (parsed_response.has_fin_tag) {
             console.log("Found '%%_Fin_%%' tag. Finalizing process.");
             system_action_log = { type: "TERMINATING", details: "%%_Fin_%% tag detected." };
-            status = "FINISHED";
+            status = APRStatus.FINISHED;
             conversation_active = false;
 
         } else if (parsed_response.requiredFilepaths.length > 0) {
@@ -407,14 +407,14 @@ async function main() {
                 // エラー時の処理 (例: エラーをフィードバックするプロンプトを作成)
                 // next_prompt_content = createErrorPrompt(error.message);
                 system_action_log = { type: "APPLYING_DIFF_FAILED", details: error.message };
-                status = `Error: Diff application failed on turn ${turn_count}`;
+                status = APRStatus.ERROR;
                 conversation_active = false;
             }
 
         } else {
             console.log("No clear next action detected. Terminating process.");
             system_action_log = { type: "TERMINATING", details: "No actionable tags detected in LLM response." };
-            status = "ERROR";
+            status = APRStatus.ERROR;
             conversation_active = false;
         }
 

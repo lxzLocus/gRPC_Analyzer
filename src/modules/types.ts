@@ -63,12 +63,17 @@ export type InternalProgressState = {
 export type LLMParsed = {
     thought: string | null;
     plan: string | null;
+    correctionGoals: string | null; // 新しいフィールド
     requiredFilepaths: string[];
     requiredFileInfos: RequiredFileInfo[]; // 新しいフィールド
     modifiedDiff: string;
+    modifiedLines?: number; // Modifiedセクションの行数（空チェック用）
     commentText: string;
     has_fin_tag: boolean;
-    has_no_changes_needed?: boolean; // LLM明示判断：変更不要タグ（オプショナル）
+    has_no_changes_needed: boolean; // LLM明示判断：修正不要タグ
+    no_progress_fallback: boolean; // システム判定：No Progress自動判定
+    has_verification_report: boolean; // 検証レポートタグ
+    ready_for_final_check?: boolean; // 最終確認フラグ
     // 新しいフィールド：LLMからの進行状況指示
     suggestedPhase?: ProcessingPhase;
     confidenceLevel?: 'HIGH' | 'MEDIUM' | 'LOW';
@@ -86,6 +91,8 @@ export type ParsedContentLog = {
     modified_diff: string | null;
     commentText: string | null;
     has_fin_tag: boolean;
+    has_no_changes_needed: boolean; // LLM明示判断
+    no_progress_fallback: boolean; // システム判定
 };
 
 export type Context = {
@@ -104,6 +111,14 @@ export type Context = {
     diff?: string;
     error?: Error | string;
     result?: unknown;
+    // Priority 1: 取得済み情報の追跡
+    retrievedSoFar?: {
+        fileContents: Set<string>;      // FILE_CONTENTで取得済みのファイルパス
+        directoryListings: Set<string>; // DIRECTORY_LISTINGで取得済みのディレクトリパス
+    };
+    // No Progress改善用フラグ
+    noProgressRetried?: boolean;        // No Progressリトライ済みフラグ
+    groundTruthChangedFiles?: string[]; // Ground Truthの変更ファイルリスト
 };
 
 export enum State {
@@ -115,7 +130,7 @@ export enum State {
     SystemAnalyzeRequest = 'SystemAnalyzeRequest',
     GetFileContent = 'GetFileContent',
     GetDirectoryListing = 'GetDirectoryListing',
-    ProcessRequiredInfos = 'ProcessRequiredInfos', // 新しいState
+    ProcessRequiredInfos = 'ProcessRequiredInfos',
     SendInfoToLLM = 'SendInfoToLLM',
     LLMReanalyze = 'LLMReanalyze',
     SystemParseDiff = 'SystemParseDiff',
@@ -123,6 +138,10 @@ export enum State {
     CheckApplyResult = 'CheckApplyResult',
     SendResultToLLM = 'SendResultToLLM',
     LLMNextStep = 'LLMNextStep',
+    SendVerificationPrompt = 'SendVerificationPrompt', // VERIFYING状態用プロンプト
+    LLMVerificationDecision = 'LLMVerificationDecision', // 検証後の判断
+    SendFinalCheckToLLM = 'SendFinalCheckToLLM', // レガシー：最終確認状態
+    LLMFinalDecision = 'LLMFinalDecision', // レガシー：最終判断状態
     SendErrorToLLM = 'SendErrorToLLM',
     LLMErrorReanalyze = 'LLMErrorReanalyze',
     End = 'End',
@@ -130,39 +149,21 @@ export enum State {
 
 // プロンプトテンプレート用の型定義
 export type PromptTemplateContext = {
+    pullRequestTitle: string;
     protoFile: string;
     protoFileChanges: string;
-    stubFileChanges: string;  // 新規追加: スタブファイルの差分
+    stubFileChanges: string; // NEW: スタブのdiff
     fileChanges: string;
     surroundedFilePath: string;
     suspectedFiles: string;
-    pullRequestTitle?: string;
-};
-
-// 終了ステータスの型定義
-export type CompletionType = 
-    | 'patch_generated'      // パッチ生成成功
-    | 'llm_no_changes'       // LLM明示判断：変更不要
-    | 'system_no_progress'   // システム判定：進捗なし
-    | 'incomplete'           // 未完了（最大ターン到達等）
-    | 'error';               // エラー
-
-// dialogue.json メタデータの型定義
-export type DialogueMetadata = {
-    completion_type: CompletionType;
-    total_turns: number;
-    total_tokens_used: number;
-    patch_file_path?: string;
-    error_message?: string;
-    summarization_count?: number;
-    final_token_count?: number;
+    systemState?: string; // FSM状態情報（オプション）
 };
 
 export type PromptFileConfig = {
     promptTextfile: string;
     protoFile: string;
     protoFileChanges: string;
-    stubFileChanges: string;  // 新規追加
+    stubFileChanges: string; // NEW: スタブのdiff
     fileChanges: string;
     surroundedFilePath: string;
     suspectedFiles: string;
@@ -221,7 +222,39 @@ export type ProcessingPlan = {
     directories: string[];
 };
 
-// 要約機能の型定義
+// Phase 3-2: diff適用システム改善のための追加型定義
+export type BackupInfo = {
+    backupPath: string;
+    timestamp: string;
+    originalFiles: string[];
+    backupSize: number;
+};
+
+export type DiffValidationResult = {
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+    appliedChanges: number;
+    skippedChanges: number;
+};
+
+export type DiffApplicationStats = {
+    totalLines: number;
+    addedLines: number;
+    deletedLines: number;
+    modifiedFiles: number;
+    processingTime: number;
+    backupCreated: boolean;
+};
+
+export type ErrorContext = {
+    diffPreview: string;
+    affectedFiles: string[];
+    systemState: string;
+    possibleCauses: string[];
+};
+
+// 対話履歴要約機能の型定義
 export type ConversationSummary = {
     original_goal_summary: string;
     progress_summary: string[];
@@ -266,37 +299,5 @@ export type SummarizeResponse = {
     summary: ConversationSummary;
     success: boolean;
     error?: string;
-};
-
-// Phase 3-2: diff適用システム改善のための追加型定義
-export type BackupInfo = {
-    backupPath: string;
-    timestamp: string;
-    originalFiles: string[];
-    backupSize: number;
-};
-
-export type DiffValidationResult = {
-    isValid: boolean;
-    errors: string[];
-    warnings: string[];
-    appliedChanges: number;
-    skippedChanges: number;
-};
-
-export type DiffApplicationStats = {
-    totalLines: number;
-    addedLines: number;
-    deletedLines: number;
-    modifiedFiles: number;
-    processingTime: number;
-    backupCreated: boolean;
-};
-
-export type ErrorContext = {
-    diffPreview: string;
-    affectedFiles: string[];
-    systemState: string;
-    possibleCauses: string[];
 };
 
