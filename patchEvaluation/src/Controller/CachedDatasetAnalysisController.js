@@ -60,16 +60,16 @@ export class CachedDatasetAnalysisController {
         const defaultConcurrency = Math.min(16, (os.cpus().length || 4) * 2);
         this.concurrency = concurrency || defaultConcurrency;
         
-        // プロジェクトレベル: 全プロジェクトを同時に処理（最大concurrency）
-        // PRレベル: 各プロジェクト内でも並列処理
-        this.projectLimit = pLimit(this.concurrency); // プロジェクトレベルも全並列
-        this.prLimit = pLimit(this.concurrency); // プルリクエストレベル
+        // 🚀 シンプル化: 単一のpLimitでPRレベル並列処理
+        // 全PRをフラット化して処理するため、プロジェクトレベルの制限は不要
+        this.prLimit = pLimit(this.concurrency); // PRレベル（メイン並列処理）
         
         // LLM API呼び出し専用制限（Rate Limit対策）
-        // OpenAI APIは通常、同時リクエスト数に制限があるため、少し控えめに設定
-        this.llmLimit = pLimit(Math.min(this.concurrency, 10)); // LLM API用（最大10並列）
+        // OpenAI APIは通常、同時リクエスト数に制限があるため
+        // concurrencyに比例させつつ、最大15並列に制限
+        this.llmLimit = pLimit(Math.min(this.concurrency, 15)); // LLM API用
         
-        console.log(`⚡ 並列処理設定: ${this.concurrency}並列 (プロジェクト: ${this.concurrency}, PR: ${this.concurrency}, LLM API: ${Math.min(this.concurrency, 10)})`);
+        console.log(`⚡ 並列処理設定: PR処理=${this.concurrency}並列, LLM API=${Math.min(this.concurrency, 15)}並列`);
     }
 
     /**
@@ -158,6 +158,12 @@ export class CachedDatasetAnalysisController {
         
         this.consoleView.showAnalysisStart(datasetDir, aprOutputPath);
         
+        // 🚀 並列処理時は詳細ログを抑制
+        if (this.concurrency > 1) {
+            this.consoleView.setVerbose(false);
+            console.log('📢 並列処理モード: 詳細ログを抑制（進捗のみ表示）');
+        }
+        
         // キャッシュ使用状況を表示
         if (useCache) {
             console.log('📈 Diffキャッシュ機能: 有効');
@@ -171,10 +177,10 @@ export class CachedDatasetAnalysisController {
             // パスの取得
             const projectDirs = await this.datasetRepository.getProjectDirectories(datasetDir);
 
-            console.log(`📦 ${projectDirs.length}個のプロジェクトを並列処理します`);
+            console.log(`📦 ${projectDirs.length}個のプロジェクトを検出`);
 
-            // 事前に全PR数をカウント（並列処理による競合を防ぐ）
-            let totalPRCount = 0;
+            // 🚀 フラット化: 全PRを事前に列挙して真の並列処理を実現
+            const allPRTasks = [];
             for (const projectName of projectDirs) {
                 const projectPath = path.join(datasetDir, projectName);
                 try {
@@ -183,7 +189,16 @@ export class CachedDatasetAnalysisController {
                         const categoryPath = path.join(projectPath, category);
                         try {
                             const titleDirs = await this.datasetRepository.getPullRequestDirectories(categoryPath);
-                            totalPRCount += titleDirs.length;
+                            for (const pullRequestTitle of titleDirs) {
+                                allPRTasks.push({
+                                    projectName,
+                                    category,
+                                    pullRequestTitle,
+                                    categoryPath,
+                                    datasetDir,
+                                    aprOutputPath
+                                });
+                            }
                         } catch (err) {
                             // カウントは続行
                         }
@@ -194,13 +209,30 @@ export class CachedDatasetAnalysisController {
             }
             
             // 事前に総数を設定
-            this.stats.totalDatasetEntries = totalPRCount;
-            console.log(`📋 合計 ${totalPRCount}個のPRを処理します`);
+            this.stats.totalDatasetEntries = allPRTasks.length;
+            console.log(`📋 合計 ${allPRTasks.length}個のPRを ${this.concurrency}並列で処理します`);
 
-            // {dataset}/{projectName}/ を並列処理
+            // 🚀 フラット化された全PRを単一のpLimitで真の並列処理
+            let completedCount = 0;
+            const progressInterval = Math.max(1, Math.floor(allPRTasks.length / 20)); // 5%ごとに進捗表示
+            
             await Promise.all(
-                projectDirs.map(projectName => 
-                    this.projectLimit(() => this.processProject(projectName, datasetDir, aprOutputPath))
+                allPRTasks.map(task => 
+                    this.prLimit(async () => {
+                        await this.processPullRequest(
+                            task.projectName,
+                            task.category,
+                            task.pullRequestTitle,
+                            task.categoryPath,
+                            task.datasetDir,
+                            task.aprOutputPath
+                        );
+                        completedCount++;
+                        if (completedCount % progressInterval === 0 || completedCount === allPRTasks.length) {
+                            const pct = ((completedCount / allPRTasks.length) * 100).toFixed(1);
+                            console.log(`⏳ 進捗: ${completedCount}/${allPRTasks.length} (${pct}%)`);
+                        }
+                    })
                 )
             );
 
@@ -430,9 +462,12 @@ export class CachedDatasetAnalysisController {
                 LLM_B（4軸評価）とLLM_C（Intent Fulfillment評価）を同時に実行
                 Rate Limit対策でllmLimitを使用
                 */
-                console.log('🚀 LLM評価の並列実行開始 (LLM_B + LLM_C)');
-                console.log('   - finalModInfo.diff length:', finalModInfo.diff?.length || 0);
-                console.log('   - groundTruthDiff length:', groundTruthDiff?.length || 0);
+                // デバッグログはverboseモード時のみ
+                if (this.consoleView.verbose) {
+                    console.log('🚀 LLM評価の並列実行開始 (LLM_B + LLM_C)');
+                    console.log('   - finalModInfo.diff length:', finalModInfo.diff?.length || 0);
+                    console.log('   - groundTruthDiff length:', groundTruthDiff?.length || 0);
+                }
                 
                 await Promise.all([
                     // LLM_B: 4軸評価
@@ -451,9 +486,11 @@ export class CachedDatasetAnalysisController {
                     ))
                 ]);
                 
-                console.log('✅ LLM評価の並列実行完了');
-                console.log('   - llmEvaluation exists:', !!finalModInfo.llmEvaluation);
-                console.log('   - intentFulfillmentEvaluation exists:', !!finalModInfo.intentFulfillmentEvaluation);
+                if (this.consoleView.verbose) {
+                    console.log('✅ LLM評価の並列実行完了');
+                    console.log('   - llmEvaluation exists:', !!finalModInfo.llmEvaluation);
+                    console.log('   - intentFulfillmentEvaluation exists:', !!finalModInfo.intentFulfillmentEvaluation);
+                }
 
                 // Intent Fulfillment評価結果の表示
                 if (finalModInfo.intentFulfillmentEvaluation) {
@@ -464,8 +501,10 @@ export class CachedDatasetAnalysisController {
                 const skipReason = this.analyzeEvaluationSkipReason(finalModsResult, aprLogData);
                 
                 this.consoleView.showNoFinalModification();
-                console.log(`   📋 評価スキップ理由: ${skipReason.reason}`);
-                console.log(`   📋 詳細: ${skipReason.details}`);
+                if (this.consoleView.verbose) {
+                    console.log(`   📋 評価スキップ理由: ${skipReason.reason}`);
+                    console.log(`   📋 詳細: ${skipReason.details}`);
+                }
                 
                 // 最終修正なしの場合も評価パイプライン完了とみなす（スキップケース）
                 this.stats.incrementEvaluationPipelineSuccess();

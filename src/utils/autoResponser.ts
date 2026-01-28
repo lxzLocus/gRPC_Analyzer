@@ -531,7 +531,7 @@ async function main() {
     const endTime = new Date().toISOString();
 
     const llmProvider = openAIClient.getProviderName();
-    const llmModel = process.env.OPENAI_MODEL || 'gpt-4o';
+    const llmModel = process.env.OPENAI_MODEL || 'gpt-5.1-chat-latest';
     
     // gpt-5モデルの場合はtemperatureを含めない
     const llmConfig: any = {

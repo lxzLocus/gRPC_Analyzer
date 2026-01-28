@@ -4015,7 +4015,7 @@ Please respond again using only the allowed tags.`;
         
         if (provider === 'openai') {
             // llm.modelを優先し、次にopenai.model、環境変数、最後にデフォルト
-            return this.config.get('llm.model', this.config.get('openai.model', process.env.OPENAI_MODEL || 'gpt-4o'));
+            return this.config.get('llm.model', this.config.get('openai.model', process.env.OPENAI_MODEL || 'gpt-5.1-chat-latest'));
         } else if (provider === 'gemini') {
             return this.config.get('gemini.model', 'gemini-1.5-pro');
         } else if (provider === 'restapi') {

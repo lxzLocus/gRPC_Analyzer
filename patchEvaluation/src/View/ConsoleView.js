@@ -11,6 +11,21 @@ import {
 } from '../types/AgentStates.js';
 
 export class ConsoleView {
+    constructor() {
+        // 並列処理時のログ出力を抑制するフラグ
+        // true: 詳細ログを出力（シーケンシャル処理向け）
+        // false: 進捗のみ出力（並列処理向け）
+        this.verbose = true;
+    }
+
+    /**
+     * 詳細ログ出力の有効/無効を設定
+     * @param {boolean} verbose - trueで詳細ログ有効
+     */
+    setVerbose(verbose) {
+        this.verbose = verbose;
+    }
+
     /**
      * 分析開始メッセージの表示
      * @param {string} datasetPath - データセットパス
@@ -28,7 +43,9 @@ export class ConsoleView {
      * @param {string} pullRequestKey - プルリクエストキー
      */
     showProcessingStart(pullRequestKey) {
-        console.log(`\n🔄 処理開始: ${pullRequestKey}`);
+        if (this.verbose) {
+            console.log(`\n🔄 処理開始: ${pullRequestKey}`);
+        }
     }
 
     /**
@@ -46,6 +63,7 @@ export class ConsoleView {
      * @param {string[]} fileList - 変更されたファイルリスト
      */
     showGroundTruthDiffInfo(fileCount, fileList) {
+        if (!this.verbose) return;
         console.log(`   📄 変更ファイル数: ${fileCount}`);
         if (fileList.length > 0) {
             console.log('   📝 変更されたファイル:');
@@ -61,6 +79,7 @@ export class ConsoleView {
      * @param {string} errorMessage - エラーメッセージ
      */
     showGroundTruthDiffError(errorMessage) {
+        if (!this.verbose) return;
         console.log(`   ❌ Ground Truth Diff生成エラー: ${errorMessage}`);
     }
     /**
@@ -69,6 +88,7 @@ export class ConsoleView {
      * @param {number} fileCount - ファイル数
      */
     showAPRLogFound(aprLogPath, fileCount) {
+        if (!this.verbose) return;
         console.log(`  ✅ APRログ発見: ${aprLogPath} (${fileCount} ファイル)`);
     }
 
@@ -77,6 +97,7 @@ export class ConsoleView {
      * @param {number} logCount - ログファイル数
      */
     showAPRLogsFound(logCount) {
+        if (!this.verbose) return;
         console.log(`  ✅ APRログ発見: ${logCount} ログファイル`);
     }
 
@@ -85,6 +106,7 @@ export class ConsoleView {
      * @param {string} message - メッセージ
      */
     showAPRLogNotFound(message) {
+        if (!this.verbose) return;
         console.log(`  ⚠️ ${message}`);
     }
 
@@ -94,6 +116,7 @@ export class ConsoleView {
      * @param {string} errorMessage - エラーメッセージ
      */
     showAPRLogAccessError(aprLogPath, errorMessage) {
+        if (!this.verbose) return;
         console.log(`  ❌ APRログアクセスエラー: ${aprLogPath} - ${errorMessage}`);
     }
 
