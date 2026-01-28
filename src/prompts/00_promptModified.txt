@@ -26,11 +26,11 @@ You are tasked with re-checking and refining the previous code modifications mad
 
 ## Your Task & Response Format ##
 1.  **Analyze & Think**: Confirm that the modification was applied. Based on your current plan, decide your next action and explain your reasoning in a `%_Thought_%` section.
-2.  **Act**: Proceed with the next action by using ONE of the following action tags: `%_Reply Required_%`, `%_Modified_%`, or `%%_Fin_%%`.
+2.  **Act**: Proceed with the next action by using ONE of the following action tags: `%_Reply Required_%` or `%_Modified_%`.
 
-// Expected response tags: %_Thought_%, and then either %_Reply Required_%, %_Modified_%, or %%_Fin_%%.
+// Expected response tags: %_Thought_%, and then either %_Reply Required_% or %_Modified_%.
 
-**IMPORTANT RULE: If you output a `%_Modified_%` tag and you believe this is the FINAL modification needed to complete your entire plan, you MUST also include the `%%_Fin_%%` tag in the SAME response.**
+**NOTE**: After all modifications are complete, the system will automatically transition you to the VERIFYING state for quality review.
 
 ---
 ## Response Structure Example ##
@@ -45,6 +45,4 @@ You are tasked with re-checking and refining the previous code modifications mad
 - old line
 + new line
 
-// --- OR ---
-
-%%_Fin_%%
+// When all modifications are complete, the system will transition to VERIFYING state.
