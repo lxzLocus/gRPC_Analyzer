@@ -172,12 +172,26 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`�📈 キャッシュ機能: ${reportOptions.useCache ? '有効' : '無効'}`);
     if (reportOptions.clearCacheFirst) {
         console.log(`🗑️ 実行前キャッシュクリア: 有効`);
-    }
-    console.log('=============================================\n');
+    }    
+    // 実行時間計測開始
+    const startTime = Date.now();
+    const startTimeFormatted = new Date(startTime).toLocaleString('ja-JP');
+    console.log(`⏰ 評価開始時刻: ${startTimeFormatted}`);    console.log('=============================================\n');
 
     cachedDatasetLoop(selectedDataset, aprOutputPath, reportOptions)
         .then((stats) => {
+            // 実行時間計測終了
+            const endTime = Date.now();
+            const executionTime = endTime - startTime;
+            const executionMinutes = Math.floor(executionTime / 60000);
+            const executionSeconds = Math.floor((executionTime % 60000) / 1000);
+            const endTimeFormatted = new Date(endTime).toLocaleString('ja-JP');
+            
             console.log('\n🎉 分析が正常に完了しました！');
+            console.log('=============================================');
+            console.log(`⏰ 評価終了時刻: ${endTimeFormatted}`);
+            console.log(`⏱️  総実行時間: ${executionMinutes}分${executionSeconds}秒 (${Math.floor(executionTime / 1000)}秒)`);
+            console.log('=============================================');
             console.log(`✅ ${stats.aprParseSuccess}/${stats.totalDatasetEntries} のマッチングペアが成功`);
             
             if (stats.aprParseSuccess > 0) {
@@ -203,7 +217,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
         })
         .catch(err => {
+            // エラー時も実行時間を出力
+            const endTime = Date.now();
+            const executionTime = endTime - startTime;
+            const executionMinutes = Math.floor(executionTime / 60000);
+            const executionSeconds = Math.floor((executionTime % 60000) / 1000);
+            const endTimeFormatted = new Date(endTime).toLocaleString('ja-JP');
+            
             console.error("❌ 分析中にエラーが発生:", err);
             console.error("スタックトレース:", err.stack);
+            console.log('=============================================');
+            console.log(`⏰ エラー発生時刻: ${endTimeFormatted}`);
+            console.log(`⏱️  実行時間: ${executionMinutes}分${executionSeconds}秒 (${Math.floor(executionTime / 1000)}秒)`);
+            console.log('=============================================');
         });
 }

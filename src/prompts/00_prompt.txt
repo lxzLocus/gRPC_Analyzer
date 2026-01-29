@@ -9,6 +9,16 @@ You are tasked with identifying and fixing potential gRPC-related issues in the 
 - Ensure that all necessary files affected by the bug are modified, beyond just those listed in "### Suspected Files ###".
 - Output only the fully corrected source code **for all affected files**, not just the initially provided files.
 
+### CRITICAL: Complete Impact Analysis ###
+- **Do NOT provide partial fixes.** Always consider the FULL scope of changes required.
+- **Function signature changes**: When you change a function's parameters or return type, you MUST also update ALL callers of that function throughout the codebase.
+- **Struct field additions**: When adding new fields to a struct or message, update ALL places where that struct is initialized or used.
+- **Interface changes**: When modifying an interface, update ALL implementations and ALL code that uses that interface.
+- **Propagation of values**: When a proto change adds a new field, trace how that field flows through the system (e.g., from client → server → database) and update ALL layers.
+
+### WARNING: Partial fixes will be rejected ###
+If you modify a function signature but don't update its callers, the code will fail to compile. Always request additional files if you need to see the full call graph before making changes.
+
 ---
 
 ## Context ##

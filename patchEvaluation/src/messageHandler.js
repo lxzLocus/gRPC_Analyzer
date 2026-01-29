@@ -104,7 +104,9 @@ class MessageHandler {
             const trimmed = line.trim();
             
             // 新しいタグ形式をサポート: %_Thought_%, %_Plan_%, %_Reply Required_%, %_Modified_%
-            const tagMatch = trimmed.match(/^%_(.+?)_%$/);
+            // 注意: LLMがマークダウン形式（例: # %_Modified_%）で出力することがあるため、
+            // 行全体の完全一致ではなく、行内にタグが含まれているかをチェック
+            const tagMatch = trimmed.match(/%_([A-Za-z_]+(?:\s+[A-Za-z_]+)?)_%/);
 
             if (tagMatch) {
                 const tagName = tagMatch[1];

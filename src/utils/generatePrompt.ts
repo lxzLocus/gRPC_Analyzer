@@ -259,20 +259,28 @@ async function main() {
                 const protoFiles: string[] = [];
                 const generatedFiles: string[] = [];
                 const handwrittenFiles: string[] = [];
+                const testFiles: string[] = []; // テストファイルも別途追跡
 
                 changedFiles.forEach((file: string) => {
                     if (file.endsWith('.proto')) {
                         protoFiles.push(file);
                     } else if (isGeneratedFile(file)) {
                         generatedFiles.push(file);
-                    } else if (!isExcludedFile(file) && !isTestFile(file)) {
-                        handwrittenFiles.push(file);
+                    } else if (!isExcludedFile(file)) {
+                        // テストファイルも手書きコードとして含める（proto変更の影響を受ける可能性があるため）
+                        if (isTestFile(file)) {
+                            testFiles.push(file);
+                            handwrittenFiles.push(file); // テストファイルもhandwrittenに含める
+                        } else {
+                            handwrittenFiles.push(file);
+                        }
                     }
                 });
 
                 console.log('Categorized Proto Files:', protoFiles);
                 console.log('Categorized Generated Files:', generatedFiles);
                 console.log('Categorized Handwritten Files:', handwrittenFiles);
+                console.log('Categorized Test Files:', testFiles);
 
 
                 // ステップB: トップダウンでプロジェクト全体の詳細な構造を一度に取得

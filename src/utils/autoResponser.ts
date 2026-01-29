@@ -109,11 +109,33 @@ class MessageHandler {
 
             if (currentTag) {
                 if (currentTag === 'required') {
-                    const match = trimmed.match(/"(.+?)"/);
-                    if (match) {
-                        sections.requiredFilepaths.push(match[1]);
-                    } else if (trimmed && !trimmed.startsWith('[') && !trimmed.startsWith(']')) {
-                        sections.requiredFilepaths.push(trimmed);
+                    // JSON形式の配列要素をパース
+                    // 例: {"type": "FILE_CONTENT", "path": "ca/ca_test.go"}
+                    if (trimmed.startsWith('{') && trimmed.includes('"path"')) {
+                        try {
+                            // 末尾のカンマを除去してからパース
+                            const jsonStr = trimmed.endsWith(',') ? trimmed.slice(0, -1) : trimmed;
+                            const parsed = JSON.parse(jsonStr);
+                            if (parsed.path) {
+                                sections.requiredFilepaths.push(parsed.path);
+                            } else if (parsed.filePath) {
+                                sections.requiredFilepaths.push(parsed.filePath);
+                            }
+                        } catch {
+                            // JSONパース失敗時は古い正規表現フォールバック（"path": "value"を抽出）
+                            const pathMatch = trimmed.match(/"path"\s*:\s*"([^"]+)"/);
+                            if (pathMatch) {
+                                sections.requiredFilepaths.push(pathMatch[1]);
+                            }
+                        }
+                    } else if (trimmed && !trimmed.startsWith('[') && !trimmed.startsWith(']') && !trimmed.startsWith('{')) {
+                        // プレーンテキストのファイルパス
+                        const match = trimmed.match(/"(.+?)"/);
+                        if (match) {
+                            sections.requiredFilepaths.push(match[1]);
+                        } else {
+                            sections.requiredFilepaths.push(trimmed);
+                        }
                     }
                 } else if (buffers[currentTag]) {
                     buffers[currentTag].push(line);

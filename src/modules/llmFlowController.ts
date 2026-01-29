@@ -105,6 +105,11 @@ class LLMFlowController {
     private tagViolationRetryCount: number = 0;
     private maxTagViolationRetries: number = 2; // 最大リトライ回数
     
+    // 調査フェーズ強制終了管理
+    private consecutiveFileRequestCount: number = 0;
+    private maxConsecutiveFileRequests: number = 5; // 連続ファイルリクエストの上限
+    private hasEverProducedModification: boolean = false; // 修正を一度でも出力したか
+    
     // 処理オプション
     private enablePreVerification: boolean = true; // 事前検証を有効にするかどうか
     
@@ -797,10 +802,26 @@ class LLMFlowController {
                 if (parsed.has_no_changes_needed) {
                     // LLMが追加情報なしで「修正不要」と判断した場合 → VERIFYINGへ
                     console.log('✅ FSM: No changes needed detected in AWAITING_INFO, transitioning to VERIFYING');
+                    this.consecutiveFileRequestCount = 0; // リセット
                     await this.agentStateService.transition(AgentState.VERIFYING, 'no_changes_needed_from_awaiting_info');
                     this.state = State.SendVerificationPrompt;
                 } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
-                    console.log(`📝 FSM: Requesting ${parsed.requiredFilepaths.length} files`);
+                    // 調査フェーズ強制終了チェック
+                    this.consecutiveFileRequestCount++;
+                    console.log(`📝 FSM: Requesting ${parsed.requiredFilepaths.length} files (consecutive: ${this.consecutiveFileRequestCount}/${this.maxConsecutiveFileRequests})`);
+                    
+                    if (this.consecutiveFileRequestCount >= this.maxConsecutiveFileRequests && !this.hasEverProducedModification) {
+                        console.warn(`⚠️ FSM: Investigation phase limit reached (${this.maxConsecutiveFileRequests} consecutive file requests without modification)`);
+                        console.warn('⚠️ FSM: Forcing transition to MODIFYING state to produce output');
+                        
+                        // 調査フェーズから強制的に修正フェーズへ遷移
+                        await this.agentStateService.transition(AgentState.MODIFYING, 'force_exit_investigation_phase');
+                        
+                        // 調査終了プロンプトを送信
+                        await this.sendForceModificationPrompt();
+                        return;
+                    }
+                    
                     this.state = State.SystemAnalyzeRequest;
                 } else {
                     console.warn('⚠️ FSM: In AWAITING_INFO but no file requests, forcing default requests');
@@ -821,6 +842,9 @@ class LLMFlowController {
                 // 修正中状態: パッチ適用
                 if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
                     console.log('🔧 FSM: Applying patch in MODIFYING state');
+                    // 修正が出力されたのでフラグを更新
+                    this.hasEverProducedModification = true;
+                    this.consecutiveFileRequestCount = 0; // リセット
                     this.state = State.SystemParseDiff;
                 } else if (parsed.has_no_changes_needed) {
                     // LLMが修正不要（修正完了）を示した場合 → VERIFYINGへ遷移
@@ -829,6 +853,7 @@ class LLMFlowController {
                     this.state = State.SendVerificationPrompt;
                 } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
                     console.log('📝 FSM: Requesting additional files before modification');
+                    this.consecutiveFileRequestCount++;
                     this.state = State.SystemAnalyzeRequest;
                 } else {
                     console.warn('⚠️ FSM: In MODIFYING but no patch or file requests');
@@ -877,13 +902,29 @@ class LLMFlowController {
                 // (ANALYSISからVERIFYINGへの直接遷移は不可)
                 if (parsed.has_no_changes_needed) {
                     console.log('✅ FSM: No changes needed detected in ANALYSIS, transitioning to VERIFYING for validation');
+                    this.consecutiveFileRequestCount = 0; // リセット
                     await this.agentStateService.transition(AgentState.VERIFYING, 'no_changes_needed_to_verification');
                     this.state = State.LLMVerificationDecision;
                 } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
-                    console.log('📝 FSM: Continuing analysis with file requests');
+                    // 調査フェーズのファイルリクエストをカウント
+                    this.consecutiveFileRequestCount++;
+                    console.log(`📝 FSM: Continuing analysis with file requests (consecutive: ${this.consecutiveFileRequestCount}/${this.maxConsecutiveFileRequests})`);
+                    
+                    // 調査フェーズ強制終了チェック
+                    if (this.consecutiveFileRequestCount >= this.maxConsecutiveFileRequests && !this.hasEverProducedModification) {
+                        console.warn(`⚠️ FSM: Investigation phase limit reached in ANALYSIS state`);
+                        console.warn('⚠️ FSM: Forcing transition to MODIFYING state to produce output');
+                        
+                        await this.agentStateService.transition(AgentState.MODIFYING, 'force_exit_investigation_phase');
+                        await this.sendForceModificationPrompt();
+                        return;
+                    }
+                    
                     this.state = State.SystemAnalyzeRequest;
                 } else if (parsed.modifiedDiff && parsed.modifiedDiff.length > 0) {
                     console.log('🔧 FSM: Found patch in analysis, applying');
+                    this.hasEverProducedModification = true;
+                    this.consecutiveFileRequestCount = 0; // リセット
                     this.state = State.SystemParseDiff;
                 } else {
                     // タグも内容もない空のレスポンス → 強制的にNo Progress扱い
@@ -1981,6 +2022,65 @@ Please respond again using only the allowed tags.`;
         console.log(`✅ Corrective retry completed (retry ${this.tagViolationRetryCount}/${this.maxTagViolationRetries})`);
         
         // llmDecision()に戻って再検証
+        await this.llmDecision();
+    }
+
+    /**
+     * 調査フェーズから強制的に修正フェーズへ移行するプロンプトを送信
+     * INVESTIGATION_PHASE問題を解決するための機能
+     */
+    private async sendForceModificationPrompt(): Promise<void> {
+        console.log('🔄 Sending force modification prompt to exit investigation phase...');
+        
+        // 収集したファイル情報のサマリーを作成
+        const collectedFiles = [...this.internalProgress.contextAccumulated.sourceFiles];
+        const filesSummary = collectedFiles.length > 0
+            ? `Files collected so far (${collectedFiles.length}):\n${collectedFiles.slice(0, 10).map(f => `- ${f}`).join('\n')}${collectedFiles.length > 10 ? `\n... and ${collectedFiles.length - 10} more` : ''}`
+            : 'No files collected yet.';
+        
+        const forceModificationPrompt = `
+## IMPORTANT: Investigation Phase Limit Reached ##
+
+You have made ${this.consecutiveFileRequestCount} consecutive file requests without producing any modifications.
+The investigation phase is now complete. You MUST now proceed to the modification phase.
+
+**Current Status:**
+${filesSummary}
+
+**Required Action:**
+Based on the commit message and proto changes you've analyzed, you MUST now:
+1. Produce a concrete modification (%_Modified_% tag) based on your analysis
+2. OR explicitly conclude that no changes are needed (%_No_Changes_Needed_% tag) with clear justification
+
+**Reminder of the Task:**
+- Analyze the proto file changes
+- Identify what handwritten code needs to be updated
+- Apply the necessary modifications
+
+**Do NOT request more files.** Use what you have collected to make your best determination.
+
+You are now in the MODIFYING state. Please provide your output:
+`;
+        
+        // メッセージを送信
+        this.currentMessages = await this.sendMessageWithSummarizer("user", forceModificationPrompt);
+        const llm_response = await this.openAIClient.fetchOpenAPI(this.currentMessages);
+        this.context.llmResponse = llm_response;
+        
+        // ターン数とトークン数を更新
+        this.currentTurn++;
+        const usage = llm_response?.usage || { prompt_tokens: 0, completion_tokens: 0, total: 0 };
+        this.totalPromptTokens += usage.prompt_tokens;
+        this.totalCompletionTokens += usage.completion_tokens;
+        
+        // LLM応答を解析
+        const content = llm_response?.choices?.[0]?.message?.content || '';
+        const currentAgentState = this.agentStateService.getCurrentState();
+        this.context.llmParsed = this.messageHandler.analyzeMessages(content, currentAgentState);
+        
+        console.log('✅ Force modification prompt sent, processing response...');
+        
+        // llmDecision()で応答を処理
         await this.llmDecision();
     }
 

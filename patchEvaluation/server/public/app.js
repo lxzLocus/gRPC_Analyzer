@@ -2125,6 +2125,11 @@ function renderProcessingFlowStats(stats) {
             <!-- 処理フロー図 -->
             <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 4px solid #667eea;">
                 <h4 style="margin-bottom: 15px; color: #495057;">🔄 処理フローの推移</h4>
+                <p style="font-size: 0.85em; color: #6c757d; margin-bottom: 15px; background: #fff3cd; padding: 10px; border-radius: 5px; border-left: 3px solid #ffc107;">
+                    💡 <strong>「APR成功」と「APR終了ステータス」の違い:</strong><br>
+                    • <strong>APR成功</strong> = 評価システムでパッチ抽出に成功した件数（LLM_B評価 + SKIPPED）<br>
+                    • <strong>APR終了ステータス(Fin)</strong> = APRエージェントが正常終了した件数（ログ解析失敗分を含む）
+                </p>
                 <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
                     <div class="flow-step">
                         <div class="flow-label" style="font-size: 0.85em; color: #6c757d;">データセット</div>
@@ -2134,7 +2139,7 @@ function renderProcessingFlowStats(stats) {
                     <div class="flow-step">
                         <div class="flow-label" style="font-size: 0.85em; color: #6c757d;">APR成功</div>
                         <div class="flow-value" style="font-size: 1.8em; font-weight: bold; color: #43e97b;">${aprSuccessCount}</div>
-                        <div class="flow-sublabel" style="font-size: 0.75em; color: #6c757d;">-${totalPRs - aprSuccessCount} 失敗</div>
+                        <div class="flow-sublabel" style="font-size: 0.75em; color: #6c757d;">-${totalPRs - aprSuccessCount} 解析失敗</div>
                     </div>
                     <div class="flow-arrow" style="font-size: 2em; color: #adb5bd;">→</div>
                     <div class="flow-step">

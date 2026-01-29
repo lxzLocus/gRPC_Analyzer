@@ -8,6 +8,28 @@ You are tasked with re-checking and refining the previous code modifications mad
 - Provide a fully corrected version of the code for all affected files, if modifications are necessary.
 - Provide the diff in the format outlined below.
 
+### CRITICAL: Complete Impact Analysis ###
+**You MUST ensure your changes are complete. Partial fixes are NOT acceptable.**
+
+1. **Function Signature Changes**: If you changed a function's parameters or return type:
+   - ✓ You MUST update ALL callers of that function
+   - ✗ Leaving callers unchanged will cause compile errors
+   - Request additional files with %_Reply Required_% if you need to see callers
+
+2. **Struct/Message Field Changes**: If you added or modified fields:
+   - ✓ You MUST update ALL struct initializations
+   - ✓ You MUST update serialization/deserialization code
+   - ✗ Missing initializations will cause runtime bugs
+
+3. **Interface Changes**: If you modified an interface:
+   - ✓ You MUST update ALL implementations
+   - ✗ Inconsistent implementations will cause compile errors
+
+4. **Value Propagation**: When a proto adds a new field:
+   - ✓ Trace the field from origin to destination (client → server → handler → storage)
+   - ✓ Update ALL layers that handle this data
+   - ✗ Skipping layers will cause the value to be lost
+
 ---
 
 ## Context ##
