@@ -190,9 +190,7 @@ class MessageHandler {
             }
             
             // 【優先3】通常タグ形式をサポート: %_Thought_%, %_Plan_%, %_Reply Required_%, %_Modified_%
-            // 注意: LLMがマークダウン形式（例: ### %_Modified_% (uni-diff patch)）で出力することがあるため、
-            // 行全体の完全一致ではなく、行内にタグが含まれているかをチェック
-            const tagMatch = trimmed.match(/%_([A-Za-z_]+(?:\s+[A-Za-z_]+)?)_%/);
+            const tagMatch = trimmed.match(/^%_(.+?)_%$/);
 
             if (tagMatch) {
                 const tagName = tagMatch[1];
@@ -209,11 +207,6 @@ class MessageHandler {
                     currentTag = 'modified';
                 } else if (tagName === 'Comment') {
                     currentTag = 'comment';
-                } else if (tagName === 'Verification' || tagName === 'Verification_Report') {
-                    // %_Verification_% と %_Verification_Report_% は無視（reply_requiredとして扱わない）
-                    currentTag = null;
-                    console.log(`🏷️ Ignoring verification tag: ${tagName}`);
-                    continue;
                 } else {
                     // 従来形式のサポート（小文字変換）
                     currentTag = tagName.toLowerCase().replace(/ /g, '_');
