@@ -514,6 +514,32 @@ class ReportBasedLogService {
                 stats.modificationStats.averageFiles = (stats.modificationStats.totalFiles / stats.totalPRs).toFixed(1);
             }
 
+            // SKIPPEDケースのNO-OP vs ERROR内訳を計算
+            // finalCategoryLevelsのSKIPPEDエントリからaprStatusを分析
+            const skippedEntries = finalCategoryLevels?.SKIPPED || [];
+            const skipDetails = {
+                totalSkipped: skippedEntries.length,
+                noOpCount: 0,    // APR FINISHED = 正常に修正不要と判断
+                errorCount: 0,   // APR ERROR = 失敗
+                unknownCount: 0, // APRステータス不明
+                aprStatusBreakdown: {}
+            };
+            
+            skippedEntries.forEach(entry => {
+                const aprStatus = entry.aprStatus || 'UNKNOWN';
+                skipDetails.aprStatusBreakdown[aprStatus] = (skipDetails.aprStatusBreakdown[aprStatus] || 0) + 1;
+                
+                if (aprStatus === 'FINISHED') {
+                    skipDetails.noOpCount++;
+                } else if (aprStatus === 'ERROR') {
+                    skipDetails.errorCount++;
+                } else {
+                    skipDetails.unknownCount++;
+                }
+            });
+            
+            stats.skipDetails = skipDetails;
+
             return stats;
         } catch (error) {
             console.error(`❌ Error in getReportStatistics for ${sessionId}:`, error);

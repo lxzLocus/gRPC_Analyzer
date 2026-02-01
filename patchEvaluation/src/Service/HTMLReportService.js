@@ -815,7 +815,10 @@ export class HTMLReportService {
             repairTypes: {},
             skipDetails: {
                 totalSkipped: 0,
+                noOpCount: 0,      // APR FINISHED + NO-OP（正常な修正不要判断）
+                errorCount: 0,     // APR ERROR（失敗）
                 reasonBreakdown: {},
+                aprStatusBreakdown: { FINISHED: 0, ERROR: 0, UNKNOWN: 0 },
                 detailedBreakdown: []
             }
         };
@@ -832,10 +835,25 @@ export class HTMLReportService {
                     }
                     results.skipDetails.reasonBreakdown[skipReason]++;
 
+                    // APRステータスを取得してNO-OP vs ERRORを区別
+                    const aprStatus = pair.aprStatus || pair.finalModification?.skipReason?.metadata?.experimentStatus || 'UNKNOWN';
+                    
+                    // APRステータス別カウント
+                    if (aprStatus === 'FINISHED') {
+                        results.skipDetails.noOpCount++;
+                        results.skipDetails.aprStatusBreakdown.FINISHED++;
+                    } else if (aprStatus === 'ERROR') {
+                        results.skipDetails.errorCount++;
+                        results.skipDetails.aprStatusBreakdown.ERROR++;
+                    } else {
+                        results.skipDetails.aprStatusBreakdown.UNKNOWN++;
+                    }
+                    
                     results.skipDetails.detailedBreakdown.push({
                         reason: skipReason,
                         datasetEntry: pair.datasetEntry || `${pair.project || 'Unknown'}/${pair.category || 'Unknown'}/${pair.pullRequest || 'Unknown'}`,
                         project: pair.project || this.extractProjectName(pair.datasetEntry),
+                        aprStatus: aprStatus,
                         metadata: pair.finalModification?.skipReason?.metadata || null
                     });
                 }

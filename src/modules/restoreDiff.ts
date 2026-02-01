@@ -53,7 +53,28 @@ class RestoreDiff {
                     console.log(`📁 Processing file: ${relativePath}`);
                 } else if (line.startsWith('+++ ')) {
                     const newPath = line.substring(4).trim().replace(/^b\//, '');
-                    currentFile = path.join(this.sourceCodePath, newPath);
+                    
+                    // ファイルパスの解決：premerge/サブディレクトリを優先
+                    // 注意: commit_snapshot_*/ は正解データ（マージ後）なので使用しない
+                    const pathCandidates = [
+                        path.join(this.sourceCodePath, 'premerge', newPath),  // premergeを優先
+                        path.join(this.sourceCodePath, newPath),              // 直接パス（フォールバック）
+                    ];
+                    
+                    currentFile = null;
+                    for (const candidate of pathCandidates) {
+                        if (fs.existsSync(candidate)) {
+                            currentFile = candidate;
+                            console.log(`📄 Found file at: ${currentFile}`);
+                            break;
+                        }
+                    }
+                    
+                    if (!currentFile) {
+                        console.warn(`⚠️ File not found in any candidate path:`);
+                        pathCandidates.forEach(p => console.warn(`   - ${p}`));
+                        currentFile = pathCandidates[0]; // フォールバック用に最初の候補を設定
+                    }
 
                     console.log(`📄 Reading file: ${currentFile}`);
                     if (fs.existsSync(currentFile)) {
@@ -104,12 +125,48 @@ class RestoreDiff {
                             hunkIndex = parseInt(flexibleMatch[1], 10) - 1;
                             console.log(`🎯 Hunk starting at line ${hunkIndex + 1} (flexible pattern: ${line})`);
                         } else {
-                            // 省略形 (@@ ... @@) の処理
-                            const ellipsisMatch = /^@@.*\.\.\..*@@$/.exec(line);
-                            if (ellipsisMatch) {
-                                // 省略形の場合はhunkを開始しない（スキップ）
-                                console.log(`⚠️ Skipping ellipsis hunk header at line ${lineNumber}: ${line}`);
-                                inHunk = false;
+                            // LLMが生成する非標準的なhunk header を処理
+                            // 例: "@@", "@@ func FunctionName(...) {", "@@ type StructName struct {"
+                            
+                            // コンテキスト情報を抽出（関数名、型名など）
+                            const contextMatch = /^@@\s*(.+)$/.exec(line.replace(/@@$/, '').trim());
+                            const contextHint = contextMatch ? contextMatch[1].trim() : '';
+                            
+                            if (contextHint && fileLines.length > 0) {
+                                // コンテキスト情報でファイル内を検索
+                                const searchPattern = contextHint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                let foundIndex = -1;
+                                
+                                for (let i = 0; i < fileLines.length; i++) {
+                                    if (fileLines[i].includes(contextHint) || 
+                                        new RegExp(searchPattern.substring(0, 30)).test(fileLines[i])) {
+                                        foundIndex = i;
+                                        break;
+                                    }
+                                }
+                                
+                                if (foundIndex >= 0) {
+                                    inHunk = true;
+                                    hunkIndex = foundIndex;
+                                    console.log(`🎯 Hunk found via context search at line ${hunkIndex + 1} (context: "${contextHint.substring(0, 50)}...")`);
+                                } else {
+                                    // 省略形 (@@ ... @@) の処理
+                                    const ellipsisMatch = /^@@.*\.\.\..*@@$/.exec(line);
+                                    if (ellipsisMatch) {
+                                        console.log(`⚠️ Skipping ellipsis hunk header at line ${lineNumber}: ${line}`);
+                                        inHunk = false;
+                                    } else {
+                                        // コンテキストが見つからない場合はファイルの先頭から開始
+                                        console.warn(`⚠️ Context not found, starting from beginning: ${line}`);
+                                        inHunk = true;
+                                        hunkIndex = 0;
+                                    }
+                                }
+                            } else if (line.trim() === '@@') {
+                                // 単純な @@ のみの場合は先頭から開始
+                                console.log(`⚠️ Simple @@ header, starting from beginning of file`);
+                                inHunk = true;
+                                hunkIndex = 0;
                             } else {
                                 console.warn(`⚠️ Invalid hunk header at line ${lineNumber}: ${line}`);
                                 inHunk = false;

@@ -904,7 +904,7 @@ class LLMFlowController {
                     console.log('✅ FSM: No changes needed detected in ANALYSIS, transitioning to VERIFYING for validation');
                     this.consecutiveFileRequestCount = 0; // リセット
                     await this.agentStateService.transition(AgentState.VERIFYING, 'no_changes_needed_to_verification');
-                    this.state = State.LLMVerificationDecision;
+                    this.state = State.SendVerificationPrompt;
                 } else if (parsed.requiredFilepaths && parsed.requiredFilepaths.length > 0) {
                     // 調査フェーズのファイルリクエストをカウント
                     this.consecutiveFileRequestCount++;
@@ -933,7 +933,7 @@ class LLMFlowController {
                     
                     // No Progress扱いでVERIFYINGへ
                     await this.agentStateService.transition(AgentState.VERIFYING, 'empty_response_to_verification');
-                    this.state = State.LLMVerificationDecision;
+                    this.state = State.SendVerificationPrompt;
                 }
                 break;
         }
@@ -1921,11 +1921,11 @@ class LLMFlowController {
             if (currentState === AgentState.ANALYSIS) {
                 // ANALYSISからVERIFYINGへ遷移して判断を検証
                 await this.agentStateService.transition(AgentState.VERIFYING, 'no_progress_to_verification');
-                this.state = State.LLMVerificationDecision;
+                this.state = State.SendVerificationPrompt;
             } else {
                 // MODIFYING等の場合はVERIFYINGへ遷移
                 await this.agentStateService.transition(AgentState.VERIFYING, 'no_progress_no_changes');
-                this.state = State.LLMVerificationDecision;
+                this.state = State.SendVerificationPrompt;
             }
         }
     }

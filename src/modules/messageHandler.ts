@@ -580,60 +580,188 @@ class MessageHandler {
                 }
             }
             
-            // パターン2: まずJSONパターンを試す
-            const pathMatches = cleanedRequiredText.match(/"path":\s*"([^"]+)"/g);
-            const typeMatches = cleanedRequiredText.match(/"type":\s*"([^"]+)"/g);
+            // パターン2: 完全なJSONオブジェクト形式で抽出
+            // { "type": "...", "path": "..." } または { "path": "...", "type": "..." }
+            const objectPattern1 = /\{\s*"type"\s*:\s*"([^"]+)"\s*,\s*"path"\s*:\s*"([^"]+)"\s*\}/g;
+            const objectPattern2 = /\{\s*"path"\s*:\s*"([^"]+)"\s*,\s*"type"\s*:\s*"([^"]+)"\s*\}/g;
             
-            console.log('🔍 pathMatches found:', pathMatches);
-            console.log('🔍 typeMatches found:', typeMatches);
+            let match;
+            let foundAny = false;
             
-            if (pathMatches && pathMatches.length > 0) {
-                console.log('✅ Using regex path extraction');
-                for (let i = 0; i < pathMatches.length; i++) {
-                    const pathMatch = pathMatches[i].match(/"path":\s*"([^"]+)"/);
-                    const typeMatch = typeMatches && typeMatches[i] ? typeMatches[i].match(/"type":\s*"([^"]+)"/) : null;
+            // パターン1: type, pathの順序
+            while ((match = objectPattern1.exec(cleanedRequiredText)) !== null) {
+                const typeValue = match[1];
+                const pathValue = match[2];
+                
+                // 無効なパスをフィルタ（JSONキーワード自体を除外）
+                if (pathValue && 
+                    pathValue !== 'type' && 
+                    pathValue !== 'path' && 
+                    pathValue !== 'FILE_CONTENT' && 
+                    pathValue !== 'DIRECTORY_LISTING' &&
+                    !pathValue.startsWith('{') && 
+                    !pathValue.startsWith('[')) {
                     
-                    if (pathMatch) {
-                        const path = pathMatch[1];
-                        const type = (typeMatch && typeMatch[1] === 'DIRECTORY_LISTING') ? 'DIRECTORY_LISTING' : 'FILE_CONTENT';
-                        
-                        // アクション型の検証（現在の状態が提供されている場合）
-                        if (currentState) {
-                            this.validateActionType(type, currentState, path);
+                    const type = typeValue === 'DIRECTORY_LISTING' ? 'DIRECTORY_LISTING' : 'FILE_CONTENT';
+                    
+                    // アクション型の検証（現在の状態が提供されている場合）
+                    if (currentState) {
+                        this.validateActionType(type, currentState, pathValue);
+                    }
+                    
+                    console.log(`📁 Extracted (pattern1): ${type} - ${pathValue}`);
+                    const fileInfo: RequiredFileInfo = { type, path: pathValue };
+                    sections.requiredFileInfos.push(fileInfo);
+                    sections.requiredFilepaths.push(pathValue);
+                    foundAny = true;
+                }
+            }
+            
+            // パターン2: path, typeの順序
+            while ((match = objectPattern2.exec(cleanedRequiredText)) !== null) {
+                const pathValue = match[1];
+                const typeValue = match[2];
+                
+                // 無効なパスをフィルタ + 重複チェック
+                if (pathValue && 
+                    pathValue !== 'type' && 
+                    pathValue !== 'path' && 
+                    pathValue !== 'FILE_CONTENT' && 
+                    pathValue !== 'DIRECTORY_LISTING' &&
+                    !pathValue.startsWith('{') && 
+                    !pathValue.startsWith('[') &&
+                    !sections.requiredFilepaths.includes(pathValue)) {
+                    
+                    const type = typeValue === 'DIRECTORY_LISTING' ? 'DIRECTORY_LISTING' : 'FILE_CONTENT';
+                    
+                    // アクション型の検証
+                    if (currentState) {
+                        this.validateActionType(type, currentState, pathValue);
+                    }
+                    
+                    console.log(`📁 Extracted (pattern2): ${type} - ${pathValue}`);
+                    const fileInfo: RequiredFileInfo = { type, path: pathValue };
+                    sections.requiredFileInfos.push(fileInfo);
+                    sections.requiredFilepaths.push(pathValue);
+                    foundAny = true;
+                }
+            }
+            
+            // パターン3: 単純な "path": "..." 形式（フォールバック）
+            if (!foundAny) {
+                console.log('🔍 Trying simple path extraction pattern...');
+                const pathMatches = cleanedRequiredText.match(/"path":\s*"([^"]+)"/g);
+                
+                if (pathMatches && pathMatches.length > 0) {
+                    for (const pathMatchStr of pathMatches) {
+                        const pathMatch = pathMatchStr.match(/"path":\s*"([^"]+)"/);
+                        if (pathMatch) {
+                            const pathValue = pathMatch[1];
+                            
+                            // 無効なパスをフィルタ
+                            if (pathValue && 
+                                pathValue !== 'type' && 
+                                pathValue !== 'path' && 
+                                pathValue !== 'FILE_CONTENT' && 
+                                pathValue !== 'DIRECTORY_LISTING' &&
+                                !pathValue.startsWith('{') && 
+                                !pathValue.startsWith('[') &&
+                                !sections.requiredFilepaths.includes(pathValue)) {
+                                
+                                console.log(`📁 Extracted (simple): FILE_CONTENT - ${pathValue}`);
+                                const fileInfo: RequiredFileInfo = { type: 'FILE_CONTENT', path: pathValue };
+                                sections.requiredFileInfos.push(fileInfo);
+                                sections.requiredFilepaths.push(pathValue);
+                                foundAny = true;
+                            }
                         }
-                        
-                        console.log(`📁 Extracted: ${type} - ${path}`);
+                    }
+                }
+            }
+            
+            if (!foundAny) {
+                console.log('🔄 Using fallback string extraction');
+                
+                // フォールバック1: 完全なJSONオブジェクトパターンを正規表現で抽出
+                // 各 {"type": "...", "path": "..."} オブジェクトを個別に抽出
+                const objectPattern = /\{\s*"type"\s*:\s*"([^"]+)"\s*,\s*"path"\s*:\s*"([^"]+)"\s*\}/g;
+                const reversePattern = /\{\s*"path"\s*:\s*"([^"]+)"\s*,\s*"type"\s*:\s*"([^"]+)"\s*\}/g;
+                
+                let objectMatch;
+                let foundObjects = false;
+                
+                // type, pathの順序
+                while ((objectMatch = objectPattern.exec(cleanedRequiredText)) !== null) {
+                    const type = objectMatch[1] === 'DIRECTORY_LISTING' ? 'DIRECTORY_LISTING' : 'FILE_CONTENT';
+                    const path = objectMatch[2];
+                    
+                    // 有効なパスかチェック（"type"や"path"などのJSONキーワードを除外）
+                    if (path && path !== 'type' && path !== 'path' && !path.startsWith('{') && !path.startsWith('[')) {
+                        console.log(`📁 Fallback object extracted: ${type} - ${path}`);
                         const fileInfo: RequiredFileInfo = { type, path };
                         sections.requiredFileInfos.push(fileInfo);
                         sections.requiredFilepaths.push(path);
+                        foundObjects = true;
                     }
                 }
-            } else {
-                console.log('🔄 Using fallback string extraction');
-                // 最後の手段：単純な文字列抽出
-                const lines = cleanedRequiredText.split('\n');
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (trimmed && !trimmed.startsWith('[') && !trimmed.startsWith(']') && 
-                        !trimmed.startsWith('{') && !trimmed.startsWith('}') && 
-                        !trimmed.includes('"type"') && !trimmed.includes('"path"') && 
-                        !trimmed.includes('FILE_CONTENT') && !trimmed.includes('DIRECTORY_LISTING') && 
-                        trimmed !== ',' && trimmed !== '') {
-                        
-                        // 引用符で囲まれた文字列を抽出
-                        const quotedMatch = trimmed.match(/"([^"]+)"/);
-                        if (quotedMatch) {
-                            const path = quotedMatch[1];
-                            console.log(`📄 Fallback extracted: ${path}`);
-                            const fileInfo: RequiredFileInfo = { type: 'FILE_CONTENT', path };
+                
+                // path, typeの順序（逆順）
+                while ((objectMatch = reversePattern.exec(cleanedRequiredText)) !== null) {
+                    const path = objectMatch[1];
+                    const type = objectMatch[2] === 'DIRECTORY_LISTING' ? 'DIRECTORY_LISTING' : 'FILE_CONTENT';
+                    
+                    // 有効なパスかチェック
+                    if (path && path !== 'type' && path !== 'path' && !path.startsWith('{') && !path.startsWith('[')) {
+                        // 重複チェック
+                        if (!sections.requiredFilepaths.includes(path)) {
+                            console.log(`📁 Fallback object extracted (reverse): ${type} - ${path}`);
+                            const fileInfo: RequiredFileInfo = { type, path };
                             sections.requiredFileInfos.push(fileInfo);
                             sections.requiredFilepaths.push(path);
-                        } else if (trimmed.match(/^[a-zA-Z0-9_\-\/\.]+$/)) {
-                            // 引用符なしのファイルパス形式
-                            console.log(`📄 Fallback extracted (unquoted): ${trimmed}`);
-                            const fileInfo: RequiredFileInfo = { type: 'FILE_CONTENT', path: trimmed };
-                            sections.requiredFileInfos.push(fileInfo);
-                            sections.requiredFilepaths.push(trimmed);
+                            foundObjects = true;
+                        }
+                    }
+                }
+                
+                // フォールバック2: ファイルパスっぽい文字列のみを抽出（JSONキーワードを除外）
+                if (!foundObjects) {
+                    console.log('🔄 No JSON objects found, trying path-like string extraction');
+                    const lines = cleanedRequiredText.split('\n');
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        
+                        // JSON構造の行をスキップ
+                        if (!trimmed || 
+                            trimmed === '[' || trimmed === ']' || 
+                            trimmed === '{' || trimmed === '}' || 
+                            trimmed === ',' || trimmed === '},' ||
+                            trimmed.includes('"type"') || 
+                            trimmed.includes('"path"') ||
+                            trimmed.includes('FILE_CONTENT') || 
+                            trimmed.includes('DIRECTORY_LISTING')) {
+                            continue;
+                        }
+                        
+                        // ファイルパスっぽい文字列を抽出（拡張子を持つ、またはディレクトリパス）
+                        const pathLikeMatch = trimmed.match(/"([a-zA-Z0-9_\-\/\.]+\.[a-zA-Z0-9]+)"/);
+                        const dirLikeMatch = trimmed.match(/"([a-zA-Z0-9_\-\/]+\/)"/);
+                        
+                        if (pathLikeMatch) {
+                            const path = pathLikeMatch[1];
+                            if (!sections.requiredFilepaths.includes(path)) {
+                                console.log(`📄 Fallback path-like extracted: ${path}`);
+                                const fileInfo: RequiredFileInfo = { type: 'FILE_CONTENT', path };
+                                sections.requiredFileInfos.push(fileInfo);
+                                sections.requiredFilepaths.push(path);
+                            }
+                        } else if (dirLikeMatch) {
+                            const path = dirLikeMatch[1];
+                            if (!sections.requiredFilepaths.includes(path)) {
+                                console.log(`📄 Fallback directory-like extracted: ${path}`);
+                                const fileInfo: RequiredFileInfo = { type: 'DIRECTORY_LISTING', path };
+                                sections.requiredFileInfos.push(fileInfo);
+                                sections.requiredFilepaths.push(path);
+                            }
                         }
                     }
                 }

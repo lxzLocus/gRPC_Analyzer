@@ -369,8 +369,17 @@ function renderReportStatistics(stats) {
         <div class="stat-card" style="margin-bottom: 20px;">
             <h3>🎯 最終カテゴリー分布（4軸評価からの判定）</h3>
             <p style="font-size: 0.9em; color: #6c757d; margin-bottom: 15px;">
-                <strong>対象:</strong> 全${total}件中、評価対象${totalEvaluated}件（SKIPPED ${correctness.SKIPPED || 0}件を除く）<br>
-                <span style="font-size: 0.85em; color: #6c757d;">※Accuracyレベルに基づく3段階分類（CORRECT/PLAUSIBLE/INCORRECT）+ SKIPPED</span>
+                <strong>対象:</strong> 全${total}件中、評価対象${totalEvaluated}件
+                ${(() => {
+                    const skipDetails = stats.skipDetails || stats.llmEvaluationResults?.skipDetails || {};
+                    const noOpCount = skipDetails.noOpCount || 0;
+                    const errorCount = skipDetails.errorCount || 0;
+                    if (noOpCount > 0 || errorCount > 0) {
+                        return `（🏁NO-OP ${noOpCount}件 + ❌ERROR ${errorCount}件 を除く）`;
+                    }
+                    return `（SKIPPED ${correctness.SKIPPED || 0}件を除く）`;
+                })()}<br>
+                <span style="font-size: 0.85em; color: #6c757d;">※Accuracyレベルに基づく3段階分類（CORRECT/PLAUSIBLE/INCORRECT）+ SKIPPED（NO-OP/ERROR）</span>
             </p>
             
             ${correctness.CORRECT === 0 && correctness.PLAUSIBLE === 0 && correctness.INCORRECT === 0 && correctness.SKIPPED === total ? `
@@ -416,15 +425,49 @@ function renderReportStatistics(stats) {
             </div>
             
             ${correctness.SKIPPED > 0 ? `
-            <div class="chart-bar">
-                <div class="chart-bar-label">
-                    <span>⏭️ スキップ/エラー</span>
-                    <span><strong>${correctness.SKIPPED}件/${total}件</strong> (${(correctness.SKIPPED / total * 100).toFixed(1)}%)</span>
-                </div>
-                <div class="chart-bar-bg">
-                    <div class="chart-bar-fill" style="width: ${correctness.SKIPPED / total * 100}%; background: #6c757d;"></div>
-                </div>
-            </div>
+            <!-- NO-OPとERRORを分離表示 -->
+            ${(() => {
+                const skipDetails = stats.skipDetails || stats.llmEvaluationResults?.skipDetails || {};
+                const noOpCount = skipDetails.noOpCount || 0;
+                const errorCount = skipDetails.errorCount || 0;
+                const hasBreakdown = noOpCount > 0 || errorCount > 0;
+                
+                if (hasBreakdown) {
+                    return `
+                    <div class="chart-bar">
+                        <div class="chart-bar-label">
+                            <span>🏁 NO-OP（修正不要判断）</span>
+                            <span><strong>${noOpCount}件/${total}件</strong> (${(noOpCount / total * 100).toFixed(1)}%)</span>
+                        </div>
+                        <div class="chart-bar-bg">
+                            <div class="chart-bar-fill" style="width: ${noOpCount / total * 100}%; background: #17a2b8;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-bar">
+                        <div class="chart-bar-label">
+                            <span>❌ APRエラー（失敗）</span>
+                            <span><strong>${errorCount}件/${total}件</strong> (${(errorCount / total * 100).toFixed(1)}%)</span>
+                        </div>
+                        <div class="chart-bar-bg">
+                            <div class="chart-bar-fill" style="width: ${errorCount / total * 100}%; background: #dc3545;"></div>
+                        </div>
+                    </div>
+                    `;
+                } else {
+                    return `
+                    <div class="chart-bar">
+                        <div class="chart-bar-label">
+                            <span>⏭️ スキップ/エラー</span>
+                            <span><strong>${correctness.SKIPPED}件/${total}件</strong> (${(correctness.SKIPPED / total * 100).toFixed(1)}%)</span>
+                        </div>
+                        <div class="chart-bar-bg">
+                            <div class="chart-bar-fill" style="width: ${correctness.SKIPPED / total * 100}%; background: #6c757d;"></div>
+                        </div>
+                    </div>
+                    `;
+                }
+            })()}
             ` : ''}
             
             <div style="background-color: #f8f9fa; border-radius: 4px; padding: 15px; margin-top: 20px; font-size: 0.85em;">
@@ -626,7 +669,18 @@ function renderPRs(prs) {
 
     // フィルター適用
     let filteredPRs = prs.filter(pr => {
-        if (state.prFilters.status !== 'all' && pr.status !== state.prFilters.status) return false;
+        // 評価ステータスフィルター（NO-OP/APR-ERROR対応）
+        if (state.prFilters.status !== 'all') {
+            if (state.prFilters.status === 'NO-OP') {
+                // NO-OP: SKIPPED + APR FINISHED
+                if (!(pr.status === 'SKIPPED' && pr.aprStatus === 'FINISHED')) return false;
+            } else if (state.prFilters.status === 'APR-ERROR') {
+                // APR-ERROR: SKIPPED + APR ERROR
+                if (!(pr.status === 'SKIPPED' && pr.aprStatus === 'ERROR')) return false;
+            } else if (pr.status !== state.prFilters.status) {
+                return false;
+            }
+        }
         if (state.prFilters.aprStatus !== 'all' && pr.aprStatus !== state.prFilters.aprStatus) return false;
         if (state.prFilters.finalCategory !== 'all' && pr.finalCategory !== state.prFilters.finalCategory) return false;
         
@@ -679,8 +733,10 @@ function renderPRs(prs) {
                     <select id="filter-status" class="filter-select" onchange="updatePRFilters()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ced4da;">
                         <option value="all">すべて (${prs.length})</option>
                         <option value="EVALUATED">✅ 評価完了 (${prs.filter(p => p.status === 'EVALUATED').length})</option>
-                        <option value="SKIPPED">⏭️ 評価スキップ (${prs.filter(p => p.status === 'SKIPPED').length})</option>
-                        <option value="ERROR">❌ エラー (${prs.filter(p => p.status === 'ERROR').length})</option>
+                        <option value="SKIPPED">⏭️ 全スキップ (${prs.filter(p => p.status === 'SKIPPED').length})</option>
+                        <option value="NO-OP">🏁 NO-OP (${prs.filter(p => p.status === 'SKIPPED' && p.aprStatus === 'FINISHED').length})</option>
+                        <option value="APR-ERROR">❌ APRエラー (${prs.filter(p => p.status === 'SKIPPED' && p.aprStatus === 'ERROR').length})</option>
+                        <option value="ERROR">❌ 評価エラー (${prs.filter(p => p.status === 'ERROR').length})</option>
                     </select>
                 </div>
                 
@@ -1862,36 +1918,83 @@ function renderFourAxisEvaluationSection(fourAxis) {
         const axisData = fourAxis[axis.key];
         if (!axisData) return '';
 
+        // ラベルベースのシステムに対応（score または label を使用）
+        const label = axisData.label;
         const score = axisData.score;
-        const percentage = (score * 100).toFixed(0);
+        
+        let displayText = '';
+        let badgeClass = '';
 
-        // スコアに基づいたバッジクラス
-        const badgeClass = score >= 0.9 ? 'badge-identical' :
-            score >= 0.7 ? 'badge-equivalent' :
-                score >= 0.4 ? 'badge-plausible' : 'badge-incorrect';
-
-        // 各評価軸に基準ラベルを統合
-        let displayText = `${percentage}%`;
-        if (axis.key === 'accuracy') {
-            if (score >= 1.0) {
-                displayText = `${percentage}% - 🏆 完全一致`;
-            } else if (score >= 0.9) {
-                displayText = `${percentage}% - ✨ ほぼ完全`;
-            } else if (score >= 0.7) {
-                displayText = `${percentage}% - ✅ 高類似性`;
-            } else if (score >= 0.5) {
-                displayText = `${percentage}% - ⚠️ 部分一致`;
-            } else if (score >= 0.2) {
-                displayText = `${percentage}% - ⚡ 位置正確`;
-            } else {
-                displayText = `${percentage}% - ❌ 不一致`;
+        if (label) {
+            // 新しいラベルベースの評価システム
+            if (axis.key === 'accuracy') {
+                const labelMap = {
+                    'IDENTICAL': { text: '🏆 完全一致', class: 'badge-identical' },
+                    'SEMANTICALLY_EQUIVALENT': { text: '✨ 意味的等価', class: 'badge-equivalent' },
+                    'PARTIALLY_CORRECT': { text: '⚠️ 部分的正解', class: 'badge-plausible' },
+                    'LOCATION_ONLY': { text: '⚡ 位置のみ正確', class: 'badge-plausible' },
+                    'DIFFERENT': { text: '❌ 不一致', class: 'badge-incorrect' }
+                };
+                const mapped = labelMap[label] || { text: label, class: 'badge-incorrect' };
+                displayText = mapped.text;
+                badgeClass = mapped.class;
+            } else if (axis.key === 'decision_soundness') {
+                const labelMap = {
+                    'SOUND': { text: '✅ 妥当な判断', class: 'badge-identical' },
+                    'UNSOUND': { text: '❌ 不適切な判断', class: 'badge-incorrect' }
+                };
+                const mapped = labelMap[label] || { text: label, class: 'badge-incorrect' };
+                displayText = mapped.text;
+                badgeClass = mapped.class;
+            } else if (axis.key === 'directional_consistency') {
+                const labelMap = {
+                    'CONSISTENT': { text: '✅ 方向性一致', class: 'badge-identical' },
+                    'INCONSISTENT': { text: '❌ 方向性矛盾', class: 'badge-incorrect' }
+                };
+                const mapped = labelMap[label] || { text: label, class: 'badge-incorrect' };
+                displayText = mapped.text;
+                badgeClass = mapped.class;
+            } else if (axis.key === 'validity') {
+                const labelMap = {
+                    'VALID': { text: '✅ 有効なコード', class: 'badge-identical' },
+                    'INVALID': { text: '❌ 無効なコード', class: 'badge-incorrect' }
+                };
+                const mapped = labelMap[label] || { text: label, class: 'badge-incorrect' };
+                displayText = mapped.text;
+                badgeClass = mapped.class;
             }
-        } else if (axis.key === 'decision_soundness') {
-            displayText = score >= 1.0 ? `${percentage}% - ✅ 妥当な判断` : `${percentage}% - ❌ 不適切な判断`;
-        } else if (axis.key === 'directional_consistency') {
-            displayText = score >= 1.0 ? `${percentage}% - ✅ 方向性一致` : `${percentage}% - ❌ 方向性矛盾`;
-        } else if (axis.key === 'validity') {
-            displayText = score >= 1.0 ? `${percentage}% - ✅ 有効なコード` : `${percentage}% - ❌ 無効なコード`;
+        } else if (score != null && !isNaN(score)) {
+            // 旧スコアベースのシステム（互換性のため）
+            const percentage = (score * 100).toFixed(0);
+            badgeClass = score >= 0.9 ? 'badge-identical' :
+                score >= 0.7 ? 'badge-equivalent' :
+                    score >= 0.4 ? 'badge-plausible' : 'badge-incorrect';
+
+            if (axis.key === 'accuracy') {
+                if (score >= 1.0) {
+                    displayText = `${percentage}% - 🏆 完全一致`;
+                } else if (score >= 0.9) {
+                    displayText = `${percentage}% - ✨ ほぼ完全`;
+                } else if (score >= 0.7) {
+                    displayText = `${percentage}% - ✅ 高類似性`;
+                } else if (score >= 0.5) {
+                    displayText = `${percentage}% - ⚠️ 部分一致`;
+                } else if (score >= 0.2) {
+                    displayText = `${percentage}% - ⚡ 位置正確`;
+                } else {
+                    displayText = `${percentage}% - ❌ 不一致`;
+                }
+            } else if (axis.key === 'decision_soundness') {
+                displayText = score >= 1.0 ? `${percentage}% - ✅ 妥当な判断` : `${percentage}% - ❌ 不適切な判断`;
+            } else if (axis.key === 'directional_consistency') {
+                displayText = score >= 1.0 ? `${percentage}% - ✅ 方向性一致` : `${percentage}% - ❌ 方向性矛盾`;
+            } else if (axis.key === 'validity') {
+                displayText = score >= 1.0 ? `${percentage}% - ✅ 有効なコード` : `${percentage}% - ❌ 無効なコード`;
+            }
+        } else {
+            // データなし
+            displayText = 'N/A';
+            badgeClass = 'badge-incorrect';
         }
 
         return `<div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff;"><p style="margin: 0 0 8px 0;"><strong>${axis.emoji} ${axis.label}</strong> <span class="correctness-badge ${badgeClass}" style="margin-left: 10px;">${displayText}</span></p><p style="margin: 0 0 8px 0; font-size: 0.9em; color: #6c757d;">${axis.description}</p><p style="margin: 0; padding: 10px; background: white; border-radius: 5px; word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap;">${axisData.reasoning || 'N/A'}</p></div>`;
@@ -2058,12 +2161,19 @@ function renderProcessingFlowStats(stats) {
     const evaluatedCount = stats.evaluationStatus?.evaluated || 0;
     const skippedCount = stats.correctnessDistribution?.skipped || 0;
     const errorCount = stats.evaluationStatus?.error || 0;
+    
+    // NO-OP/ERROR区別（skipDetailsから取得）- 両方のパスに対応
+    const skipDetails = stats.skipDetails || stats.llmEvaluationResults?.skipDetails || {};
+    const noOpCount = skipDetails.noOpCount || 0;
+    const aprErrorInSkipCount = skipDetails.errorCount || 0;
 
     console.log('[renderProcessingFlowStats] Calculated values:', {
         totalPRs,
         evaluatedCount,
         skippedCount,
-        errorCount
+        errorCount,
+        noOpCount,
+        aprErrorInSkipCount
     });
 
     // APR処理成功数 = 評価完了 + スキップ（APR側）
@@ -2155,7 +2265,29 @@ function renderProcessingFlowStats(stats) {
                     </div>
                 </div>
                 
-                ${errorCount > 0 ? `
+                <!-- NO-OP/ERROR詳細 -->
+                ${(noOpCount > 0 || aprErrorInSkipCount > 0) ? `
+                <div style="margin-top: 15px; padding: 15px; background: #e9ecef; border-radius: 5px;">
+                    <h5 style="margin: 0 0 10px 0; color: #495057; font-size: 0.95em;">📊 SKIPPED詳細（NO-OP vs ERROR）</h5>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 150px; background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #17a2b8;">
+                            <div style="font-size: 0.85em; color: #6c757d;">🏁 NO-OP（正常）</div>
+                            <div style="font-size: 1.8em; font-weight: bold; color: #17a2b8;">${noOpCount}</div>
+                            <div style="font-size: 0.75em; color: #6c757d;">APR成功 + 修正不要判断</div>
+                        </div>
+                        <div style="flex: 1; min-width: 150px; background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #dc3545;">
+                            <div style="font-size: 0.85em; color: #6c757d;">❌ APRエラー</div>
+                            <div style="font-size: 1.8em; font-weight: bold; color: #dc3545;">${aprErrorInSkipCount}</div>
+                            <div style="font-size: 0.75em; color: #6c757d;">APR処理失敗</div>
+                        </div>
+                    </div>
+                    <p style="margin: 10px 0 0 0; font-size: 0.8em; color: #6c757d;">
+                        💡 NO-OPケースはIntent Fulfillment評価で「修正不要判断が妥当か」を評価
+                    </p>
+                </div>
+                ` : ''}
+                
+                ${(errorCount > 0 && noOpCount === 0 && aprErrorInSkipCount === 0) ? `
                 <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 5px; border-left: 3px solid #ffc107;">
                     <span style="font-size: 0.9em; color: #856404;">⚠️ エラー: ${errorCount}件</span>
                 </div>
