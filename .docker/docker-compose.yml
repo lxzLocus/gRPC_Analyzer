@@ -56,21 +56,21 @@ services:
     volumes:
       # 評価システムコード（/app/evaluation → コンテナの/app）
       - type: bind
-        source: F:/Workspace/gRPC_Analyzer/evaluation
+        source: E:/F/Workspace/gRPC_Analyzer/evaluation
         target: /app
       # データセット（読み取り専用）
       - type: bind
-        source: F:/Workspace/gRPC_Analyzer/dataset
+        source: E:/F/Workspace/gRPC_Analyzer/dataset
         target: /app/dataset
         read_only: true
       # APRログ（読み取り専用）
       - type: bind
-        source: F:/Workspace/gRPC_Analyzer/log
+        source: E:/F/Workspace/gRPC_Analyzer/log
         target: /app/apr-logs
         read_only: true
       # APR結果（読み取り専用）
       - type: bind
-        source: F:/Workspace/gRPC_Analyzer/output
+        source: E:/F/Workspace/gRPC_Analyzer/output
         target: /app/apr-output
         read_only: true
 
@@ -84,20 +84,20 @@ services:
     volumes:
       # 評価システムコード（patchEvaluation → コンテナの/app）
       - type: bind
-        source: F:/Workspace/gRPC_Analyzer/patchEvaluation
+        source: E:/F/Workspace/gRPC_Analyzer/patchEvaluation
         target: /app
       # データセット（読み取り専用）
       - type: bind
-        source: E:/Workspace/gRPC_Analyzer/dataset
+        source: E:/F/Workspace/gRPC_Analyzer/dataset
         target: /app/dataset
         read_only: true
       # APRログ（読み取り専用）
       - type: bind
-        source: F:/Workspace/gRPC_Analyzer/log
+        source: E:/F/Workspace/gRPC_Analyzer/log
         target: /app/apr-logs
         read_only: true
       # APR結果（読み取り専用）
       # - type: bind
-      #   source: F:/Workspace/gRPC_Analyzer/output
+      #   source: E:/F/Workspace/gRPC_Analyzer/output
       #   target: /app/apr-output
       #   read_only: true

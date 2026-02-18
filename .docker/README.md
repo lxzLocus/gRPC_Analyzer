@@ -79,10 +79,10 @@ cd /app/.docker
 ./manage.sh eval-step2  # パッチ品質
 ```
 
-## 📁 ディレクトリ構造（ホストOS: F:\Workspace\gRPC_Analyzer）
+## 📁 ディレクトリ構造（ホストOS: E:\F\Workspace\gRPC_Analyzer）
 
 ```
-F:\Workspace\gRPC_Analyzer\     # ホストOS
+E:\F\Workspace\gRPC_Analyzer\     # ホストOS
 ├── .docker/                    # Docker設定
 │   ├── docker-compose.yml      # サービス定義
 │   ├── Dockerfile_*            # 各種Dockerfile
@@ -103,14 +103,14 @@ F:\Workspace\gRPC_Analyzer\     # ホストOS
 ### ボリュームマッピング
 
 **grpc-analyzer-node（本番環境）:**
-- `F:\Workspace\gRPC_Analyzer\dataset\*` → `/app/dataset/*`
+- `E:\Workspace\gRPC_Analyzer\dataset\*` → `/app/dataset/*`
 - 全データセットサブフォルダを個別バインド
 
 **evaluation-system（評価環境）:**
-- `F:\Workspace\gRPC_Analyzer\dataset` → `/app/dataset` (読み取り専用)
-- `F:\Workspace\gRPC_Analyzer\log` → `/app/log` (読み取り専用)
-- `F:\Workspace\gRPC_Analyzer\output` → `/app/output` (読み取り専用)
-- `F:\Workspace\gRPC_Analyzer\evaluation-results` → `/app/evaluation-results`
+- `E:\F\Workspace\gRPC_Analyzer\dataset` → `/app/dataset` (読み取り専用)
+- `E:\F\Workspace\gRPC_Analyzer\log` → `/app/log` (読み取り専用)
+- `E:\F\Workspace\gRPC_Analyzer\output` → `/app/output` (読み取り専用)
+- `E:\F\Workspace\gRPC_Analyzer\evaluation-results` → `/app/evaluation-results`
 
 ## 🐳 サービス構成
 
@@ -223,7 +223,7 @@ EVALUATION_MODE=production
 
 ### APR結果
 ```
-F:\Workspace\gRPC_Analyzer\output\
+E:\F\Workspace\gRPC_Analyzer\output\
 ├── processing_summary_*.json    # 処理サマリー
 ├── error_report_*.json          # エラーレポート
 └── backups/                     # バックアップ
@@ -231,7 +231,7 @@ F:\Workspace\gRPC_Analyzer\output\
 
 ### 評価結果
 ```
-F:\Workspace\gRPC_Analyzer\evaluation-results\
+E:\F\Workspace\gRPC_Analyzer\evaluation-results\
 ├── step1/                       # 仕様準拠性評価
 │   └── compliance_evaluation_*.json
 ├── step2/                       # パッチ品質評価
@@ -286,7 +286,7 @@ F:\Workspace\gRPC_Analyzer\evaluation-results\
 ./manage.sh eval-all
 
 # 4. 結果確認
-ls -la F:/Workspace/gRPC_Analyzer/evaluation-results/
+ls -la E:/F/Workspace/gRPC_Analyzer/evaluation-results/
 
 # 5. クリーンアップ
 ./manage.sh down

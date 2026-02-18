@@ -162,13 +162,13 @@ case "${1:-help}" in
         log_error "⚠️  全データリセットを実行します（10秒でキャンセル可能）"
         sleep 10
         log_warning "評価結果ディレクトリをクリア中..."
-        rm -rf F:/Workspace/gRPC_Analyzer/evaluation/results/*
+        rm -rf E:/F/Workspace/gRPC_Analyzer/evaluation/results/*
         log_warning "評価ログディレクトリをクリア中..."
-        rm -rf F:/Workspace/gRPC_Analyzer/evaluation/logs/*
+        rm -rf E:/F/Workspace/gRPC_Analyzer/evaluation/logs/*
         log_warning "APRログディレクトリをクリア中..."
-        rm -rf F:/Workspace/gRPC_Analyzer/log/*
+        rm -rf E:/F/Workspace/gRPC_Analyzer/log/*
         log_warning "APR出力ディレクトリをクリア中..."
-        rm -rf F:/Workspace/gRPC_Analyzer/output/*
+        rm -rf E:/F/Workspace/gRPC_Analyzer/output/*
         log_success "データリセット完了"
         ;;
         

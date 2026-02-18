@@ -6,6 +6,8 @@ yarn-error.log*
 
 # Datasets (mounted as volumes)
 dataset/
+test_dataset/
+test_dataset_mini/
 apr-logs/
 apr-output/
 logs/

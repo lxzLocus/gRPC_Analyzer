@@ -222,10 +222,10 @@ ANTHROPIC_API_KEY=your_key_here   # Anthropic使用時
 
 ### ホストパスマッピング
 ```
-F:/Workspace/gRPC_Analyzer/evaluation → /app/
-F:/Workspace/gRPC_Analyzer/dataset   → /app/dataset
-F:/Workspace/gRPC_Analyzer/log       → /app/apr-logs
-F:/Workspace/gRPC_Analyzer/output    → /app/apr-output
+E:/F/Workspace/gRPC_Analyzer/evaluation → /app/
+E:/F/Workspace/gRPC_Analyzer/dataset   → /app/dataset
+E:/F/Workspace/gRPC_Analyzer/log       → /app/apr-logs
+E:/F/Workspace/gRPC_Analyzer/output    → /app/apr-output
 ```
 
 ## 🆘 トラブルシューティング
@@ -335,12 +335,12 @@ python main.py --dry-run
 - `EVALUATION_MODE=production`
 
 ### 入力データ
-- **APRログ**: `/app/apr-logs/` (F:\Workspace\gRPC_Analyzer\log)
-- **APR結果**: `/app/apr-output/` (F:\Workspace\gRPC_Analyzer\output)
-- **データセット**: `/app/dataset/` (F:\Workspace\gRPC_Analyzer\dataset)
+- **APRログ**: `/app/apr-logs/` (E:\F\Workspace\gRPC_Analyzer\log)
+- **APR結果**: `/app/apr-output/` (E:\F\Workspace\gRPC_Analyzer\output)
+- **データセット**: `/app/dataset/` (E:\F\Workspace\gRPC_Analyzer\dataset)
 
 ### 出力データ
-- **評価結果**: `/app/results/` (F:\Workspace\gRPC_Analyzer\evaluation\results)
+- **評価結果**: `/app/results/` (E:\F\Workspace\gRPC_Analyzer\evaluation\results)
 
 ## 🛠️ 開発
 
