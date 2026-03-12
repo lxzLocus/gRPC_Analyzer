@@ -1,5 +1,9 @@
 # gRPC LLMエージェントによる自動バグ修正システム
 
+> ⚠️ **IMPORTANT**: The `main` branch must not be modified.  
+> It corresponds to the exact implementation used for paper submission (2026-03).  
+> Tag `paper-submission-2026-03` marks the frozen submission point.
+
 gRPCベースのマイクロサービスにおいて、`.proto` ファイルの変更に起因するバグを LLM エージェントが自動で検出・修正するシステム。
 
 ---
@@ -103,25 +107,33 @@ node scripts/MainScript.js --help
 
 | ドキュメント | 内容 |
 |-------------|------|
+| [BRANCH_OVERVIEW.md](BRANCH_OVERVIEW.md) | ブランチ一覧・FSM レベル・実験条件の研究マップ |
+| [REPRODUCIBILITY.md](REPRODUCIBILITY.md) | 環境構築・実行手順・データセット・評価方法 |
 | [docs/architecture.md](docs/architecture.md) | アーキテクチャ詳細・エントリーポイント・MVC構成・処理フロー |
 | [docs/dataset.md](docs/dataset.md) | データセットのディレクトリ構造・プロンプト変数ファイル生成基準 |
 | [docs/fsm.md](docs/fsm.md) | FSM（有限状態機械）の状態・遷移・タグ制御の詳細 |
-| [docs/branches.md](docs/branches.md) | ブランチ一覧と各ブランチの FSM 実装バージョンの違い |
+| [docs/branches.md](docs/branches.md) | ブランチごとの FSM 実装バージョンの技術的な違い |
 | [docs/design_jp.md](docs/design_jp.md) | 設計思想の詳細（日本語） |
 
 ---
 
 ## ブランチ構成
 
-| ブランチ | 概要 |
-|---------|------|
-| `master` | メインブランチ（基本 LLM 対話ループ） |
-| `experiment/fsm-implementation` | **論文投稿最終版** — FSM による状態遷移制御を実装 |
-| `Feature_SelfRefine` | Self-Refine パターン（セッション管理・自己改善ループ） |
-| `feature/Evaluation_FSM` | FSM + 評価システム統合版 |
-| その他 | 実験用ブランチ各種 |
+このリポジトリは研究アーカイブです。全ブランチは実験スナップショットとして凍結されています。
 
-> 詳細は [docs/branches.md](docs/branches.md) を参照
+| ブランチ | FSM Level | 概要 |
+|---------|:---------:|------|
+| `main` ★ | Lv1 | **論文投稿版** — FSM 緩め制御（system-managed completion） |
+| `baseline/prompt-5step` | Lv0 | プロンプト駆動ベースライン（旧 master） |
+| `baseline/prompt-pr-title` | Lv0 | + PR タイトル埋め込み |
+| `baseline/prompt-context-enhanced` | Lv0 | + コンテキスト要約強化 |
+| `baseline/prompt-model-abtest` | Lv0 | + モデル/タイムアウト A/B テスト |
+| `baseline/prompt-title-fix` | Lv0 | + タイトルパーサー修正 |
+| `fsm-strict/selfrefine` | Lv2 | FSM 厳格 + Self-Refine パターン |
+| `fsm-strict/integrated` | Lv2 | FSM 厳格 + バッチ処理統合 |
+| `fsm-strict/evaluation` | Lv2 | FSM 厳格 + 評価システム統合 |
+
+> 詳細は [BRANCH_OVERVIEW.md](BRANCH_OVERVIEW.md) を参照
 
 ---
 
